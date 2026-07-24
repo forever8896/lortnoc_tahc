@@ -12,37 +12,18 @@ export function injectStyles(): void {
     .lortnoc-decoded {
       border-bottom: 1px dashed rgba(227,58,32,.7);
       padding-bottom: 1px;
-      position: relative;
-      cursor: help;
+      cursor: help; /* native title tooltip reveals the cover text on hover */
     }
     .lortnoc-decoded::before { content: "🔓 "; opacity: .8; }
-    /* hover shows the cover text Telegram actually stores */
-    .lortnoc-decoded:hover::after {
-      content: "🔒 Telegram sees: " attr(data-cover);
-      position: absolute;
-      left: 0;
-      top: 1.7em;
-      z-index: 2147483647;
-      min-width: 220px;
-      max-width: 340px;
-      white-space: normal;
-      background: #14130f;
-      color: #efece3;
-      border: 1px solid #ff5a3c;
-      border-radius: 8px;
-      padding: 7px 10px;
-      font-size: 12px;
-      font-weight: 400;
-      line-height: 1.4;
-      box-shadow: 0 6px 22px rgba(0,0,0,.5);
-      pointer-events: none;
-    }
+    /* "working" cue while the codec runs (GPT-2 takes seconds) */
+    .lortnoc-busy { opacity: .6; animation: lortnoc-pulse 1.1s ease-in-out infinite; }
+    @keyframes lortnoc-pulse { 0%,100% { opacity: .55; } 50% { opacity: .9; } }
     .lortnoc-shuffle { animation: lortnoc-flicker .5s ease-in-out; }
     @keyframes lortnoc-flicker {
       0%,100% { opacity: 1; }
       50%     { opacity: .45; filter: blur(.3px); }
     }
-    @media (prefers-reduced-motion: reduce) { .lortnoc-shuffle { animation: none; } }
+    @media (prefers-reduced-motion: reduce) { .lortnoc-shuffle, .lortnoc-busy { animation: none; } }
   `
   document.documentElement.appendChild(s)
 }

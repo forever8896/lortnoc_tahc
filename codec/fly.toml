@@ -1,0 +1,38 @@
+# fly.io config for the GPT-2 codec. Set a unique `app` name (or run `fly launch`).
+# Deploy:  cd codec && fly launch --no-deploy   # (or edit `app` below), then: fly deploy
+#
+# ⚠️ MUST run exactly ONE machine. Reversibility needs encode+decode to hit the SAME
+# model — two machines can disagree on float logits and break decoding. After any deploy:
+#     fly scale count 1 --yes
+app = "lortnoc-codec"
+primary_region = "cdg"   # pick one near you: iad, lhr, cdg, ams, sjc, ...
+
+[build]
+  dockerfile = "Dockerfile"
+
+# Tune without rebuilding the image (overrides the Dockerfile ENV at runtime):
+[env]
+  CODEC_BACKEND = "gpt2"    # gpt2 | markov | wordmap | auto
+  CODEC_K = "5"             # 5 bits/word → ~40% fewer words = shorter cover AND faster
+  CODEC_SELFTEST = "1"      # startup round-trips (0 skips) — keep boot fast
+  OMP_NUM_THREADS = "4"     # let torch use all 4 shared cores
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # keep one machine warm — loading torch + gpt2 on cold start takes ~30-60s
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "120s"   # allow model load + self-test before first check
+
+# 4 shared cores speed up torch matmul several×; 4GB headroom for the extra threads.
+[[vm]]
+  size = "shared-cpu-4x"
+  memory = "4gb"

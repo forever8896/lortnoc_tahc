@@ -52,6 +52,26 @@ python3 test_coder.py     # block coder exactly reversible (mock model, no GPU) 
 python3 test_codec.py     # wordmap round-trip + active-backend round-trip
 ```
 
+## Deploy on fly.io (persistent GPT-2 codec, stable HTTPS URL)
+
+Hosts the deterministic GPT-2 backend externally so both extensions share one model — and gives a
+stable `https://<app>.fly.dev` URL (no cloudflared tunnel). The extension is unchanged; just point its
+Codec URL at the fly URL.
+
+```bash
+cd codec
+fly launch --no-deploy      # pick a unique app name + region (keeps this fly.toml)
+fly deploy                  # builds the image (CPU torch + gpt2 baked in) — a few minutes
+fly status                  # → https://<app>.fly.dev
+curl https://<app>.fly.dev/health     # {"model":"gpt2/k3","ready":true}
+```
+
+Then set **Codec URL = `https://<app>.fly.dev`** in each extension popup. Notes:
+- Boot loads torch + gpt2 + a round-trip self-test (~30–60s); the health-check `grace_period` covers it.
+- `min_machines_running = 1` keeps it warm (cold start reloads the model). ~2 GB VM, CPU only.
+- Tune quality/length live via `fly.toml` `[env]` (`CODEC_K`, `CODEC_BACKEND`) then `fly deploy`.
+- The crypto stays in the extension — fly only ever sees ciphertext (invariant §4).
+
 ## Files
 
 ```
