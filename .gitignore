@@ -16,3 +16,6 @@ dist/
 
 # local tools (downloaded binaries, e.g. cloudflared)
 .tools/
+
+# packaged extension zips
+*.zip
