@@ -16,11 +16,17 @@ async function codecBase(): Promise<string> {
   return url.replace(/\/+$/, '')
 }
 
+// Bound every codec call so a slow/unreachable fly instance fails closed (pulse clears)
+// instead of hanging forever. GPT-2 can take several seconds, so give it real headroom.
+const ENCODE_TIMEOUT = 30_000
+const HEALTH_TIMEOUT = 8_000
+
 async function postJson(url: string, body: unknown): Promise<Response> {
   return fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(ENCODE_TIMEOUT),
   })
 }
 
@@ -28,7 +34,7 @@ async function handle(msg: CodecRequest): Promise<CodecResponse> {
   const base = await codecBase()
   try {
     if (msg.type === 'HEALTH') {
-      const r = await fetch(`${base}/health`)
+      const r = await fetch(`${base}/health`, { signal: AbortSignal.timeout(HEALTH_TIMEOUT) })
       return r.ok ? { ok: true, data: await r.json() } : { ok: false, error: `health ${r.status}` }
     }
     if (msg.type === 'ENCODE') {
