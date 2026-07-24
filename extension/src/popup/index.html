@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lortnoc tahc</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <header>
+      <span class="mark">lortnoc&nbsp;tahc</span>
+      <span id="status" class="pill pill-off">codec offline</span>
+    </header>
+
+    <label class="row toggle">
+      <span>Stego</span>
+      <input type="checkbox" id="enabled" />
+    </label>
+
+    <label class="field">
+      <span>Passphrase (both sides type the same)</span>
+      <input type="password" id="passphrase" autocomplete="off" spellcheck="false" placeholder="shared secret" />
+    </label>
+
+    <label class="field">
+      <span>Codec URL</span>
+      <input type="text" id="codecUrl" spellcheck="false" placeholder="http://localhost:8080" />
+    </label>
+
+    <div class="actions">
+      <button id="save">Save</button>
+      <button id="check" class="ghost">Check codec</button>
+    </div>
+
+    <p class="note">Enter the same passphrase on both laptops, point both at the one codec URL, and toggle Stego on in the chat you're demoing.</p>
+
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,88 @@
+// Inbound: watch message bubbles, decode ours inline, leave others untouched.
+// Dedupe by data-mid; the AES-SIV tag (via onDecode) is the detector, so non-ours
+// bubbles are naturally skipped. `textContent` is lossy (custom emoji) — accepted (§6).
+import type { TgClient } from './selectors'
+import { selectorsFor } from './selectors'
+
+/** onDecode(coverText) → decoded message, or null if not one of ours. */
+export type DecodeFn = (coverText: string) => Promise<string | null>
+
+function readBubbleText(bubble: Element, textSel: string, timeSel: string): string {
+  const msg = bubble.querySelector(textSel)
+  if (!msg) return ''
+  const clone = msg.cloneNode(true) as HTMLElement
+  clone.querySelectorAll(`${timeSel}, .reactions, .MessageReactions, .document, .web`).forEach((n) => n.remove())
+  clone.querySelectorAll('.lortnoc-decoded').forEach((n) => n.remove())
+  return clone.textContent?.trim() ?? ''
+}
+
+function renderDecoded(bubble: Element, textSel: string, timeSel: string, decoded: string): void {
+  const msg = bubble.querySelector(textSel)
+  if (!(msg instanceof HTMLElement)) return
+  const time = msg.querySelector(timeSel)
+  // remove existing content except the time/meta node
+  Array.from(msg.childNodes).forEach((n) => {
+    if (n === time) return
+    if (n instanceof HTMLElement && n.matches(`${timeSel}, .reactions, .MessageReactions`)) return
+    msg.removeChild(n)
+  })
+  const span = document.createElement('span')
+  span.className = 'lortnoc-decoded'
+  span.textContent = decoded + ' '
+  msg.insertBefore(span, msg.firstChild)
+  ;(msg as HTMLElement).dataset.lortnocRendered = '1'
+}
+
+export function startInbound(client: TgClient, isReady: () => boolean, onDecode: DecodeFn): void {
+  const sel = selectorsFor(client)
+  if (!sel) return
+
+  let scanning = false
+
+  async function scan(): Promise<void> {
+    if (scanning || !isReady()) return
+    scanning = true
+    try {
+      const container = Array.from(document.querySelectorAll<HTMLElement>(sel!.bubblesContainer)).find(
+        (c) => c.offsetParent !== null,
+      )
+      if (!container) return
+      const bubbles = Array.from(container.querySelectorAll(sel!.bubble))
+      for (const bubble of bubbles) {
+        const mid = bubble.getAttribute(sel!.midAttr) ?? ''
+        const el = bubble as HTMLElement
+        const msg = bubble.querySelector(sel!.bubbleText) as HTMLElement | null
+        if (!msg) continue
+        if (el.dataset.lortnocMid === mid && msg.dataset.lortnocRendered === '1') continue
+        if (el.dataset.lortnocPending === '1') continue
+        const text = readBubbleText(bubble, sel!.bubbleText, sel!.timeInMessage)
+        if (!text) continue
+        el.dataset.lortnocPending = '1'
+        try {
+          const decoded = await onDecode(text)
+          if (decoded != null) {
+            renderDecoded(bubble, sel!.bubbleText, sel!.timeInMessage, decoded)
+            el.dataset.lortnocMid = mid
+          }
+        } finally {
+          delete el.dataset.lortnocPending
+        }
+      }
+    } finally {
+      scanning = false
+    }
+  }
+
+  let timer: number | undefined
+  const debouncedScan = (): void => {
+    window.clearTimeout(timer)
+    timer = window.setTimeout(() => void scan(), 250)
+  }
+
+  new MutationObserver(debouncedScan).observe(document.body, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+  })
+  void scan()
+}
