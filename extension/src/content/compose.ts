@@ -64,9 +64,11 @@ export function installSendInterceptor(
     shuffle(input) // immediate feedback while the codec runs
     try {
       const cover = await onSwap(real) // encrypt + /encode
+      console.debug('[lortnoc] swap: %o -> %o', real, cover)
       if (cover == null) return // fail-closed: leave draft, do not send
       replaceCompose(input, cover)
       const btn = visibleSendButton(sel!.sendButton)
+      if (!btn) console.warn('[lortnoc] send button not found for selector', sel!.sendButton)
       btn?.click() // real send; synthetic Enter would be ignored (isTrusted:false)
     } finally {
       // release after the app has processed the click
@@ -80,10 +82,12 @@ export function installSendInterceptor(
   document.addEventListener(
     'keydown',
     (e) => {
-      if (swapping || !isReady()) return
       const t = e.target as HTMLElement | null
-      if (!t || !t.matches?.(sel.composeInput)) return
-      if (!isSendShortcut(e)) return
+      // target may be the contenteditable OR a child text node's element — use closest
+      const onCompose = !!t?.closest?.(sel.composeInput)
+      if (!onCompose || !isSendShortcut(e)) return
+      console.debug('[lortnoc] Enter on compose — ready=%s swapping=%s', isReady(), swapping)
+      if (swapping || !isReady()) return
       e.preventDefault()
       e.stopImmediatePropagation()
       void doSwapAndSend()

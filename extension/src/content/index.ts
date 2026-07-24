@@ -1,6 +1,6 @@
 // Content-script entry: wires compose interception and inbound decoding to the codec
 // (via the service worker) and the in-page crypto. Plaintext + key never leave here.
-import { detectClient } from './selectors'
+import { detectClient, selectorsFor, activeCompose } from './selectors'
 import { injectStyles } from './ui'
 import { initState, get, ready } from './state'
 import { installSendInterceptor } from './compose'
@@ -11,9 +11,13 @@ import type { EncodeData, DecodeData } from '../shared/messages'
 
 async function main(): Promise<void> {
   injectStyles()
-  await initState()
+  await initState(() => {
+    const s = get()
+    console.debug('[lortnoc] state changed — enabled=%s hasKey=%s ready=%s', s.enabled, s.key !== null, ready())
+  })
 
   const client = detectClient()
+  console.info('[lortnoc] loaded on', location.pathname, '→ client:', client)
   if (client !== 'k') {
     console.warn(
       '[lortnoc] Unsupported Telegram Web client at',
@@ -22,6 +26,17 @@ async function main(): Promise<void> {
     )
     return
   }
+
+  const sel = selectorsFor(client)!
+  const composeFound = !!activeCompose(sel)
+  const s0 = get()
+  console.info(
+    '[lortnoc] compose found=%s · enabled=%s · hasKey=%s · ready=%s (set passphrase + toggle Stego on)',
+    composeFound,
+    s0.enabled,
+    s0.key !== null,
+    ready(),
+  )
 
   // Outbound: real text → AES-SIV → /encode → cover text (or null to fail-closed).
   installSendInterceptor(client, ready, async (real) => {

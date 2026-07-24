@@ -13,3 +13,6 @@ venv/
 node_modules/
 dist/
 .DS_Store
+
+# local tools (downloaded binaries, e.g. cloudflared)
+.tools/
