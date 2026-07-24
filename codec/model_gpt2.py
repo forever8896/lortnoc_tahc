@@ -16,21 +16,34 @@ Requires: torch, transformers (see requirements.txt). Model: gpt2 (124M), CPU.
 """
 from __future__ import annotations
 
+import os
 import re
 
-# Fixed conversational priming so cover text reads like idle chatter. Not part of the
-# payload — identical on both ends by construction.
-PRIMING = "so anyway i was just thinking about how"
+# Priming context sets the TONE of the cover text (it's not emitted — identical on both
+# ends). A warm, chatty opener makes GPT-2 continue as friendly small-talk instead of
+# drifting into confessional rambling. Tune live via the CODEC_PRIME env (no rebuild).
+DEFAULT_PRIME = (
+    "hey!! oh my gosh it has honestly been way too long since we properly caught up, "
+    "i have so much to tell you haha. ok so the other day i was just chatting with a "
+    "friend about how"
+)
+
+# Conversational model by default (GPT-2 architecture, trained on real dialogue) → much
+# friendlier than base gpt2, and 124M so it's as fast. Override with CODEC_MODEL.
+DEFAULT_MODEL = "microsoft/DialoGPT-small"
 
 
 class GPT2Model:
-    def __init__(self, model_name: str = "gpt2"):
+    def __init__(self, model_name: str | None = None):
         import torch
-        from transformers import GPT2LMHeadModel, GPT2TokenizerFast
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        model_name = model_name or os.environ.get("CODEC_MODEL", DEFAULT_MODEL)
+        self.PRIMING = os.environ.get("CODEC_PRIME", DEFAULT_PRIME)
 
         self.torch = torch
-        self.tok = GPT2TokenizerFast.from_pretrained(model_name)
-        self.model = GPT2LMHeadModel.from_pretrained(model_name)
+        self.tok = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name)
         self.model.eval()
         torch.manual_seed(0)
 
@@ -55,7 +68,7 @@ class GPT2Model:
             raise RuntimeError(f"only {len(safe_ids)} safe word tokens; need >= 64")
         self.safe_ids = torch.tensor(sorted(safe_ids), dtype=torch.long)
 
-        self._priming_ids = self.tok.encode(PRIMING)
+        self._priming_ids = self.tok.encode(self.PRIMING)
         self._reset()
 
     # ---- internal KV-cached state ----
@@ -115,5 +128,5 @@ class GPT2Model:
     def digest(self) -> str:
         import hashlib
 
-        basis = PRIMING + "|" + ",".join(map(str, self.safe_ids.tolist()[:64]))
+        basis = self.PRIMING + "|" + ",".join(map(str, self.safe_ids.tolist()[:64]))
         return hashlib.sha256(basis.encode()).hexdigest()[:16]
