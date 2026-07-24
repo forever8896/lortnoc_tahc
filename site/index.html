@@ -53,8 +53,9 @@ body{
 .lede strong{ color:var(--ink); font-weight:300; }
 
 /* ── 00–01 the film: cold open + the threat, scroll-scrubbed ── */
-/* Track gives the scrub room to breathe: ~20vh of scroll per second of film. */
-.film{ height:620vh; position:relative; background:#000; }
+/* Fallback track height; JS sets the real one per section from data-track
+   (~20vh of scroll per second of film). */
+.film{ height:560vh; position:relative; background:#000; }
 .film__pin{ position:sticky; top:0; height:100vh; overflow:hidden; }
 .film__video,.film__poster{
   position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
@@ -88,6 +89,8 @@ body{
   font-size:clamp(30px,4.6vw,74px); line-height:1.06; letter-spacing:-0.024em;
   color:var(--signal); max-width:24ch;
 }
+/* The resolving half of a sentence: same weight and alignment, signal colour. */
+.film__line--signal p.big{ color:var(--signal); }
 .film__date{ margin-bottom:clamp(28px,4vw,56px); }
 .film__line .lede{ margin-top:clamp(32px,4vw,60px); }
 .cue{
@@ -188,18 +191,16 @@ body{
   *{ animation:none !important; transition:none !important; }
   .reversal{ height:auto !important; }
   .reversal__pin{ position:static; height:auto; min-height:100vh; }
-  /* Static tier: the film collapses to a still frame with the copy stacked
-     underneath in normal document flow. */
+  /* Static tier: each film collapses to its poster frame with the copy
+     stacked underneath in normal document flow. */
   .film{ height:auto !important; }
-  .film__pin{
-    position:relative; height:auto; padding:10vh 0;
-    background:#000 url("videos/therun-poster.jpg") center/cover no-repeat;
-  }
-  .film__video,.film__poster,.cue{ display:none; }
+  .film__pin{ position:relative; height:auto; padding:0 0 6vh; background:#000; }
+  .film__video,.film__scrim,.cue{ display:none; }
+  .film__poster{ position:static; width:100%; height:auto; display:block; }
   .film__copy{ position:static; }
   .film__line{
     position:static; opacity:1 !important; transform:none !important;
-    padding-top:9vh; padding-bottom:9vh; margin:0 auto;
+    padding:8vh var(--shell); margin:0 auto;
   }
 }
 </style>
@@ -209,38 +210,46 @@ body{
 
 <main>
 
-  <!-- 00–01 ─ THE RUN. Cold open and the threat, over one continuous
-       scroll-scrubbed take. The film is all-intra, so any scroll position
-       seeks instantly and scrolling up plays it backwards. -->
-  <section class="film" id="film" aria-label="Chat Control">
+  <!-- 00–01 ─ FILM A, "being watched". One continuous scroll-scrubbed take:
+       a man on his phone, the camera rises off him into a street surveillance
+       camera, through the lens, and out into the control room where an officer
+       reads everything. Falls to black over the last two seconds so the
+       reversal section below starts from the black the film ends on. -->
+  <section class="film" id="film-watched" aria-label="Chat Control"
+           data-scrub="videos/watched-scrub.mp4"
+           data-mobile="videos/watched-mobile.mp4"
+           data-poster="videos/watched-poster.jpg"
+           data-len="25.2" data-track="560">
     <div class="film__pin">
-      <img class="film__poster" id="film-poster" src="videos/therun-poster.jpg" alt="" aria-hidden="true">
-      <video class="film__video" id="film-video" muted playsinline preload="none"
-             poster="videos/therun-poster.jpg" aria-hidden="true"></video>
+      <img class="film__poster" src="videos/watched-poster.jpg" alt="" aria-hidden="true">
+      <video class="film__video" muted playsinline preload="none"
+             poster="videos/watched-poster.jpg" aria-hidden="true"></video>
       <div class="film__scrim" aria-hidden="true"></div>
 
       <div class="film__copy">
         <!-- in=-1/hold=0 so the hero is already at full opacity before the
              first scroll — otherwise the page opens on an empty screen. -->
-        <div class="film__line" data-in="-1" data-hold="0" data-out="5.2" data-gone="6.8">
+        <div class="film__line" data-in="-1" data-hold="0" data-out="4.0" data-gone="5.4">
           <div class="eyebrow eyebrow--signal film__date">17 June 2026 — European Union</div>
           <h1>They made it legal to read your messages.</h1>
           <p class="lede">Every platform. Every message. Scanned before it&rsquo;s ever encrypted. It&rsquo;s called Chat Control, and it is already law.</p>
         </div>
 
-        <div class="film__line" data-in="7.4" data-hold="8.6" data-out="10.4" data-gone="11.4">
+        <div class="film__line" data-in="6.2" data-hold="7.4" data-out="9.4" data-gone="10.4">
           <p class="big">Encryption happens after the scan.</p>
         </div>
 
-        <div class="film__line" data-in="12.4" data-hold="13.6" data-out="15.4" data-gone="16.4">
+        <div class="film__line" data-in="11.2" data-hold="12.4" data-out="14.4" data-gone="15.4">
           <p class="big">So encryption doesn&rsquo;t matter.</p>
         </div>
 
-        <div class="film__line" data-in="17.4" data-hold="18.6" data-out="20.4" data-gone="21.4">
+        <!-- Rides the whole ascent: into the lens, through it, into the room. -->
+        <div class="film__line" data-in="16.2" data-hold="17.4" data-out="21.2" data-gone="22.2">
           <p class="big">They read it first.</p>
         </div>
 
-        <div class="film__line film__line--end" data-in="22.6" data-hold="24.0" data-out="28.4" data-gone="30.2">
+        <!-- Lands on the fade to black. -->
+        <div class="film__line film__line--end" data-in="22.4" data-hold="23.4" data-out="24.8" data-gone="25.2">
           <p class="big">They wrote the law assuming you&rsquo;d accept it.</p>
         </div>
       </div>
@@ -252,13 +261,43 @@ body{
     </div>
   </section>
 
-  <!-- 02 ─ the reversal -->
+  <!-- 02 ─ the reversal. Deliberately no film: pure black, so the name
+       reveal lands with nothing competing for attention. -->
   <section class="reversal" id="reversal" aria-label="Lortnoc Tahc">
     <div class="reversal__pin">
       <div class="word" id="word" aria-label="Chat Control becomes Lortnoc Tahc"></div>
       <div class="reversal__caption" id="caption">
         <p>That&rsquo;s Chat Control spelled backwards.</p>
         <p>We built the opposite of the law.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02b ─ FILM B, "the escape". The answer to Film A: he doesn't outrun the
+       light, it passes over him because he looks ordinary. Noir chase into a
+       warm cafe, ending on the phone waking green — which hands straight off
+       to the message panes below. -->
+  <section class="film" id="film-escape" aria-label="How it works"
+           data-scrub="videos/escape-scrub.mp4"
+           data-mobile="videos/escape-mobile.mp4"
+           data-poster="videos/escape-poster.jpg"
+           data-len="25.17" data-track="440">
+    <div class="film__pin">
+      <img class="film__poster" src="videos/escape-poster.jpg" alt="" aria-hidden="true">
+      <video class="film__video" muted playsinline preload="none"
+             poster="videos/escape-poster.jpg" aria-hidden="true"></video>
+      <div class="film__scrim" aria-hidden="true"></div>
+
+      <div class="film__copy">
+        <!-- One sentence split across the two halves of the film: the promise
+             over the run, the mechanism once the beam has passed him. -->
+        <div class="film__line" data-in="2.4" data-hold="3.8" data-out="9.2" data-gone="10.6">
+          <p class="big">Take back control of your privacy</p>
+        </div>
+
+        <div class="film__line film__line--signal" data-in="14.6" data-hold="16.0" data-out="23.6" data-gone="25.17">
+          <p class="big">by transforming every message into friendly small talk.</p>
+        </div>
       </div>
     </div>
   </section>
@@ -286,9 +325,6 @@ body{
       <p class="lede">Your message becomes small talk. Small talk is all they get. The person you&rsquo;re talking to sees exactly what you wrote.</p>
     </div>
 
-    <div class="trick__kicker" data-reveal="1">
-      <p>They&rsquo;re not blocked. They&rsquo;re not hacked. They&rsquo;re just reading the wrong conversation.</p>
-    </div>
   </section>
 
   <!-- 04 ─ the line -->
@@ -526,14 +562,13 @@ body{
     }
   }, 1200);
 
-  /* ── beats 00-01: THE RUN, scroll-scrubbed ────────────────── */
-  // The film is all-intra (keyint=1), so every frame is a keyframe and any
-  // scroll position seeks instantly. Scrolling up plays it backwards.
-  var filmTrack  = document.getElementById('film');
-  var filmVideo  = document.getElementById('film-video');
-  var filmPoster = document.getElementById('film-poster');
-  var cueEl      = document.querySelector('.cue');
-  var FILM_LEN   = 30.2;   // must match the ffmpeg build of therun-scrub.mp4
+  /* ── the films: scroll-scrubbed pinned sections ───────────── */
+  // Both films are all-intra (keyint=1), so every frame is a keyframe and any
+  // scroll position seeks instantly. Scrolling up plays them backwards.
+  //
+  // Section A ("being watched") runs behind beats 00-01 and falls to black.
+  // The reversal then plays on that same black. Section B ("the escape")
+  // picks up after it and hands off to the message panes.
 
   // Data-saver and 2g never get a multi-megabyte film: they keep the poster.
   var conn = navigator.connection;
@@ -541,86 +576,96 @@ body{
 
   // Scrub only where it works. currentTime-while-native-scrolling is the
   // documented jank path on touch, so phones play through instead.
-  var filmScrub = window.matchMedia('(hover: hover) and (pointer: fine)').matches
-                  && window.innerWidth >= 900;
+  var canScrub = window.matchMedia('(hover: hover) and (pointer: fine)').matches
+                 && window.innerWidth >= 900;
 
-  if (!filmScrub) filmTrack.style.height = '320vh';
+  function setupFilm(section) {
+    var video  = section.querySelector('.film__video');
+    var poster = section.querySelector('.film__poster');
+    var cue    = section.querySelector('.cue');
+    var len    = parseFloat(section.dataset.len);
 
-  // Copy windows are authored in film-seconds; normalise to 0..1 progress.
-  var filmLines = [].slice.call(document.querySelectorAll('.film__line')).map(function (el) {
-    return {
-      el: el,
-      a: parseFloat(el.dataset.in)   / FILM_LEN,
-      b: parseFloat(el.dataset.hold) / FILM_LEN,
-      c: parseFloat(el.dataset.out)  / FILM_LEN,
-      d: parseFloat(el.dataset.gone) / FILM_LEN
-    };
-  });
+    // Touch gets a shorter track — it plays through rather than scrubbing,
+    // so there's no reason to make people scroll the full scrub distance.
+    section.style.height = (canScrub ? parseFloat(section.dataset.track) : 300) + 'vh';
 
-  var filmReady = false;
+    // Copy windows are authored in film-seconds; normalise to 0..1 progress.
+    var lines = [].slice.call(section.querySelectorAll('.film__line')).map(function (el) {
+      return {
+        el: el,
+        a: parseFloat(el.dataset.in)   / len,
+        b: parseFloat(el.dataset.hold) / len,
+        c: parseFloat(el.dataset.out)  / len,
+        d: parseFloat(el.dataset.gone) / len
+      };
+    });
 
-  if (!lite) {
-    // preload BEFORE src, then an explicit load(). Setting src while the
-    // element still says preload="none" leaves browsers with no reason to
-    // fetch anything, so canplay never fires and duration stays NaN.
-    filmVideo.preload = 'auto';
-    filmVideo.src = filmScrub ? 'videos/therun-scrub.mp4' : 'videos/therun-mobile.mp4';
-    filmVideo.load();
+    var shown = false;
+    if (!lite) {
+      // preload BEFORE src, then an explicit load(). Setting src while the
+      // element still says preload="none" leaves browsers with no reason to
+      // fetch anything, so canplay never fires and duration stays NaN.
+      video.preload = 'auto';
+      video.src = canScrub ? section.dataset.scrub : section.dataset.mobile;
+      video.load();
 
-    // Poster holds the frame until the film can actually play, so first paint
-    // is instant and the video fades in underneath it.
-    var reveal = function () {
-      if (filmReady) return;
-      filmReady = true;
-      filmVideo.classList.add('is-ready');
-      filmPoster.style.transition = 'opacity 1.2s ease';
-      filmPoster.style.opacity = '0';
-    };
-    filmVideo.addEventListener('loadeddata', reveal);
-    filmVideo.addEventListener('canplay', reveal);
+      // Poster holds the frame until the film can actually play, so first
+      // paint is instant and the video fades in underneath it.
+      var reveal = function () {
+        if (shown) return;
+        shown = true;
+        video.classList.add('is-ready');
+        poster.style.transition = 'opacity 1.2s ease';
+        poster.style.opacity = '0';
+      };
+      video.addEventListener('loadeddata', reveal);
+      video.addEventListener('canplay', reveal);
 
-    if (!filmScrub) {
-      filmVideo.loop = true;
-      var pl = filmVideo.play();
-      if (pl && pl.catch) pl.catch(function () {});
-    }
-  }
-
-  var fp = 0, fsp = 0, fseeded = false;
-
-  function tickFilm(dt) {
-    var r = filmTrack.getBoundingClientRect();
-    var span = r.height - window.innerHeight;
-    fp = span > 0 ? Math.min(1, Math.max(0, (-r.top) / span)) : 0;
-
-    // Land on the real position on first frame (e.g. a refresh mid-page)
-    // instead of easing up from zero.
-    if (!fseeded) { fsp = fp; fseeded = true; }
-
-    // Same easing as the reversal — turns wheel steps into cinematic inertia.
-    fsp += (fp - fsp) * (1 - Math.pow(0.0055, dt / 1000));
-
-    // readyState >= 2 (HAVE_CURRENT_DATA) means it can actually honour a seek.
-    if (filmScrub && !lite && filmVideo.readyState >= 2 && filmVideo.duration) {
-      var target = fsp * (filmVideo.duration - 0.05);
-      if (Math.abs(filmVideo.currentTime - target) > 0.02) {
-        try { filmVideo.currentTime = target; } catch (e) { /* not seekable yet */ }
+      if (!canScrub) {
+        video.loop = true;
+        var pl = video.play();
+        if (pl && pl.catch) pl.catch(function () {});
       }
     }
 
-    for (var i = 0; i < filmLines.length; i++) {
-      var w = filmLines[i], o;
-      if (fsp < w.a || fsp > w.d)      o = 0;
-      else if (fsp < w.b)              o = w.b > w.a ? (fsp - w.a) / (w.b - w.a) : 1;
-      else if (fsp <= w.c)             o = 1;
-      else                             o = w.d > w.c ? 1 - (fsp - w.c) / (w.d - w.c) : 0;
-      var s = o * o * (3 - 2 * o);
-      w.el.style.opacity = s.toFixed(3);
-      w.el.style.transform = 'translate3d(0,' + (26 * (1 - s)).toFixed(1) + 'px,0)';
-    }
+    var p = 0, sp = 0, seeded = false;
 
-    if (cueEl) cueEl.style.opacity = Math.max(0, 1 - fsp / 0.05).toFixed(3);
+    return function (dt) {
+      var r = section.getBoundingClientRect();
+      var span = r.height - window.innerHeight;
+      p = span > 0 ? Math.min(1, Math.max(0, (-r.top) / span)) : 0;
+
+      // Land on the real position on the first frame (e.g. a refresh
+      // mid-page) instead of easing up from zero.
+      if (!seeded) { sp = p; seeded = true; }
+
+      // Same easing as the reversal — wheel steps become cinematic inertia.
+      sp += (p - sp) * (1 - Math.pow(0.0055, dt / 1000));
+
+      // readyState >= 2 (HAVE_CURRENT_DATA) means it can honour a seek.
+      if (canScrub && !lite && video.readyState >= 2 && video.duration) {
+        var target = sp * (video.duration - 0.05);
+        if (Math.abs(video.currentTime - target) > 0.02) {
+          try { video.currentTime = target; } catch (e) { /* not seekable yet */ }
+        }
+      }
+
+      for (var i = 0; i < lines.length; i++) {
+        var w = lines[i], o;
+        if (sp < w.a || sp > w.d)      o = 0;
+        else if (sp < w.b)             o = w.b > w.a ? (sp - w.a) / (w.b - w.a) : 1;
+        else if (sp <= w.c)            o = 1;
+        else                           o = w.d > w.c ? 1 - (sp - w.c) / (w.d - w.c) : 0;
+        var s = o * o * (3 - 2 * o);
+        w.el.style.opacity = s.toFixed(3);
+        w.el.style.transform = 'translate3d(0,' + (26 * (1 - s)).toFixed(1) + 'px,0)';
+      }
+
+      if (cue) cue.style.opacity = Math.max(0, 1 - sp / 0.05).toFixed(3);
+    };
   }
+
+  var filmTicks = [].slice.call(document.querySelectorAll('.film')).map(setupFilm);
 
   /* ── one loop drives everything ───────────────────────────── */
   var last = performance.now();
@@ -629,7 +674,7 @@ body{
     last = now;
     tickReveals();
     tickWord(dt);
-    tickFilm(dt);
+    for (var i = 0; i < filmTicks.length; i++) filmTicks[i](dt);
     requestAnimationFrame(loop);
   })(performance.now());
 
