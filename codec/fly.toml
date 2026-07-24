@@ -1,5 +1,9 @@
 # fly.io config for the GPT-2 codec. Set a unique `app` name (or run `fly launch`).
 # Deploy:  cd codec && fly launch --no-deploy   # (or edit `app` below), then: fly deploy
+#
+# ⚠️ MUST run exactly ONE machine. Reversibility needs encode+decode to hit the SAME
+# model — two machines can disagree on float logits and break decoding. After any deploy:
+#     fly scale count 1 --yes
 app = "lortnoc-codec"
 primary_region = "cdg"   # pick one near you: iad, lhr, cdg, ams, sjc, ...
 
