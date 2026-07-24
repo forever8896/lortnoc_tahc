@@ -52,31 +52,49 @@ body{
 .lede{ margin:0; font-size:clamp(17px,1.15vw,19px); line-height:1.75; max-width:620px; color:var(--muted); }
 .lede strong{ color:var(--ink); font-weight:300; }
 
-/* ── 00 cold open ───────────────────────────────────────────── */
-.open{ min-height:100vh; padding-top:clamp(28px,5vw,64px); padding-bottom:clamp(28px,5vw,64px); display:flex; flex-direction:column; }
-.open__body{ flex:1; display:flex; flex-direction:column; justify-content:center; padding-top:6vh; }
-.open__date{ margin-bottom:clamp(28px,4vw,56px); }
-.open h1{
+/* ── 00–01 the film: cold open + the threat, scroll-scrubbed ── */
+/* Track gives the scrub room to breathe: ~20vh of scroll per second of film. */
+.film{ height:620vh; position:relative; background:#000; }
+.film__pin{ position:sticky; top:0; height:100vh; overflow:hidden; }
+.film__video,.film__poster{
+  position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+}
+.film__video{ opacity:0; transition:opacity 1.2s ease; }
+.film__video.is-ready{ opacity:1; }
+/* Keeps the copy legible when the searchlight blows out the left of frame. */
+.film__scrim{
+  position:absolute; inset:0; pointer-events:none;
+  background:
+    linear-gradient(90deg, rgba(8,8,10,0.88) 0%, rgba(8,8,10,0.55) 46%, rgba(8,8,10,0.15) 100%),
+    linear-gradient(180deg, rgba(8,8,10,0.55) 0%, transparent 26%, transparent 68%, rgba(8,8,10,0.75) 100%);
+}
+.film__copy{ position:absolute; inset:0; z-index:2; }
+.film__line{
+  position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center;
+  padding:0 var(--shell); max-width:1560px; margin:0 auto;
+  will-change:opacity, transform;
+}
+.film__line--end{ align-items:flex-end; text-align:right; }
+.film__line h1{
   margin:0; font-weight:400;
   font-size:clamp(48px,9vw,160px); line-height:0.95; letter-spacing:-0.035em;
   max-width:17ch; text-wrap:balance;
 }
-.open .lede{ margin-top:clamp(32px,4vw,60px); }
-.cue{ display:flex; align-items:center; gap:14px; }
-.cue__line{ display:block; width:1px; height:46px; background:linear-gradient(to bottom,rgba(237,234,228,0.35),transparent); animation:lt-cue 2.6s ease-in-out infinite; }
-
-/* ── 01 the threat ──────────────────────────────────────────── */
-.threat__frame{ min-height:88vh; display:flex; align-items:center; }
-.threat__frame--last{ min-height:100vh; justify-content:flex-end; }
-.threat p{
+.film__line p.big{
   margin:0; font-weight:400;
-  font-size:clamp(34px,5.6vw,88px); line-height:1.02; letter-spacing:-0.028em;
-  max-width:22ch;
+  font-size:clamp(34px,5.6vw,88px); line-height:1.02; letter-spacing:-0.028em; max-width:22ch;
 }
-.threat__turn{
-  font-size:clamp(30px,4.6vw,74px) !important; line-height:1.06 !important; letter-spacing:-0.024em !important;
-  color:var(--signal); max-width:24ch !important; text-align:right;
+.film__line--end p.big{
+  font-size:clamp(30px,4.6vw,74px); line-height:1.06; letter-spacing:-0.024em;
+  color:var(--signal); max-width:24ch;
 }
+.film__date{ margin-bottom:clamp(28px,4vw,56px); }
+.film__line .lede{ margin-top:clamp(32px,4vw,60px); }
+.cue{
+  position:absolute; left:var(--shell); bottom:clamp(28px,5vw,52px); z-index:3;
+  display:flex; align-items:center; gap:14px;
+}
+.cue__line{ display:block; width:1px; height:46px; background:linear-gradient(to bottom,rgba(237,234,228,0.35),transparent); animation:lt-cue 2.6s ease-in-out infinite; }
 
 /* ── 02 the reversal ────────────────────────────────────────── */
 .reversal{ height:320vh; position:relative; }
@@ -162,36 +180,76 @@ body{
 }
 @keyframes lt-cue{ 0%,100%{ transform:translateY(0); opacity:0.35; } 50%{ transform:translateY(9px); opacity:0.9; } }
 
+/* JS drives the film copy; hide it up front only when JS is actually running,
+   so a failed script leaves the words on screen rather than a black hole. */
+.js .film__line{ opacity:0; }
+
 @media (prefers-reduced-motion: reduce){
   *{ animation:none !important; transition:none !important; }
   .reversal{ height:auto !important; }
   .reversal__pin{ position:static; height:auto; min-height:100vh; }
+  /* Static tier: the film collapses to a still frame with the copy stacked
+     underneath in normal document flow. */
+  .film{ height:auto !important; }
+  .film__pin{
+    position:relative; height:auto; padding:10vh 0;
+    background:#000 url("videos/therun-poster.jpg") center/cover no-repeat;
+  }
+  .film__video,.film__poster,.cue{ display:none; }
+  .film__copy{ position:static; }
+  .film__line{
+    position:static; opacity:1 !important; transform:none !important;
+    padding-top:9vh; padding-bottom:9vh; margin:0 auto;
+  }
 }
 </style>
+<script>document.documentElement.className += ' js';</script>
 </head>
 <body>
 
 <main>
 
-  <!-- 00 ─ cold open -->
-  <section class="wrap open" aria-label="Chat Control">
-    <div class="open__body">
-      <div class="eyebrow eyebrow--signal open__date">17 June 2026 — European Union</div>
-      <h1>They made it legal to read your messages.</h1>
-      <p class="lede">Every platform. Every message. Scanned before it&rsquo;s ever encrypted. It&rsquo;s called Chat Control, and it is already law.</p>
-    </div>
-    <div class="cue" aria-hidden="true">
-      <span class="cue__line"></span>
-      <span class="eyebrow">Scroll</span>
-    </div>
-  </section>
+  <!-- 00–01 ─ THE RUN. Cold open and the threat, over one continuous
+       scroll-scrubbed take. The film is all-intra, so any scroll position
+       seeks instantly and scrolling up plays it backwards. -->
+  <section class="film" id="film" aria-label="Chat Control">
+    <div class="film__pin">
+      <img class="film__poster" id="film-poster" src="videos/therun-poster.jpg" alt="" aria-hidden="true">
+      <video class="film__video" id="film-video" muted playsinline preload="none"
+             poster="videos/therun-poster.jpg" aria-hidden="true"></video>
+      <div class="film__scrim" aria-hidden="true"></div>
 
-  <!-- 01 ─ the threat -->
-  <section class="wrap threat" aria-label="The threat">
-    <div class="threat__frame"><p data-reveal="1">Encryption happens after the scan.</p></div>
-    <div class="threat__frame"><p data-reveal="1">So encryption doesn&rsquo;t matter.</p></div>
-    <div class="threat__frame"><p data-reveal="1">They read it first.</p></div>
-    <div class="threat__frame threat__frame--last"><p class="threat__turn" data-reveal="1">They wrote the law assuming you&rsquo;d accept it.</p></div>
+      <div class="film__copy">
+        <!-- in=-1/hold=0 so the hero is already at full opacity before the
+             first scroll — otherwise the page opens on an empty screen. -->
+        <div class="film__line" data-in="-1" data-hold="0" data-out="5.2" data-gone="6.8">
+          <div class="eyebrow eyebrow--signal film__date">17 June 2026 — European Union</div>
+          <h1>They made it legal to read your messages.</h1>
+          <p class="lede">Every platform. Every message. Scanned before it&rsquo;s ever encrypted. It&rsquo;s called Chat Control, and it is already law.</p>
+        </div>
+
+        <div class="film__line" data-in="7.4" data-hold="8.6" data-out="10.4" data-gone="11.4">
+          <p class="big">Encryption happens after the scan.</p>
+        </div>
+
+        <div class="film__line" data-in="12.4" data-hold="13.6" data-out="15.4" data-gone="16.4">
+          <p class="big">So encryption doesn&rsquo;t matter.</p>
+        </div>
+
+        <div class="film__line" data-in="17.4" data-hold="18.6" data-out="20.4" data-gone="21.4">
+          <p class="big">They read it first.</p>
+        </div>
+
+        <div class="film__line film__line--end" data-in="22.6" data-hold="24.0" data-out="28.4" data-gone="30.2">
+          <p class="big">They wrote the law assuming you&rsquo;d accept it.</p>
+        </div>
+      </div>
+
+      <div class="cue" aria-hidden="true">
+        <span class="cue__line"></span>
+        <span class="eyebrow">Scroll</span>
+      </div>
+    </div>
   </section>
 
   <!-- 02 ─ the reversal -->
@@ -468,6 +526,102 @@ body{
     }
   }, 1200);
 
+  /* ── beats 00-01: THE RUN, scroll-scrubbed ────────────────── */
+  // The film is all-intra (keyint=1), so every frame is a keyframe and any
+  // scroll position seeks instantly. Scrolling up plays it backwards.
+  var filmTrack  = document.getElementById('film');
+  var filmVideo  = document.getElementById('film-video');
+  var filmPoster = document.getElementById('film-poster');
+  var cueEl      = document.querySelector('.cue');
+  var FILM_LEN   = 30.2;   // must match the ffmpeg build of therun-scrub.mp4
+
+  // Data-saver and 2g never get a multi-megabyte film: they keep the poster.
+  var conn = navigator.connection;
+  var lite = !!(conn && (conn.saveData || /(^|-)2g$/.test(conn.effectiveType || '')));
+
+  // Scrub only where it works. currentTime-while-native-scrolling is the
+  // documented jank path on touch, so phones play through instead.
+  var filmScrub = window.matchMedia('(hover: hover) and (pointer: fine)').matches
+                  && window.innerWidth >= 900;
+
+  if (!filmScrub) filmTrack.style.height = '320vh';
+
+  // Copy windows are authored in film-seconds; normalise to 0..1 progress.
+  var filmLines = [].slice.call(document.querySelectorAll('.film__line')).map(function (el) {
+    return {
+      el: el,
+      a: parseFloat(el.dataset.in)   / FILM_LEN,
+      b: parseFloat(el.dataset.hold) / FILM_LEN,
+      c: parseFloat(el.dataset.out)  / FILM_LEN,
+      d: parseFloat(el.dataset.gone) / FILM_LEN
+    };
+  });
+
+  var filmReady = false;
+
+  if (!lite) {
+    // preload BEFORE src, then an explicit load(). Setting src while the
+    // element still says preload="none" leaves browsers with no reason to
+    // fetch anything, so canplay never fires and duration stays NaN.
+    filmVideo.preload = 'auto';
+    filmVideo.src = filmScrub ? 'videos/therun-scrub.mp4' : 'videos/therun-mobile.mp4';
+    filmVideo.load();
+
+    // Poster holds the frame until the film can actually play, so first paint
+    // is instant and the video fades in underneath it.
+    var reveal = function () {
+      if (filmReady) return;
+      filmReady = true;
+      filmVideo.classList.add('is-ready');
+      filmPoster.style.transition = 'opacity 1.2s ease';
+      filmPoster.style.opacity = '0';
+    };
+    filmVideo.addEventListener('loadeddata', reveal);
+    filmVideo.addEventListener('canplay', reveal);
+
+    if (!filmScrub) {
+      filmVideo.loop = true;
+      var pl = filmVideo.play();
+      if (pl && pl.catch) pl.catch(function () {});
+    }
+  }
+
+  var fp = 0, fsp = 0, fseeded = false;
+
+  function tickFilm(dt) {
+    var r = filmTrack.getBoundingClientRect();
+    var span = r.height - window.innerHeight;
+    fp = span > 0 ? Math.min(1, Math.max(0, (-r.top) / span)) : 0;
+
+    // Land on the real position on first frame (e.g. a refresh mid-page)
+    // instead of easing up from zero.
+    if (!fseeded) { fsp = fp; fseeded = true; }
+
+    // Same easing as the reversal — turns wheel steps into cinematic inertia.
+    fsp += (fp - fsp) * (1 - Math.pow(0.0055, dt / 1000));
+
+    // readyState >= 2 (HAVE_CURRENT_DATA) means it can actually honour a seek.
+    if (filmScrub && !lite && filmVideo.readyState >= 2 && filmVideo.duration) {
+      var target = fsp * (filmVideo.duration - 0.05);
+      if (Math.abs(filmVideo.currentTime - target) > 0.02) {
+        try { filmVideo.currentTime = target; } catch (e) { /* not seekable yet */ }
+      }
+    }
+
+    for (var i = 0; i < filmLines.length; i++) {
+      var w = filmLines[i], o;
+      if (fsp < w.a || fsp > w.d)      o = 0;
+      else if (fsp < w.b)              o = w.b > w.a ? (fsp - w.a) / (w.b - w.a) : 1;
+      else if (fsp <= w.c)             o = 1;
+      else                             o = w.d > w.c ? 1 - (fsp - w.c) / (w.d - w.c) : 0;
+      var s = o * o * (3 - 2 * o);
+      w.el.style.opacity = s.toFixed(3);
+      w.el.style.transform = 'translate3d(0,' + (26 * (1 - s)).toFixed(1) + 'px,0)';
+    }
+
+    if (cueEl) cueEl.style.opacity = Math.max(0, 1 - fsp / 0.05).toFixed(3);
+  }
+
   /* ── one loop drives everything ───────────────────────────── */
   var last = performance.now();
   (function loop(now) {
@@ -475,6 +629,7 @@ body{
     last = now;
     tickReveals();
     tickWord(dt);
+    tickFilm(dt);
     requestAnimationFrame(loop);
   })(performance.now());
 
