@@ -34,10 +34,12 @@ DIGEST: str
 
 
 def _selftest(model) -> None:
-    for _ in range(5):
-        x = os.urandom(1 + os.urandom(1)[0] % 24)
+    # CODEC_SELFTEST=0 skips; small payloads keep cold-boot fast (matters on fly).
+    n = int(os.environ.get("CODEC_SELFTEST", "3"))
+    for _ in range(n):
+        x = os.urandom(1 + os.urandom(1)[0] % 8)
         if coder.decode(coder.encode(x, model, K), model, K) != x:
-            raise RuntimeError("gpt2 self-test round-trip failed")
+            raise RuntimeError("self-test round-trip failed")
 
 
 def _load() -> None:

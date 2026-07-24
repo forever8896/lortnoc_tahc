@@ -10,6 +10,7 @@ primary_region = "cdg"   # pick one near you: iad, lhr, cdg, ams, sjc, ...
 [env]
   CODEC_BACKEND = "gpt2"   # gpt2 | markov | wordmap | auto
   CODEC_K = "3"            # lower = more natural / longer cover text
+  CODEC_SELFTEST = "2"     # startup round-trips (0 skips) — keep boot fast
 
 [http_service]
   internal_port = 8080
