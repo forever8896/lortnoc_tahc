@@ -6,7 +6,8 @@ import type { TgClient } from './selectors'
 import { selectorsFor, activeCompose } from './selectors'
 import { shuffle } from './ui'
 
-let swapping = false // guards our own programmatic click from re-entering the interceptor
+let swapping = false // true from the moment a send is intercepted until the cover is sent
+let allowNextClick = false // set right before OUR programmatic send-button click, so it passes through
 
 export function readCompose(el: HTMLElement): string {
   return el.innerText.replace(/ /g, ' ').trim()
@@ -54,58 +55,81 @@ export function installSendInterceptor(
   const sel = selectorsFor(client)
   if (!sel) return
 
+  // Assumes `swapping` was already set true synchronously by the caller (so no second
+  // send can slip through the async gap while the codec runs — the double-send bug).
   async function doSwapAndSend(): Promise<void> {
-    if (swapping) return
     const input = activeCompose(sel!)
-    if (!input) return
+    if (!input) {
+      swapping = false
+      return
+    }
     const real = readCompose(input)
-    if (!real) return
-    swapping = true
-    shuffle(input) // immediate feedback while the codec runs
+    if (!real) {
+      swapping = false
+      return
+    }
+    input.classList.add('lortnoc-busy') // persistent "working" cue during the slow codec call
+    shuffle(input)
     try {
-      const cover = await onSwap(real) // encrypt + /encode
+      const cover = await onSwap(real) // encrypt + /encode (GPT-2 → seconds)
       console.debug('[lortnoc] swap: %o -> %o', real, cover)
       if (cover == null) return // fail-closed: leave draft, do not send
       replaceCompose(input, cover)
       const btn = visibleSendButton(sel!.sendButton)
-      if (!btn) console.warn('[lortnoc] send button not found for selector', sel!.sendButton)
-      btn?.click() // real send; synthetic Enter would be ignored (isTrusted:false)
+      if (!btn) {
+        console.warn('[lortnoc] send button not found for', sel!.sendButton)
+        return
+      }
+      allowNextClick = true
+      btn.click() // real send; our click passes the interceptor via allowNextClick
+      window.setTimeout(() => {
+        allowNextClick = false
+      }, 300)
     } finally {
-      // release after the app has processed the click
+      input.classList.remove('lortnoc-busy')
       window.setTimeout(() => {
         swapping = false
-      }, 50)
+      }, 100)
     }
   }
 
-  // Enter-to-send (capture phase, so we pre-empt the app's handler).
+  // Enter-to-send (capture phase). When ready, ALWAYS block the native send — even while a
+  // swap is already in flight — so nothing goes out as plaintext during the codec wait.
   document.addEventListener(
     'keydown',
     (e) => {
       const t = e.target as HTMLElement | null
-      // target may be the contenteditable OR a child text node's element — use closest
       const onCompose = !!t?.closest?.(sel.composeInput)
-      if (!onCompose || !isSendShortcut(e)) return
-      console.debug('[lortnoc] Enter on compose — ready=%s swapping=%s', isReady(), swapping)
-      if (swapping || !isReady()) return
+      if (!onCompose || !isSendShortcut(e) || !isReady()) return
       e.preventDefault()
       e.stopImmediatePropagation()
-      void doSwapAndSend()
+      if (!swapping) {
+        swapping = true
+        void doSwapAndSend()
+      }
     },
     true,
   )
 
-  // Click-the-send-button (capture phase). Our own .click() is skipped via `swapping`.
+  // Send-button click (capture phase). Let OUR programmatic click through; block user
+  // clicks (and start a swap) — including during an in-flight swap.
   document.addEventListener(
     'click',
     (e) => {
-      if (swapping || !isReady()) return
       const t = e.target as HTMLElement | null
       const btn = t?.closest?.(sel.sendButton)
       if (!btn) return
+      if (allowNextClick) {
+        allowNextClick = false
+        return // our own send — let it fire
+      }
+      if (!isReady()) return
       e.preventDefault()
       e.stopImmediatePropagation()
-      void doSwapAndSend()
+      if (!swapping) {
+        swapping = true
+        void doSwapAndSend()
+      }
     },
     true,
   )

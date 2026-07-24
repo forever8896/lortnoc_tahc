@@ -47,6 +47,9 @@ export function startInbound(client: TgClient, isReady: () => boolean, onDecode:
   if (!sel) return
 
   let scanning = false
+  // decode decision cached per data-mid: {…}=ours, null=not ours. Each message hits the
+  // codec at most ONCE — critical now that a GPT-2 decode costs seconds.
+  const seen = new Map<string, { decoded: string; cover: string } | null>()
 
   async function scan(): Promise<void> {
     if (scanning || !isReady()) return
@@ -58,12 +61,23 @@ export function startInbound(client: TgClient, isReady: () => boolean, onDecode:
       if (!container) return
       const bubbles = Array.from(container.querySelectorAll(sel!.bubble))
       for (const bubble of bubbles) {
-        const mid = bubble.getAttribute(sel!.midAttr) ?? ''
         const el = bubble as HTMLElement
         const msg = bubble.querySelector(sel!.bubbleText) as HTMLElement | null
         if (!msg) continue
-        if (el.dataset.lortnocMid === mid && msg.dataset.lortnocRendered === '1') continue
+        const mid = bubble.getAttribute(sel!.midAttr) ?? ''
+
+        // already decided for this message? re-apply from cache if Telegram re-rendered
+        // the node (cheap), never re-hit the codec.
+        if (mid && seen.has(mid)) {
+          const hit = seen.get(mid)
+          if (hit && msg.dataset.lortnocRendered !== '1') {
+            renderDecoded(bubble, sel!.bubbleText, sel!.timeInMessage, hit.decoded, hit.cover)
+          }
+          continue
+        }
+        if (msg.dataset.lortnocRendered === '1') continue
         if (el.dataset.lortnocPending === '1') continue
+
         const text = readBubbleText(bubble, sel!.bubbleText, sel!.timeInMessage)
         if (!text) continue
         el.dataset.lortnocPending = '1'
@@ -71,7 +85,9 @@ export function startInbound(client: TgClient, isReady: () => boolean, onDecode:
           const decoded = await onDecode(text)
           if (decoded != null) {
             renderDecoded(bubble, sel!.bubbleText, sel!.timeInMessage, decoded, text)
-            el.dataset.lortnocMid = mid
+            if (mid) seen.set(mid, { decoded, cover: text })
+          } else if (mid) {
+            seen.set(mid, null) // not ours — remember, so we never decode it again
           }
         } finally {
           delete el.dataset.lortnocPending
