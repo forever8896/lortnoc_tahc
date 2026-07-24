@@ -13,6 +13,14 @@ A 4-byte big-endian length header prefixes the payload so decode knows where the
 bytes end (the last token's spare bits are padding and ignored).
 """
 
+import os
+
+# Random prefix in front of the payload so the cover text OPENS differently every message
+# — otherwise the (mostly-zero) length header makes every message start with the model's
+# greedy continuation of the fixed prime (a visible tell). Ignored on decode.
+_NONCE = 2
+
+
 def _to_bits(data: bytes) -> list[int]:
     return [(byte >> i) & 1 for byte in data for i in range(7, -1, -1)]
 
@@ -30,7 +38,7 @@ def _from_bits(bits: list[int]) -> bytes:
 
 def hide(data: bytes, model, k: int) -> list[int]:
     """ciphertext bytes -> list of token ids (each token carries k bits)."""
-    payload = len(data).to_bytes(4, "big") + data
+    payload = os.urandom(_NONCE) + len(data).to_bytes(2, "big") + data
     bits = _to_bits(payload)
     bits += [0] * ((-len(bits)) % k)  # pad up to a whole number of tokens
     ctx = model.start()
@@ -57,10 +65,11 @@ def reveal(tokens: list[int], model, k: int) -> bytes:
             bits.append((idx >> j) & 1)
         ctx = model.extend(ctx, tok)
     data = _from_bits(bits)
-    length = int.from_bytes(data[:4], "big")
-    if 4 + length > len(data):
+    length = int.from_bytes(data[_NONCE : _NONCE + 2], "big")
+    start = _NONCE + 2
+    if start + length > len(data):
         raise ValueError("truncated payload")
-    return data[4 : 4 + length]
+    return data[start : start + length]
 
 
 def encode(data: bytes, model, k: int) -> str:
