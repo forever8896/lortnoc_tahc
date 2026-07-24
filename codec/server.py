@@ -74,10 +74,14 @@ class Handler(BaseHTTPRequestHandler):
                 ct = codec.decode(req["coverText"])
                 return self._json(200, {"ciphertext": base64.b64encode(ct).decode()})
             return self._json(404, {"error": "not found"})
-        except KeyError:
-            # a word that isn't in the codec table -> not one of ours -> fail closed
-            return self._json(422, {"error": "not codec cover text"})
-        except Exception as e:  # noqa: BLE001 - surface any decode/base64/json error as 400
+        except (KeyError, ValueError) as e:
+            # KeyError: unknown cover word; ValueError: coder rejected the tokens.
+            # Both mean "not one of ours" -> fail closed. (base64/json errors on /encode
+            # also raise ValueError, but /encode never hits this in normal use.)
+            if path == "/decode":
+                return self._json(422, {"error": "not codec cover text"})
+            return self._json(400, {"error": str(e)})
+        except Exception as e:  # noqa: BLE001 - surface any other error as 400
             return self._json(400, {"error": str(e)})
 
     def log_message(self, *_):  # quiet; no request logging (gateway hygiene)

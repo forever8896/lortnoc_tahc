@@ -1,38 +1,63 @@
 # codec service
 
 Deterministic, reversible cover-text coder for the Telegram overlay (PRD §7, CLAUDE.md §6.2).
-Dependency-free (Python stdlib). Sees **ciphertext only** — never plaintext, never a key.
+Sees **ciphertext only** — never plaintext, never a key.
 
 ## Contract
 
 ```
-POST /encode  { "ciphertext": <base64> }  -> { "coverText": <string> }   # plain lowercase ASCII words
+POST /encode  { "ciphertext": <base64> }  -> { "coverText": <string> }   # lowercase words + spaces
 POST /decode  { "coverText": <string> }    -> { "ciphertext": <base64> }
 GET  /health                               -> { "model", "digest", "ready" }
 ```
 
 `decode(encode(x)) == x` for all byte strings, deterministically. One warm process serves **both**
-ends of a conversation, so encode-time and decode-time coders are identical by construction.
+ends of a conversation, so the coder is identical on encode and decode.
+
+## Backends (`CODEC_BACKEND`, default `auto`)
+
+| value | what | needs |
+|---|---|---|
+| `gpt2` | **Real LLM stego** — block coder over GPT-2; cover text = natural-ish lowercase words | `torch`, `transformers` |
+| `wordmap` | Byte→word placeholder; word-like but not grammatical | nothing (stdlib) |
+| `auto` | Try `gpt2`, run a round-trip **self-test**; on any failure fall back to `wordmap` (loud log) | — |
+
+The GPT-2 backend restricts candidates to whole lowercase words that re-encode to themselves, so cover
+text stays byte-safe through Telegram (no markdown/emoji/case Telegram would normalize) and word→token
+is unambiguous on decode. It's deterministic (greedy, CPU) and reversibility is **model-independent** —
+proven by `test_coder.py` with a mock, so it holds for GPT-2 given deterministic inference.
+
+`CODEC_K` (default 3) = bits hidden per token in `gpt2` (higher = shorter cover text, less natural).
 
 ## Run
 
 ```bash
-python3 server.py                 # 127.0.0.1:8080
-PORT=8080 HOST=0.0.0.0 python3 server.py
-python3 test_codec.py             # 100 random round-trips + determinism
+# real GPT-2 backend:
+pip install -r requirements.txt
+CODEC_BACKEND=gpt2 python3 server.py      # self-tests on startup, then serves
+# or just:  python3 server.py             # auto: gpt2 if available, else wordmap
+
+# expose the ONE instance for the two-laptop demo:
+cloudflared tunnel --url http://localhost:8080
 ```
 
-For the two-laptop demo, expose the one instance over HTTPS so both extensions can reach it:
+## Test
 
 ```bash
-cloudflared tunnel --url http://localhost:8080     # -> put the printed URL in each extension's popup
+python3 test_coder.py     # block coder exactly reversible (mock model, no GPU) — the core proof
+python3 test_codec.py     # wordmap round-trip + active-backend round-trip
 ```
 
-## Status
+## Files
 
-`codec.py` is the **locked-contract placeholder** (`wordmap-256/v1`): each ciphertext byte → one word
-from a fixed 256-word table. Byte-exact and plain-ASCII, but word-like rather than grammatical.
+```
+server.py        stdlib HTTP server (/encode /decode /health), threaded, CORS + LNA hedge
+codec.py         dispatcher: picks backend, self-tests gpt2, serializes stateful calls
+coder.py         model-agnostic block (bin) coder — EXACTLY reversible
+model_gpt2.py    GPT-2 backend: safe lowercase-word tokens + KV-cached greedy inference
+model_mock.py    deterministic mock model (for test_coder, no GPU)
+wordmap.py       byte→word fallback coder
+```
 
-The real steganographic coder (GPT-2 arithmetic coding) **replaces `codec.py` behind the same
-`encode`/`decode` signatures** — the HTTP contract and the extension are unchanged. It needs
-`transformers` + a pinned model run on CPU, greedy/`temp=0` for byte-determinism (CLAUDE.md §6.2, CF-1).
+The real steganographic quality lives in `model_gpt2.py`; the reversibility guarantee lives in
+`coder.py` (proven) — they compose so swapping the model never touches the HTTP contract or the extension.

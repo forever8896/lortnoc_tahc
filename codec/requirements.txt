@@ -1,0 +1,4 @@
+# Real GPT-2 stego backend (CODEC_BACKEND=gpt2 or auto). CPU is fine.
+# Without these, the codec falls back to the dependency-free wordmap backend.
+torch>=2.2
+transformers>=4.40

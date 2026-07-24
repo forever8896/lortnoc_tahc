@@ -1,79 +1,78 @@
 """
-lortnoc_tahc codec — deterministic, reversible, plain-ASCII cover-text coder.
+Codec dispatcher. Picks a backend and exposes the stable interface the server uses:
+    encode(bytes) -> cover_text
+    decode(cover_text) -> bytes
+    MODEL, DIGEST
 
-Contract (PRD §7):
-    encode(ciphertext_bytes) -> cover_text   (plain ASCII words, space-separated)
-    decode(cover_text)       -> ciphertext_bytes
-    decode(encode(x)) == x   for all byte strings, deterministically.
+Backend selection (env CODEC_BACKEND, default "auto"):
+    gpt2     — REAL LLM stego (model_gpt2 + block coder). Cover text = natural-ish
+               lowercase words. Requires torch + transformers.
+    wordmap  — deterministic byte→word placeholder (no deps).
+    auto     — try gpt2, run a round-trip SELF-TEST; on any failure fall back to wordmap
+               with a loud log. So you always get a working codec, and the real one
+               whenever it loads and verifies.
 
-This is the LOCKED-CONTRACT PLACEHOLDER for the hero demo. It maps each ciphertext
-byte to one word from a fixed 256-word table, so the output is byte-exact-reversible
-and contains only plain lowercase ASCII words + single spaces (invariant §4: no
-markdown, emoji, smart quotes, or edge whitespace that Telegram might normalize).
-
-The real steganographic coder (GPT-2 arithmetic coding, CLAUDE.md §6.2) replaces THIS
-FILE behind the same `encode`/`decode` signatures — nothing else changes. Until then
-the cover text is word-like rather than grammatical; that's expected.
+CODEC_K (default 3) = bits hidden per token in the gpt2 backend (higher = shorter cover
+text, less natural).
 """
+import os
+import threading
 
-# A pool of common lowercase ASCII words; the first 256 unique ones form the byte table.
-_POOL = (
-    "the of and to in is that it for on with as was at by an be this from or had "
-    "not are but have they we all one you your can has more will each about which "
-    "time when up out them then she many some these would other into him his "
-    "how our over new take only little work know place year live me back give most "
-    "very after thing just name good sentence man think say great where help through "
-    "much before line right too mean old any same tell boy follow came want show also "
-    "around form three small set put end does another well large must big even such "
-    "because turn here why ask went men read need land different home us move try kind "
-    "hand picture again change play spell air away animal house point page letter "
-    "mother answer found study still learn should america world high every near add "
-    "food between own below country plant last school father keep tree never start "
-    "city earth eye light thought head under story saw left few while along might "
-    "close something seem next hard open example begin life always those both paper "
-    "together got group often run important until children side feet car mile night "
-    "walk white sea began grow took river four carry state once book hear stop "
-    "second later miss idea enough eat face watch far really almost let above "
-    "girl sometimes mountain cut young talk soon list song being leave family "
-    "body music color stand sun questions fish area mark dog horse birds problem "
-    "complete room knew since ever piece told usually didnt friends easy heard order "
-    "red door sure become top ship across today during short better best however low "
-    "hours black products happened whole measure remember early waves reached listen "
-    "wind rock space covered fast several hold himself toward five step morning passed "
-    "vowel true hundred against pattern numeral table north slowly money map farm pulled "
-    "draw voice seen cold cried plan notice south sing war ground fall king town "
-    "unit figure certain field travel wood fire upon done english road half ten fly "
-    "gave box finally wait correct oh quickly person became shown minutes strong verb "
-    "stars front feel fact inches street decided contain course surface produce building "
-    "ocean class note nothing rest carefully scientists inside wheels stay green known "
-    "island week less machine base ago stood plane system behind ran round boat game "
-    "force brought understand warm common bring explain dry though language shape deep "
-).split()
+import coder
+import wordmap
 
-_seen = []
-for _w in _POOL:
-    if _w.isalpha() and _w.islower() and _w not in _seen:
-        _seen.append(_w)
-assert len(_seen) >= 256, f"word pool has only {len(_seen)} unique words; need >= 256"
-WORDS = _seen[:256]
-assert len(WORDS) == 256 and len(set(WORDS)) == 256
-assert all(w.isalpha() and w.islower() and w.isascii() for w in WORDS)
+# The gpt2 backend keeps stateful KV cache, so serialize access (server is threaded).
+_lock = threading.Lock()
 
-_INDEX = {w: i for i, w in enumerate(WORDS)}
+BACKEND = os.environ.get("CODEC_BACKEND", "auto").lower()
+K = int(os.environ.get("CODEC_K", "3"))
+
+_kind: str
+_model = None
+MODEL: str
+DIGEST: str
+
+
+def _selftest(model) -> None:
+    for _ in range(5):
+        x = os.urandom(1 + os.urandom(1)[0] % 24)
+        if coder.decode(coder.encode(x, model, K), model, K) != x:
+            raise RuntimeError("gpt2 self-test round-trip failed")
+
+
+def _load() -> None:
+    global _kind, _model, MODEL, DIGEST
+    if BACKEND in ("auto", "gpt2"):
+        try:
+            from model_gpt2 import GPT2Model
+
+            m = GPT2Model()
+            _selftest(m)
+            _kind, _model = "gpt2", m
+            MODEL, DIGEST = f"gpt2/k{K}", m.digest()
+            print(f"[codec] backend=gpt2 k={K} ({MODEL} {DIGEST})")
+            return
+        except Exception as e:  # noqa: BLE001
+            if BACKEND == "gpt2":
+                raise
+            print(f"[codec] gpt2 unavailable ({e}); falling back to wordmap")
+    _kind = "wordmap"
+    MODEL, DIGEST = wordmap.MODEL, wordmap.DIGEST
+    print(f"[codec] backend=wordmap ({MODEL} {DIGEST})")
+
+
+_load()
 
 
 def encode(data: bytes) -> str:
-    """ciphertext bytes -> cover text (space-joined words)."""
-    return " ".join(WORDS[b] for b in data)
+    if _kind == "gpt2":
+        with _lock:
+            return coder.encode(data, _model, K)
+    return wordmap.encode(data)
 
 
-def decode(text: str) -> bytes:
-    """cover text -> ciphertext bytes. Raises KeyError on any non-codec word."""
-    words = text.strip().split()
-    return bytes(_INDEX[w] for w in words)
-
-
-# Model identity, so /health can pin what both ends agree on.
-MODEL = "wordmap-256/v1"
-import hashlib as _h
-DIGEST = _h.sha256(("|".join(WORDS)).encode()).hexdigest()[:16]
+def decode(cover: str) -> bytes:
+    if _kind == "gpt2":
+        with _lock:
+            return coder.decode(cover, _model, K)
+    return wordmap.decode(cover)
