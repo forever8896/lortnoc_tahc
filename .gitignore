@@ -1,0 +1,15 @@
+# secrets — never commit real keys (share the Venice key privately)
+.env
+.env.local
+.env.*.local
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# node
+node_modules/
+dist/
+.DS_Store
