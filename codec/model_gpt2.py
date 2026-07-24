@@ -28,22 +28,20 @@ DEFAULT_PRIME = (
     "friend about how"
 )
 
-# Conversational model by default (GPT-2 architecture, trained on real dialogue) → much
-# friendlier than base gpt2, and 124M so it's as fast. Override with CODEC_MODEL.
-DEFAULT_MODEL = "microsoft/DialoGPT-small"
+DEFAULT_MODEL = "gpt2"  # base gpt2 with a friendly prime (fast KV path). Override w/ CODEC_MODEL.
 
 
 class GPT2Model:
     def __init__(self, model_name: str | None = None):
         import torch
-        from transformers import AutoModelForCausalLM, AutoTokenizer
+        from transformers import GPT2LMHeadModel, GPT2TokenizerFast
 
         model_name = model_name or os.environ.get("CODEC_MODEL", DEFAULT_MODEL)
         self.PRIMING = os.environ.get("CODEC_PRIME", DEFAULT_PRIME)
 
         self.torch = torch
-        self.tok = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForCausalLM.from_pretrained(model_name)
+        self.tok = GPT2TokenizerFast.from_pretrained(model_name)
+        self.model = GPT2LMHeadModel.from_pretrained(model_name)
         self.model.eval()
         torch.manual_seed(0)
 
@@ -57,6 +55,8 @@ class GPT2Model:
             if not pat.fullmatch(s):
                 continue
             w = s[1:]
+            if len(w) < 2:  # drop single-letter tokens → no "x o l m" degeneration
+                continue
             if w in self.word2tok:
                 continue
             if self.tok.encode(" " + w) != [tid]:  # must round-trip to itself

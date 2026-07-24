@@ -8,15 +8,14 @@ WORKDIR /app
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
  && pip install --no-cache-dir transformers
 
-# Pre-download the model (DialoGPT-small, 124M) at build time → fast, offline startup.
-ARG CODEC_MODEL=microsoft/DialoGPT-small
-RUN python -c "from transformers import AutoModelForCausalLM, AutoTokenizer; \
-AutoModelForCausalLM.from_pretrained('${CODEC_MODEL}'); AutoTokenizer.from_pretrained('${CODEC_MODEL}')"
+# Pre-download gpt2 (124M) at build time → fast, offline startup.
+RUN python -c "from transformers import GPT2LMHeadModel, GPT2TokenizerFast; \
+GPT2LMHeadModel.from_pretrained('gpt2'); GPT2TokenizerFast.from_pretrained('gpt2')"
 
 COPY . .
 
 ENV CODEC_BACKEND=gpt2 \
-    CODEC_MODEL=microsoft/DialoGPT-small \
+    CODEC_MODEL=gpt2 \
     CODEC_K=4 \
     HOST=0.0.0.0 \
     PORT=8080 \
