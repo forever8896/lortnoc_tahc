@@ -6,7 +6,7 @@ Strict priority, so if time runs out you stop at a natural cut line and still ha
 ## P0 — Hero demo: the extension on Telegram Web
 *Ship this first. If only this works, you win the room. Items build on each other in order.*
 
-- [x] **Codec round-trips deterministically** — `codec/` `wordmap-256`; `decode(encode(x))==x` + determinism tests green *(GPT-2 arithmetic coder swaps in later behind the same HTTP contract)*
+- [x] **Codec round-trips deterministically** — `codec/`: **real GPT-2 block-stego backend** (byte-safe lowercase-word tokens, self-tests on startup) + `wordmap` fallback. Reversibility proven model-independently in `test_coder.py`; run the GPT-2 path with `pip install -r requirements.txt` (torch not installable in the build sandbox, so verified via the mock + startup self-test)
 - [x] **Extension scaffold + loads on `web.telegram.org`** — CRXJS MV3, content script on `/k/`, SW, popup toggle; `npm run build` clean *(load-unpacked confirmation pending)*
 - [ ] **🔑 Telegram byte-exactness test** — **PENDING (needs live browser)**: load unpacked, confirm `execCommand('insertText')` + `.btn-send.click()` sends byte-identical cover text on the current Web K build. Code is in `content/compose.ts`; this is the one live gate.
 - [x] **Client-side AES-SIV** — `@noble/ciphers` in `content/crypto.ts`; `test/pipeline.test.mjs` proves round-trip + wrong-key detector
