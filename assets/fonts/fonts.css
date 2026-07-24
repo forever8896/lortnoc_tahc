@@ -1,0 +1,57 @@
+/* lortnoc_tahc — brand type
+ * Wordmark: Questrial (geometric monoline, single weight)
+ * Text/UI:  Jost (geometric, 300–700)
+ * Both SIL Open Font License 1.1 — free for commercial use + redistribution (see each OFL.txt).
+ * Import with:  @import url("assets/fonts/fonts.css");
+ */
+
+/* ---- Questrial (wordmark) ---- */
+@font-face {
+  font-family: "Questrial";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./questrial/questrial-400.woff2") format("woff2");
+}
+
+/* ---- Jost (text / UI) ---- */
+@font-face {
+  font-family: "Jost";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("./jost/jost-300.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Jost";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./jost/jost-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Jost";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./jost/jost-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Jost";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./jost/jost-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Jost";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./jost/jost-700.woff2") format("woff2");
+}
+
+:root {
+  --font-wordmark: "Questrial", system-ui, sans-serif;
+  --font-body: "Jost", system-ui, sans-serif;
+}
