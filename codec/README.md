@@ -18,9 +18,13 @@ ends of a conversation, so the coder is identical on encode and decode.
 
 | value | what | needs |
 |---|---|---|
-| `gpt2` | **Real LLM stego** — block coder over GPT-2; cover text = natural-ish lowercase words | `torch`, `transformers` |
-| `wordmap` | Byte→word placeholder; word-like but not grammatical | nothing (stdlib) |
-| `auto` | Try `gpt2`, run a round-trip **self-test**; on any failure fall back to `wordmap` (loud log) | — |
+| `gpt2` | **Best quality** — block coder over GPT-2; natural sentences | `torch`, `transformers` |
+| `markov` | **Good quality, no GPU** — block coder over a trigram model trained on public-domain prose; flowing, locally-coherent sentences | internet (fetches corpora once) |
+| `wordmap` | Byte→word placeholder; word-like salad, but zero deps | nothing (stdlib) |
+| `auto` | Try `gpt2` → `markov` → `wordmap`, each with a round-trip **self-test**; use the first that verifies | — |
+
+`CODEC_ORDER` (default 3) = markov n-gram order. Lower `CODEC_K` (e.g. 2) = more natural / longer cover text.
+All three backends share the identical `/encode`·`/decode` contract, so the extension never changes.
 
 The GPT-2 backend restricts candidates to whole lowercase words that re-encode to themselves, so cover
 text stays byte-safe through Telegram (no markdown/emoji/case Telegram would normalize) and word→token

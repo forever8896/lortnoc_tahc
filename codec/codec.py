@@ -55,7 +55,22 @@ def _load() -> None:
         except Exception as e:  # noqa: BLE001
             if BACKEND == "gpt2":
                 raise
-            print(f"[codec] gpt2 unavailable ({e}); falling back to wordmap")
+            print(f"[codec] gpt2 unavailable ({e}); trying markov")
+    if BACKEND in ("auto", "markov"):
+        try:
+            from model_markov import MarkovModel
+
+            order = int(os.environ.get("CODEC_ORDER", "3"))
+            m = MarkovModel(order=order)
+            _selftest(m)
+            _kind, _model = "markov", m
+            MODEL, DIGEST = f"markov-o{order}/k{K}", m.digest()
+            print(f"[codec] backend=markov order={order} k={K} ({MODEL} {DIGEST})")
+            return
+        except Exception as e:  # noqa: BLE001
+            if BACKEND == "markov":
+                raise
+            print(f"[codec] markov unavailable ({e}); falling back to wordmap")
     _kind = "wordmap"
     MODEL, DIGEST = wordmap.MODEL, wordmap.DIGEST
     print(f"[codec] backend=wordmap ({MODEL} {DIGEST})")
@@ -65,14 +80,14 @@ _load()
 
 
 def encode(data: bytes) -> str:
-    if _kind == "gpt2":
+    if _kind in ("gpt2", "markov"):
         with _lock:
             return coder.encode(data, _model, K)
     return wordmap.encode(data)
 
 
 def decode(cover: str) -> bytes:
-    if _kind == "gpt2":
+    if _kind in ("gpt2", "markov"):
         with _lock:
             return coder.decode(cover, _model, K)
     return wordmap.decode(cover)

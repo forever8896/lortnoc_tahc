@@ -19,3 +19,6 @@ dist/
 
 # packaged extension zips
 *.zip
+
+# codec corpus + trained-model cache (fetched/built on demand)
+.cache/

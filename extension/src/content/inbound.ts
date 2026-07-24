@@ -16,7 +16,13 @@ function readBubbleText(bubble: Element, textSel: string, timeSel: string): stri
   return clone.textContent?.trim() ?? ''
 }
 
-function renderDecoded(bubble: Element, textSel: string, timeSel: string, decoded: string): void {
+function renderDecoded(
+  bubble: Element,
+  textSel: string,
+  timeSel: string,
+  decoded: string,
+  cover: string,
+): void {
   const msg = bubble.querySelector(textSel)
   if (!(msg instanceof HTMLElement)) return
   const time = msg.querySelector(timeSel)
@@ -29,6 +35,9 @@ function renderDecoded(bubble: Element, textSel: string, timeSel: string, decode
   const span = document.createElement('span')
   span.className = 'lortnoc-decoded'
   span.textContent = decoded + ' '
+  // hover shows what Telegram actually stored (the cover text)
+  span.title = `Telegram stores:\n“${cover}”`
+  span.dataset.cover = cover
   msg.insertBefore(span, msg.firstChild)
   ;(msg as HTMLElement).dataset.lortnocRendered = '1'
 }
@@ -61,7 +70,7 @@ export function startInbound(client: TgClient, isReady: () => boolean, onDecode:
         try {
           const decoded = await onDecode(text)
           if (decoded != null) {
-            renderDecoded(bubble, sel!.bubbleText, sel!.timeInMessage, decoded)
+            renderDecoded(bubble, sel!.bubbleText, sel!.timeInMessage, decoded, text)
             el.dataset.lortnocMid = mid
           }
         } finally {
