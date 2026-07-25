@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Business model | Lortnoc Tahc</title>
-<meta name="description" content="How Lortnoc Tahc makes money: one-time handle sales settled on 0G, against a cost base that scales in flat $30/day steps.">
+<meta name="description" content="Users pay $50 once. They cost four cents a day. One $30/day server serves 800 of them.">
 <meta name="theme-color" content="#08080A">
 <link rel="preload" href="fonts/jost/jost-300.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
@@ -20,75 +20,60 @@
 
   <div class="doc__hero">
     <div class="eyebrow eyebrow--signal doc__partner">Business model</div>
-    <h1>We sell Lortnoctahc DM accounts. The costs are small, and they scale in flat steps.</h1>
-    <p class="lede">One-time payment per account, settled on 0G in a way that can&rsquo;t be traced back to the handle it bought. Infrastructure that grows $30 at a time.</p>
+    <h1>A user pays $50 once. They cost us four cents a day.</h1>
+    <p class="lede">We sell Lortnoctahc DM accounts. One server runs 800 of them for $30 a day.</p>
 
     <div class="metrics">
-      <div class="metric"><b>$50</b><span>One-time, per handle</span></div>
-      <div class="metric"><b>$30</b><span>Per day, per codec server</span></div>
-      <div class="metric"><b>800</b><span>Daily active users per unit</span></div>
-      <div class="metric"><b>$13.69</b><span>Cost per active user, per year</span></div>
+      <div class="metric"><b>$50</b><span>Paid once, per account</span></div>
+      <div class="metric"><b>$0.04</b><span>Cost per active user, per day</span></div>
+      <div class="metric"><b>73%</b><span>Gross margin, year one</span></div>
+      <div class="metric"><b>800</b><span>Users per $30/day server</span></div>
     </div>
   </div>
 
   <section>
     <h2>Revenue</h2>
-    <p>A Lortnoctahc DM account is an ENS sub-name. To get one, you buy it. That&rsquo;s the business &mdash; not ads, not data, not a subscription nobody wants to think about.</p>
-    <p><strong>$50 USDC, one time.</strong> The first 100 accounts go for <strong>$1</strong>, because early users are worth more to us as proof than as revenue.</p>
-
-    <h3>The payment rail is itself a feature</h3>
-    <p>Payments settle on <strong>0G mainnet</strong> and are gated by zero-knowledge nullifiers. Paying inserts a commitment; claiming a handle proves you know the secret behind <em>some</em> commitment and burns a single-use nullifier.</p>
-    <p>The result: we can verify that an account was paid for without ever learning which wallet paid for which handle. Most privacy products have to ask you to trust their billing system. Ours structurally can&rsquo;t link the two &mdash; which means we can sell to exactly the people who would never hand a card to a company like ours.</p>
+    <p>An account is an ENS sub-name. You buy it. <strong>$50 USDC, one time</strong> &mdash; $1 for the first 100.</p>
+    <p>Payment settles on 0G behind a zero-knowledge nullifier, so we can prove an account was paid for without ever learning which wallet paid for it. <strong>We can take money from people who would never hand a card to a company like ours.</strong></p>
   </section>
 
   <section>
-    <h2>Cost of goods sold</h2>
-    <p>Effectively the whole cost base is one line: the server running Natural Language Encryption. <strong>$30/day buys a dedicated machine hosting our pinned, deterministic language model</strong> &mdash; the thing that turns an encrypted message into innocent small talk and back again.</p>
-    <p>It has to be a single machine, and that&rsquo;s the interesting part. Reversibility requires both ends to walk byte-identical probability distributions, so the model stays warm in one pinned process rather than autoscaling across a fleet. <strong>That technical constraint is what makes the cost a flat line instead of a per-request meter.</strong></p>
-    <p>One server serves roughly <strong>800 daily active users</strong> on an unlimited-use model. Heavy simultaneous load queues against the warm model &mdash; it gets slower, not more expensive. When demand outgrows a server, we buy another for $30/day.</p>
-    <p>So capacity scales in flat increments with no step-function capex, and COGS tracks usage closely in both directions.</p>
+    <h2>Cost</h2>
+    <p>One line: the server running Natural Language Encryption. <strong>$30/day, ~800 daily active users, unlimited messages.</strong></p>
+    <p>It stays one warm machine because reversibility needs both ends on identical distributions &mdash; which is why the cost is flat rather than per-request. Under load it queues and slows. It never bills more.</p>
+    <p>Need more capacity? Buy another server. <strong>$30 a day, 800 more users.</strong></p>
+  </section>
 
+  <section>
+    <h2>The math</h2>
     <div class="spec-wrap">
       <table class="spec">
-        <tr><th>The unit</th><td>One codec server &mdash; pinned deterministic model, kept warm</td></tr>
-        <tr><th>Cost</th><td>$30/day &mdash; $10,950/year</td></tr>
-        <tr><th>Serves</th><td>~800 daily active users, unlimited messages</td></tr>
-        <tr><th>Cost per DAU</th><td>$13.69/year &mdash; $0.0375/day</td></tr>
-        <tr><th>Scaling</th><td>Linear. Add a unit per additional 800 DAU.</td></tr>
-        <tr><th>Under load</th><td>Requests queue against the warm model &mdash; slower, never billed as overage</td></tr>
+        <tr><th>Per server</th><td>800 accounts &times; $50 = <strong>$40,000</strong> in</td></tr>
+        <tr><th>To run it</th><td>$30/day = <strong>$10,950</strong> a year</td></tr>
+        <tr><th>Year one</th><td><strong>73% gross margin</strong></td></tr>
+        <tr><th>Per user</th><td>$13.69 a year, at <em>maximum</em> usage</td></tr>
       </table>
     </div>
 
-    <h3>Where a payment goes</h3>
-    <p>Each $50 funds the account it bought: minting the user&rsquo;s sub-name, and standing up a Walrus wallet on Sui that we fund by delegation so storage is sponsored rather than billed to the user. Nobody has to hold a token or think about gas to use a messaging app.</p>
-    <p>At current scale those on-chain costs are immaterial next to the $30/day codec line.</p>
-  </section>
-
-  <section>
-    <h2>Unit economics</h2>
-    <p>A full capacity unit at 800 paying accounts is <strong>$40,000</strong> of one-time revenue against <strong>$10,950</strong> of annual cost &mdash; a <strong>73% gross margin in year one.</strong></p>
-    <p>The honest tension is that revenue is one-time and cost is recurring, so the model depends on what share of accounts are actually daily active. At full daily engagement, $50 buys 3.7 years of service. Real messaging products don&rsquo;t look like that.</p>
+    <p>Revenue is one-time and cost is recurring, so what matters is how many accounts are active on a given day. At the ratios consumer messaging actually sees, one $50 payment covers a decade or more:</p>
 
     <div class="spec-wrap">
       <table class="spec">
-        <tr><th>Engagement</th><td>Cost per account / year &mdash; years covered by $50</td></tr>
-        <tr><td>100% daily active</td><td>$13.69 &mdash; 3.7 years</td></tr>
-        <tr><td>50% daily active</td><td>$6.84 &mdash; 7.3 years</td></tr>
-        <tr><td>25% daily active</td><td>$3.42 &mdash; 14.6 years</td></tr>
-        <tr><td>10% daily active</td><td>$1.37 &mdash; 36.5 years</td></tr>
+        <tr><th>Daily active</th><td>$50 covers</td></tr>
+        <tr><td>100% &mdash; everyone, every day</td><td>3.7 years</td></tr>
+        <tr><td>50%</td><td>7.3 years</td></tr>
+        <tr><td>25%</td><td>14.6 years</td></tr>
+        <tr><td>10%</td><td>36.5 years</td></tr>
       </table>
     </div>
 
-    <p>At the engagement ratios consumer messaging actually sees, a one-time $50 covers well over a decade of service per account. If it turns out we&rsquo;re wrong about that, the fix is a renewal on the sub-name &mdash; which ENS already models natively, and which we&rsquo;d rather introduce from data than assume from a spreadsheet.</p>
-
-    <h3>Where the model extends</h3>
-    <p>Short and premium handles price above $50 on scarcity alone. Sub-names under an organisation&rsquo;s own name are the obvious business tier. Neither is built yet, and neither is needed for the core model to work.</p>
+    <p>If we&rsquo;re wrong, sub-names renew &mdash; ENS models that natively. Short handles and company sub-names price above $50 whenever we want them to.</p>
   </section>
 
   <section>
-    <h2>What we don&rsquo;t know yet</h2>
-    <p>Sub-names are minted on <strong>Sepolia</strong> and storage runs on <strong>Sui testnet</strong> today. Mainnet costs for minting and for sponsored Walrus storage are not yet measured. We expect them to stay well under the compute line and to remain sponsored rather than passed to users, but we haven&rsquo;t paid them yet and won&rsquo;t pretend otherwise.</p>
-    <p>The $30/day figure is real and being paid now.</p>
+    <h2>Not measured yet</h2>
+    <p>Minting is on Sepolia, storage on Sui testnet. Mainnet costs will be sponsored, not billed to users, and we expect them well under the server line &mdash; but we haven&rsquo;t paid them yet.</p>
+    <p><strong>The $30/day is real and being paid now.</strong></p>
   </section>
 
   <nav class="docnav">
