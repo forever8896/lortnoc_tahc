@@ -22,3 +22,9 @@ dist/
 
 # codec corpus + trained-model cache (fetched/built on demand)
 .cache/
+
+# fine-tune artifacts (generated / large / secret-adjacent)
+codec/finetune/casual.jsonl
+codec/finetune/*.bin
+codec/finetune/lora-adapter/
+codec/finetune/cover-model/
