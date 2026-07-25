@@ -31,3 +31,14 @@ codec/finetune/cover-model/
 
 # build artifacts
 *.tsbuildinfo
+
+# ENS day-0 scripts
+scripts/**/node_modules/
+scripts/ens/.deploy-state.json
+contracts/out/
+contracts/cache/
+
+# Build artifacts
+app/contracts/move/build/
+lortnoc-tahc-extension-v1/
+.claude/worktrees/
