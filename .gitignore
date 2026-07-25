@@ -28,3 +28,6 @@ codec/finetune/casual.jsonl
 codec/finetune/*.bin
 codec/finetune/lora-adapter/
 codec/finetune/cover-model/
+
+# build artifacts
+*.tsbuildinfo
