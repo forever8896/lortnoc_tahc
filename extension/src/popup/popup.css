@@ -60,6 +60,11 @@ body {
 .btn { width: 100%; background: var(--signal); color: #08080a; border: 0; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 400; padding: 12px 16px; min-height: 42px; display: inline-flex; align-items: center; justify-content: center; transition: background .2s, opacity .2s; }
 .btn:hover:not(:disabled) { background: var(--ink); }
 .btn:disabled { opacity: .4; cursor: default; }
+/* "invite sent — waiting" — a live, breathing state so you know it's working and don't re-click */
+.btn.is-busy:disabled { opacity: 1; cursor: default; color: #08080a; animation: btn-wait 1.3s ease-in-out infinite; }
+@keyframes btn-wait { 0%,100% { opacity: .58; } 50% { opacity: .95; } }
+/* connected — solid teal, unmistakably done */
+.btn.is-done:disabled { opacity: 1; cursor: default; background: var(--signal); color: #08080a; }
 .btn--ghost { background: transparent; color: var(--ink); border: 1px solid var(--rule); }
 .btn--ghost:hover:not(:disabled) { background: transparent; border-color: var(--ink); }
 .btn--sm { font-size: 12px; min-height: 34px; padding: 8px 12px; }

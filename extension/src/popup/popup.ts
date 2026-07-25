@@ -107,6 +107,7 @@ async function refreshHsStatus(): Promise<void> {
     }
     const [text, on] = map[r?.status] ?? ['not connected', false]
     setChip(hsStatus, text, on)
+    paintConnect(r?.status ?? 'none')
     // keep the master-switch sub-label honest: "on" only hides once there's a key
     if (stegoOn) masterSub.textContent = r?.hasKey ? 'on · hiding your messages' : 'on · connect a session first ↓'
   } catch {
@@ -114,20 +115,52 @@ async function refreshHsStatus(): Promise<void> {
   }
 }
 
-byId('connect').addEventListener('click', async () => {
+// The Connect button IS the interaction sign — its state tells you what's happening so you
+// don't click again (the cause of the multi-click keypair churn).
+const connectBtn = byId<HTMLButtonElement>('connect')
+// True from the click until the offer actually registers, so the 1.5s poll can't briefly
+// flip the button back to "Connect securely" mid-send (which would invite the double-click).
+let connecting = false
+function paintConnect(status: string): void {
+  if (status === 'none' && connecting) return // hold the "Sending invite…" state
+  connectBtn.classList.remove('is-busy', 'is-done')
+  if (status === 'established') {
+    connecting = false
+    connectBtn.disabled = true
+    connectBtn.classList.add('is-done')
+    connectBtn.textContent = 'Connected'
+  } else if (status === 'offered') {
+    connecting = false
+    connectBtn.disabled = true
+    connectBtn.classList.add('is-busy')
+    connectBtn.textContent = 'Invite sent — waiting…'
+  } else {
+    connectBtn.disabled = false
+    connectBtn.textContent = 'Connect securely'
+  }
+}
+
+connectBtn.addEventListener('click', async () => {
   const tab = await activeTab()
   if (!tab?.id) return
   if (!(tab.url ?? '').includes('web.telegram.org')) {
     setChip(hsStatus, 'open Telegram', false)
     return
   }
+  // immediate feedback so nobody clicks twice
+  connecting = true
+  connectBtn.disabled = true
+  connectBtn.classList.add('is-busy')
+  connectBtn.textContent = 'Sending invite…'
   await reachContentScript(tab.id)
   try {
     await chrome.tabs.sendMessage(tab.id, { type: 'START_HANDSHAKE' })
     setChip(hsStatus, 'invite sent…', false)
-    window.close()
+    // keep the popup OPEN and poll — you watch it flip to "Connected" live
   } catch {
+    connecting = false
     setChip(hsStatus, 'reload the tab', false)
+    paintConnect('none')
   }
 })
 
@@ -135,3 +168,5 @@ byId('save').addEventListener('click', () => void persist().then(checkHealth))
 byId('check').addEventListener('click', () => void checkHealth())
 void load()
 void refreshHsStatus()
+// poll while the popup is open so the button/status update live as the peer accepts
+setInterval(() => void refreshHsStatus(), 1500)
