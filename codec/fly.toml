@@ -13,8 +13,8 @@ primary_region = "cdg"   # pick one near you: iad, lhr, cdg, ams, sjc, ...
 # Tune without rebuilding the image (overrides the Dockerfile ENV at runtime):
 [env]
   CODEC_BACKEND = "gpt2"    # gpt2 | markov | wordmap | auto
-  CODEC_MODEL = "gpt2"      # fast + friendly at low k (high k drifts/profane)
-  CODEC_K = "5"             # ~40 words: shorter than k4 but still coherent
+  CODEC_MODEL = "gpt2"      # best-of-N (below) lets us push k higher without the drift
+  CODEC_K = "6"             # ~33 words; 0G picks the most coherent of the variants
   CODEC_SELFTEST = "1"      # startup round-trips (0 skips) — keep boot fast
   OMP_NUM_THREADS = "4"     # let torch use all 4 shared cores
   # Tone dial — tweak this + `fly deploy` (no rebuild) to steer the vibe:
