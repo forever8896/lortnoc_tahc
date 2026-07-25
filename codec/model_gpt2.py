@@ -30,6 +30,16 @@ DEFAULT_PRIME = (
 
 DEFAULT_MODEL = "gpt2"  # base gpt2 with a friendly prime (fast KV path). Override w/ CODEC_MODEL.
 
+# Keep cover text friendly: drop profanity / slurs / strongly-negative words from the
+# candidate vocab so higher k can't grab them. (Not exhaustive — a demo hygiene filter.)
+BLOCKLIST = set(
+    "fuck fucking fucked fuckin shit shitty bullshit ass asshole bitch bastard dick "
+    "cock pussy cunt slut whore damn goddamn hell crap piss prick douche fag faggot "
+    "nigger nigga retard rape raped raping kill killed killing kill murder murdered "
+    "suicide die died dying death dead corpse blood bloody hate hatred hell damn "
+    "sex sexy porn nude nsfw".split()
+)
+
 
 class GPT2Model:
     def __init__(self, model_name: str | None = None):
@@ -56,6 +66,8 @@ class GPT2Model:
                 continue
             w = s[1:]
             if len(w) < 2:  # drop single-letter tokens → no "x o l m" degeneration
+                continue
+            if w in BLOCKLIST:  # keep the tone friendly
                 continue
             if w in self.word2tok:
                 continue
