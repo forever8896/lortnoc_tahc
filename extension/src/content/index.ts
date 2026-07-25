@@ -7,6 +7,8 @@ import { initState, get } from './state'
 import { installSendInterceptor, sendCoverText } from './compose'
 import { startInbound } from './inbound'
 import { encrypt, tryDecrypt, toB64, fromB64 } from './crypto'
+
+const toHex = (u: Uint8Array): string => [...u].map((b) => b.toString(16).padStart(2, '0')).join('')
 import { parseFrame, FRAME } from './handshake'
 import * as session from './session'
 import { sendToCodec } from '../shared/messages'
@@ -35,6 +37,15 @@ async function sendOffer(): Promise<void> {
   else toast('Could not send the invite — is Stego on and the codec reachable?')
 }
 
+let inbound: { reset: () => void } | null = null
+
+/** Short fingerprint of the conversation key — BOTH users should see the SAME value once
+ *  the handshake is established. If they differ, the ECDH keys crossed (retry the connect). */
+function logKeyFingerprint(): void {
+  const k = session.convKey()
+  console.info('[lortnoc] convKey fingerprint:', k ? toHex(k.slice(0, 6)) : '(none)', '— must MATCH the other side')
+}
+
 async function handleFrame(type: number, pubkey: Uint8Array): Promise<void> {
   if (session.isMine(pubkey)) return // our own frame echoed back into the chat — ignore
   if (type === FRAME.OFFER) {
@@ -42,10 +53,16 @@ async function handleFrame(type: number, pubkey: Uint8Array): Promise<void> {
       const ack = await session.acceptOffer(pubkey)
       const cover = await bytesToCover(ack, true) // fast: handshake frame, skip best-of-N
       if (cover) await sendCoverText(cover)
+      console.info('[lortnoc] session established (accepted); re-scanning inbound')
+      inbound?.reset() // decode any messages that arrived before the key
+      logKeyFingerprint()
       toast('🔒 Private session established — no passphrase needed.')
     })
   } else if (type === FRAME.ACK) {
     await session.onAck(pubkey)
+    console.info('[lortnoc] session established (ack); re-scanning inbound')
+    inbound?.reset() // KEY FIX: re-decode messages that arrived before the key was set
+    logKeyFingerprint()
     toast('🔒 They accepted — private session established.')
   }
 }
@@ -124,21 +141,30 @@ async function main(): Promise<void> {
   })
 
   // Inbound: cover → /decode → bytes → handshake frame? handle it : AES-SIV decrypt.
-  startInbound(client, () => get().enabled, async (cover) => {
+  // Returns 'retry' on transient failure (no key yet / codec error) so the bubble is
+  // re-tried later — never permanently cached as "not ours" (the asymmetric-decode bug).
+  inbound = startInbound(client, () => get().enabled, async (cover) => {
+    let res
     try {
-      const res = await sendToCodec<DecodeData>({ type: 'DECODE', coverText: cover })
-      if (!res.ok) return null
-      const bytes = fromB64(res.data.ciphertext)
-      const frame = parseFrame(bytes)
-      if (frame) {
-        await handleFrame(frame.type, frame.pubkey)
-        return null // handled as handshake — not rendered as a message
-      }
-      const key = activeKey()
-      return key ? tryDecrypt(key, bytes) : null
+      res = await sendToCodec<DecodeData>({ type: 'DECODE', coverText: cover })
     } catch {
-      return null
+      return 'retry' // network glitch — try again
     }
+    if (!res.ok) {
+      // 422 = genuinely not codec cover text (normal chatter) → cache; else transient
+      return res.error?.includes('422') ? null : 'retry'
+    }
+    const bytes = fromB64(res.data.ciphertext)
+    const frame = parseFrame(bytes)
+    if (frame) {
+      await handleFrame(frame.type, frame.pubkey)
+      return null // handled as handshake — not a message
+    }
+    const key = activeKey()
+    if (!key) return 'retry' // no key yet — don't poison the cache; decode after handshake
+    const pt = tryDecrypt(key, bytes)
+    if (pt === null) console.debug('[lortnoc] inbound: had key but AES-SIV tag failed (not ours or key mismatch)')
+    return pt
   })
 
   console.info('[lortnoc] content script ready (Web K)')
