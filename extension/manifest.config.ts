@@ -3,7 +3,7 @@ import { defineManifest } from '@crxjs/vite-plugin'
 export default defineManifest({
   manifest_version: 3,
   name: 'lortnoc tahc',
-  version: '0.6.0',
+  version: '0.7.0',
   description: 'Type real, send cover text, decode inline — a stego overlay for Telegram Web.',
   icons: {
     16: 'icons/on-16.png',
@@ -33,6 +33,12 @@ export default defineManifest({
       // Web K is the supported client; Web A matched for graceful "unsupported" messaging.
       matches: ['https://web.telegram.org/k/*', 'https://web.telegram.org/a/*'],
       js: ['src/content/index.ts'],
+      run_at: 'document_idle',
+    },
+    {
+      // App→extension bridge: receives the codec membership token after a paid claim.
+      matches: ['https://app.lortnoctahc.com/*', 'http://localhost/*'],
+      js: ['src/content/appbridge.ts'],
       run_at: 'document_idle',
     },
   ],

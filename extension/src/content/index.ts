@@ -19,7 +19,7 @@ import {
   getMembershipToken,
 } from './metering'
 import { getSelfHandle } from './identity'
-import { UPGRADE_URL } from '../shared/config'
+import { UPGRADE_URL, LOCAL } from '../shared/config'
 
 const toHex = (u: Uint8Array): string => [...u].map((b) => b.toString(16).padStart(2, '0')).join('')
 import { parseFrame, FRAME } from './handshake'
@@ -153,6 +153,10 @@ async function main(): Promise<void> {
   await initState()
   await loadMeter() // freemium counter + paid flag (§9)
   selfHandle = await getSelfHandle() // stable metering bucket (§9), resolved once
+  // React instantly when the app delivers a membership token (paid claim) — no reload needed.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && (LOCAL.meter in changes || LOCAL.membership in changes)) void loadMeter()
+  })
 
   const client = detectClient()
   console.info('[lortnoc] loaded on', location.pathname, '→ client:', client)
@@ -174,7 +178,9 @@ async function main(): Promise<void> {
   installSendInterceptor(client, haveKey, async (real, progress) => {
     // Freemium gate (§9): out of free sends and not a member → fail-closed + funnel to pay.
     // Reading/decoding stays free; only sending is metered.
-    if (isBlocked()) {
+    // A membership token (from a paid claim) skips the local block — let the server confirm it.
+    const token = await getMembershipToken()
+    if (!token && isBlocked()) {
       // fast local pre-gate to skip a doomed round-trip; the codec is the real authority
       progress.fail('Free trial used up — unlock to keep sending')
       showPaywall(UPGRADE_URL, sends())
@@ -193,7 +199,7 @@ async function main(): Promise<void> {
           type: 'ENCODE',
           ciphertextB64: toB64(ct),
           handle: selfHandle, // server meters per handle (§9)
-          membership: await getMembershipToken(), // x402 token → unlimited when valid
+          membership: token, // membership token → unlimited when valid
         })
         if (!res.ok) {
           if (res.status === 402) {
