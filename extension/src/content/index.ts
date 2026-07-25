@@ -53,27 +53,37 @@ function logKeyFingerprint(): void {
 // re-fires the accept banner / onAck → an infinite handshake loop that resends frames.
 const handledFrames = new Set<string>()
 
+/** Establish from a received offer: derive K_conv, send our ack, re-scan. */
+async function establishFromOffer(pubkey: Uint8Array): Promise<void> {
+  const ack = await session.acceptOffer(pubkey) // derives K_conv, status → established
+  const cover = await bytesToCover(ack, true) // fast: handshake frame, skip best-of-N
+  if (cover) await sendCoverText(cover)
+  console.info('[lortnoc] session established; re-scanning inbound')
+  inbound?.reset() // decode any messages that arrived before the key
+  logKeyFingerprint()
+  toast('Private session established — no passphrase needed.')
+}
+
 async function handleFrame(type: number, pubkey: Uint8Array): Promise<void> {
   if (session.isMine(pubkey)) return // our own frame echoed back into the chat — ignore
-  // already connected? ignore further offers/acks entirely (one session per demo)
-  if (session.status() === 'established') return
+  if (session.status() === 'established') return // already connected — ignore further frames
   const fkey = `${type}:${toHex(pubkey)}`
   if (handledFrames.has(fkey)) return // already processed (e.g. re-scanned after reset)
   handledFrames.add(fkey)
+  console.info('[lortnoc] handshake frame received:', type === FRAME.OFFER ? 'offer' : 'ack')
   if (type === FRAME.OFFER) {
-    showAcceptBanner(async () => {
-      const ack = await session.acceptOffer(pubkey)
-      const cover = await bytesToCover(ack, true) // fast: handshake frame, skip best-of-N
-      if (cover) await sendCoverText(cover)
-      console.info('[lortnoc] session established (accepted); re-scanning inbound')
-      inbound?.reset() // decode any messages that arrived before the key
-      logKeyFingerprint()
-      toast('Private session established — no passphrase needed.')
-    })
+    if (session.status() === 'offered') {
+      // GLARE: we also clicked Connect → we already have each other's pubkey, so just
+      // connect (no second click). This is why "both click Connect" now just works.
+      await establishFromOffer(pubkey)
+    } else {
+      // fresh invite → consent with one tap
+      showAcceptBanner(() => void establishFromOffer(pubkey))
+    }
   } else if (type === FRAME.ACK) {
     await session.onAck(pubkey)
     console.info('[lortnoc] session established (ack); re-scanning inbound')
-    inbound?.reset() // KEY FIX: re-decode messages that arrived before the key was set
+    inbound?.reset()
     logKeyFingerprint()
     toast('They accepted — private session established.')
   }
