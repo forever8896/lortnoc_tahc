@@ -7,41 +7,48 @@
     <link rel="stylesheet" href="./popup.css" />
   </head>
   <body>
-    <header>
-      <span class="mark">lortnoc&nbsp;tahc</span>
-      <span id="status" class="pill pill-off">codec offline</span>
+    <header class="hdr">
+      <div class="brand">
+        <img class="logo" src="/icons/on-48.png" alt="" />
+        <span class="wordmark">lortnoc<span class="dot">·</span>tahc</span>
+      </div>
+      <span id="status" class="chip chip-off"><i class="led"></i>codec</span>
     </header>
 
-    <label class="row toggle">
-      <span>Stego</span>
-      <input type="checkbox" id="enabled" />
-    </label>
+    <!-- master switch -->
+    <button id="masterSwitch" class="master" data-on="false" aria-pressed="false">
+      <div class="master__l">
+        <div class="master__label">Stego</div>
+        <div id="masterSub" class="master__sub">off · sending normally</div>
+      </div>
+      <div class="switch"><div class="knob"></div></div>
+    </button>
 
-    <div class="handshake">
-      <div class="row"><span>Session</span><span id="hsStatus" class="pill pill-off">not connected</span></div>
-      <button id="connect">🤝 Connect securely (no passphrase)</button>
-      <p class="hint">Both people just need the extension + Stego on. Click connect; the other side taps Accept. Keys are exchanged invisibly through the chat.</p>
-    </div>
+    <!-- session -->
+    <section class="card">
+      <div class="card__head">
+        <span class="eyebrow">Private session</span>
+        <span id="hsStatus" class="chip chip-off">not connected</span>
+      </div>
+      <button id="connect" class="btn">🤝&nbsp; Connect securely</button>
+      <p class="hint">No passphrase. Both sides just need the extension + Stego on — one clicks connect, the other taps Accept. Keys are exchanged invisibly through the chat.</p>
+    </section>
 
-    <details class="fallback">
-      <summary>or use a shared passphrase</summary>
+    <details class="adv">
+      <summary>Advanced</summary>
       <label class="field">
-        <span>Passphrase (both sides type the same)</span>
-        <input type="password" id="passphrase" autocomplete="off" spellcheck="false" placeholder="shared secret" />
+        <span class="eyebrow">Codec URL</span>
+        <input type="text" id="codecUrl" spellcheck="false" placeholder="https://lortnoc-codec.fly.dev" />
       </label>
+      <label class="field">
+        <span class="eyebrow">Shared passphrase <em>(fallback)</em></span>
+        <input type="password" id="passphrase" autocomplete="off" spellcheck="false" placeholder="only if not using Connect" />
+      </label>
+      <div class="actions">
+        <button id="save" class="btn btn--sm">Save</button>
+        <button id="check" class="btn btn--ghost btn--sm">Check codec</button>
+      </div>
     </details>
-
-    <label class="field">
-      <span>Codec URL</span>
-      <input type="text" id="codecUrl" spellcheck="false" placeholder="http://localhost:8080" />
-    </label>
-
-    <div class="actions">
-      <button id="save">Save</button>
-      <button id="check" class="ghost">Check codec</button>
-    </div>
-
-    <p class="note">Enter the same passphrase on both laptops, point both at the one codec URL, and toggle Stego on in the chat you're demoing.</p>
 
     <script type="module" src="./popup.ts"></script>
   </body>

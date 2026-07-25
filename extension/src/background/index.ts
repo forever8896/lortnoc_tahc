@@ -16,6 +16,29 @@ async function codecBase(): Promise<string> {
   return url.replace(/\/+$/, '')
 }
 
+// Toolbar icon reflects the on/off state: the mark lights up green when Stego is active.
+function iconSet(on: boolean): Record<number, string> {
+  const v = on ? 'on' : 'off'
+  return {
+    16: `icons/${v}-16.png`,
+    32: `icons/${v}-32.png`,
+    48: `icons/${v}-48.png`,
+    128: `icons/${v}-128.png`,
+  }
+}
+async function reflectState(): Promise<void> {
+  const got = await chrome.storage.local.get(LOCAL.enabled)
+  const on = got[LOCAL.enabled] === true
+  await chrome.action.setIcon({ path: iconSet(on) }).catch(() => {})
+  await chrome.action.setTitle({ title: on ? 'lortnoc tahc — Stego ON' : 'lortnoc tahc — Stego off' }).catch(() => {})
+}
+chrome.runtime.onInstalled.addListener(() => void reflectState())
+chrome.runtime.onStartup.addListener(() => void reflectState())
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && LOCAL.enabled in changes) void reflectState()
+})
+void reflectState()
+
 // Bound every codec call so a slow/unreachable fly instance fails closed (pulse clears)
 // instead of hanging forever. GPT-2 can take several seconds, so give it real headroom.
 const ENCODE_TIMEOUT = 30_000
