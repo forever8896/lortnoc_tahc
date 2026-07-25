@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Storage — Sui, Walrus &amp; Seal | Lortnoc Tahc</title>
-<meta name="description" content="Why Lortnoc Tahc stores conversations on Walrus under Seal threshold encryption, with the access rule enforced on-chain instead of in our database.">
+<meta name="description" content="Every message encrypted, anonymized, and stored immutably — on Walrus, under Seal, with the access rule enforced on-chain instead of in our database.">
 <meta name="theme-color" content="#08080A">
 <link rel="preload" href="fonts/jost/jost-300.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
@@ -23,67 +23,65 @@
       <img class="brand__logo" src="logos/sui.svg" alt="Sui" width="160" height="92">
       <span class="brand__name">Sui &middot; Walrus &middot; Seal</span>
     </div>
-    <h1>A vault we can&rsquo;t open, on storage we don&rsquo;t own.</h1>
-    <p class="lede">Every conversation is batched, encrypted under keys derived on your device, and written to a decentralized network that has no idea what it is holding. The rule for who may decrypt it runs on-chain, where you can read it for yourself.</p>
+    <h1>Every message encrypted, anonymized, and stored immutably.</h1>
+    <p class="lede">On a network that can&rsquo;t read what it&rsquo;s holding, behind a rule anyone can audit.</p>
   </div>
 
   <section>
-    <h2>Why it&rsquo;s essential</h2>
+    <h2>Why it matters</h2>
     <p class="pull">If we hold your messages, we can be made to hand them over.</p>
-    <p>The threat model was never only Chat Control. It is every future order served on whoever runs this service. A privacy product that keeps a readable copy of your conversations has relocated the surveillance, not removed it &mdash; and it has made itself the single most attractive thing in the system to compel.</p>
-    <p>So the constraint is absolute: <strong>we never hold plaintext, and we never hold a key that opens it.</strong> That rules out our own servers. It also rules out ordinary cloud storage with encryption we administer, because &ldquo;we promise not to look&rdquo; is a policy, and policies change the moment a subpoena arrives.</p>
-    <p>What that leaves is a specific pair of requirements: storage that cannot read what it stores, and an access rule that nobody &mdash; including us &mdash; can quietly edit. Walrus answers the first. Seal answers the second.</p>
+    <p>Chat Control is one law. The next order lands on whoever runs the service. A privacy app that keeps a readable copy hasn&rsquo;t stopped the surveillance &mdash; it has moved it somewhere easier to compel.</p>
+    <p><strong>So we hold nothing.</strong> No plaintext. No key. Nothing worth seizing.</p>
 
-    <h3>Why Seal, rather than just encrypting it ourselves</h3>
-    <p>We could encrypt with our own keys and tell you the rules. Seal replaces that promise with a program. Decryption is gated by <code>seal_approve</code>, a Move function on Sui &mdash; the access policy is public code anyone can read and verify, not a conditional buried in a backend only we can see.</p>
-    <p>It is the difference between <em>they say only you can read it</em> and <em>here is the rule, check it yourself.</em> For a product whose entire claim is that you don&rsquo;t have to trust us, that distinction is the product.</p>
+    <h3>Why Seal, and not our own encryption</h3>
+    <p>We could encrypt it ourselves and tell you the rules. Seal makes the rule a public program instead &mdash; <code>seal_approve</code>, running on Sui, that anyone can read.</p>
+    <p>That&rsquo;s the difference between <em>trust us</em> and <em>check for yourself.</em></p>
   </section>
 
   <section>
-    <h2>How it works here</h2>
+    <h2>How it works</h2>
     <ol class="steps">
-      <li><b>Batch.</b> Messages are grouped with <b>Quilt</b> before anything else. Chat messages are tiny, and writing them one at a time to a blob store is enormously wasteful &mdash; batching is roughly 100&ndash;420&times; cheaper at this size. Storage economics decide whether a privacy product is affordable enough to actually run.</li>
-      <li><b>Encrypt.</b> <b>Seal</b> encrypts the batch with threshold encryption, so no single party holds the key that opens it.</li>
-      <li><b>Store.</b> The encrypted blob goes to <b>Walrus</b>, which erasure-codes it into shards spread across the network. Any sufficient subset reconstructs the blob, and the network self-heals as nodes come and go. No node holds anything meaningful, and no node can read what it holds.</li>
-      <li><b>Point.</b> A Sui object, <code>ConversationHead</code>, is the mutable pointer &mdash; <code>{ participants, headBlobId, seq, updatedAt }</code>. Blobs are immutable; the head is what moves as the conversation grows.</li>
-      <li><b>Index.</b> Your ENS text record <code>eth.lortnoc.walrus</code> points at a <code>Manifest</code> blob listing your conversations, so any device holding your master secret can rebuild your entire inbox from nothing but your handle.</li>
-      <li><b>Read.</b> Resolve the handle &rarr; manifest &rarr; heads &rarr; blobs &rarr; decrypt with <code>id_seal</code>, derived from your master secret through HKDF. Client-side, always. Reading your own history never requires our permission and is always free.</li>
+      <li><b>Batch.</b> Messages group into one blob with Quilt &mdash; up to 420&times; cheaper than storing them one by one.</li>
+      <li><b>Encrypt.</b> Seal threshold-encrypts the batch. No single party holds the key.</li>
+      <li><b>Scatter.</b> Walrus erasure-codes it across the network. Every node holds a fragment it can&rsquo;t read.</li>
+      <li><b>Point.</b> A Sui object tracks the current blob. Blobs never change; only the pointer moves.</li>
+      <li><b>Find.</b> Your ENS record points at the index, so any device with your secret rebuilds your inbox.</li>
+      <li><b>Open.</b> Decrypted in your browser, with a key derived on your device. Reading your own history is always free.</li>
     </ol>
   </section>
 
   <section>
     <h2>Why not 0G Storage</h2>
-    <p>We evaluated it seriously. Using it would have collapsed storage onto the same EVM spine as the rest of the stack, which is architecturally tidy and worth wanting.</p>
-    <p>We deferred it for three reasons. There is <strong>no threshold-encryption equivalent with an on-chain access policy</strong> &mdash; which is precisely the property doing the work above. Walrus has the more battle-tested durability story for &ldquo;your data, portable and durable.&rdquo; And there is no Quilt-style small-object batching, which matters disproportionately for chat-sized writes.</p>
-    <p>0G earns its place in this stack elsewhere, on the problem it is actually the right answer to. That work is described on <a href="0g.html">the compute page</a>.</p>
+    <p>We looked at it seriously &mdash; it would have put storage on the same chain as everything else, which is tidy.</p>
+    <p>But it has no Seal. No threshold encryption with an on-chain policy, which is the entire point above. Walrus also has the stronger durability record, and the small-object batching that chat-sized writes live or die on.</p>
+    <p><a href="0g.html">0G earns its place elsewhere &rarr;</a></p>
   </section>
 
   <section>
     <h2>Specifics</h2>
     <div class="spec-wrap">
       <table class="spec">
-        <tr><th>Blob store</th><td>Walrus &mdash; erasure-coded, self-healing, immutable blobs (<code>@mysten/walrus</code>)</td></tr>
-        <tr><th>Encryption</th><td>Seal threshold encryption (<code>@mysten/seal</code>)</td></tr>
-        <tr><th>Access policy</th><td><code>seal_approve</code> &mdash; a Move function on Sui</td></tr>
+        <tr><th>Storage</th><td>Walrus &mdash; erasure-coded, self-healing, immutable</td></tr>
+        <tr><th>Encryption</th><td>Seal threshold encryption</td></tr>
+        <tr><th>Access rule</th><td><code>seal_approve</code>, a Move function on Sui</td></tr>
         <tr><th>Batching</th><td>Quilt</td></tr>
         <tr><th>Pointer</th><td><code>ConversationHead</code> Sui object</td></tr>
-        <tr><th>Index</th><td><code>Manifest</code> blob, found via <code>eth.lortnoc.walrus</code></td></tr>
-        <tr><th>Decryption key</th><td><code>id_seal</code>, HKDF-derived from your master secret, on-device</td></tr>
+        <tr><th>Your key</th><td><code>id_seal</code>, derived on-device, never transmitted</td></tr>
       </table>
     </div>
 
     <div class="note">
       <span class="eyebrow">What we don&rsquo;t claim</span>
-      <p><strong>Walrus is a durable log, not a realtime bus.</strong> Delivery in this build is polling. A realtime relay is roadmap; we would rather say that than describe latency we haven&rsquo;t shipped.</p>
-      <p><strong>The conversation head is single-writer for now.</strong> Two participants writing the same head concurrently would contend on <code>seq</code>. Multi-writer ordering is post-hackathon work.</p>
-      <p><strong>The access policy runs in its fallback form.</strong> Today the gateway issues a short-lived Seal session key against a valid zero-knowledge proof. The stronger design &mdash; checking the nullifier inside <code>seal_approve</code> against an on-chain registry &mdash; is specified and is the next step, not what is running as you read this.</p>
+      <p><strong>Walrus is a durable log, not a realtime bus.</strong> Delivery is polling today.</p>
+      <p><strong>One writer per conversation, for now.</strong> Concurrent writes would contend.</p>
+      <p><strong>The access rule runs in its fallback form</strong> &mdash; a short-lived session key issued against a valid proof. Nullifier-in-policy is next, not shipped.</p>
     </div>
   </section>
 
   <nav class="docnav">
     <div class="docnav__grid">
-      <a href="0g.html"><span>02 &mdash; Compute</span><b>Making cover text read like a person</b></a>
-      <a href="ens.html"><span>03 &mdash; Identity</span><b>A name you own, permission by permission</b></a>
+      <a href="0g.html"><span>02 &mdash; Compute</span><b>Intelligent AI for realistic conversation obfuscation</b></a>
+      <a href="ens.html"><span>03 &mdash; Identity</span><b>A name you own, with permissions you control</b></a>
       <a href="index.html"><span>Back</span><b>Lortnoc Tahc</b></a>
     </div>
   </nav>
