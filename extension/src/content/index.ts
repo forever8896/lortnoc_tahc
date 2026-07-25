@@ -31,8 +31,13 @@ async function bytesToCover(bytes: Uint8Array, fast = false): Promise<string | n
 }
 
 async function sendOffer(): Promise<void> {
-  await session.reset() // fresh keypair + clean state (also recovers from a stuck session)
-  handledFrames.clear()
+  // Don't break a working session, and NEVER regenerate the keypair mid-handshake — that
+  // was the decrypt bug: a second Connect click changed our pubkey, so the key each side
+  // derived no longer matched. startOffer() reuses the existing keypair (stable pubkey).
+  if (session.status() === 'established') {
+    toast('Already connected — you can just type.')
+    return
+  }
   const frame = await session.startOffer()
   const cover = await bytesToCover(frame, true) // fast: handshake frame, skip best-of-N
   if (cover && (await sendCoverText(cover))) toast('Invite sent. Waiting for the other side to accept…')
