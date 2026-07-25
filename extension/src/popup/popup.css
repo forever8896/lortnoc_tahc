@@ -28,7 +28,7 @@ body {
 /* header */
 .hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .brand { display: flex; align-items: center; }
-.brand-logo { height: 40px; width: auto; display: block; }
+.brand-logo { height: 56px; width: auto; display: block; }
 
 /* chips */
 .chip { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; padding: 4px 9px; border: 1px solid var(--rule); color: var(--muted); }
