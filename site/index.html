@@ -100,7 +100,9 @@ body{
 .cue__line{ display:block; width:1px; height:46px; background:linear-gradient(to bottom,rgba(237,234,228,0.35),transparent); animation:lt-cue 2.6s ease-in-out infinite; }
 
 /* ── 02 the reversal ────────────────────────────────────────── */
-.reversal{ height:320vh; position:relative; }
+/* Taller than the flip alone needs: the strike-through takes the first third
+   of the track before a single letter moves. */
+.reversal{ height:420vh; position:relative; }
 .reversal__pin{
   position:sticky; top:0; height:100vh; overflow:hidden;
   display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -111,6 +113,15 @@ body{
   text-align:center; text-transform:uppercase; white-space:nowrap;
 }
 .word span{ display:inline-block; min-width:0.28em; will-change:filter,opacity,transform; }
+.word-wrap{ position:relative; display:inline-block; }
+/* viewBox is set in JS to the element's real pixel box, so user units are CSS
+   pixels 1:1. That keeps stroke-dasharray honest — the reason not to stretch
+   the viewBox or reach for non-scaling-stroke. */
+.strike{
+  position:absolute; inset:0; width:100%; height:100%;
+  overflow:visible; opacity:0; pointer-events:none; will-change:opacity;
+}
+.strike line{ stroke:var(--signal); stroke-linecap:round; }
 .reversal__caption{ margin-top:clamp(36px,5vw,72px); text-align:center; }
 .reversal__caption p:first-child{ margin:0; font-size:clamp(20px,2.2vw,34px); line-height:1.2; letter-spacing:-0.015em; font-weight:400; }
 .reversal__caption p:last-child{ margin:16px auto 0; font-size:clamp(17px,1.15vw,19px); line-height:1.75; color:var(--muted); max-width:36ch; }
@@ -265,7 +276,14 @@ body{
        reveal lands with nothing competing for attention. -->
   <section class="reversal" id="reversal" aria-label="Lortnoc Tahc">
     <div class="reversal__pin">
-      <div class="word" id="word" aria-label="Chat Control becomes Lortnoc Tahc"></div>
+      <div class="word-wrap">
+        <div class="word" id="word" aria-label="Chat Control becomes Lortnoc Tahc"></div>
+        <!-- Struck out first, then rearranged. Drawn by scroll, not CSS. -->
+        <svg class="strike" id="strike" aria-hidden="true">
+          <line></line>
+          <line></line>
+        </svg>
+      </div>
       <div class="reversal__caption" id="caption">
         <p>That&rsquo;s Chat Control spelled backwards.</p>
         <p>We built the opposite of the law.</p>
@@ -455,8 +473,54 @@ body{
   var thresholds = [];
   for (var t = 0; t < n; t++) {
     var k = n - 1 - t;                       // rightmost letter flips first
-    thresholds[t] = 0.05 + Math.pow(k / (n - 1), 0.58) * 0.8;  // finals land together
+    // Starts at 0.34, not 0.05: the strike-through owns the first third.
+    thresholds[t] = 0.34 + Math.pow(k / (n - 1), 0.58) * 0.58;  // finals land together
   }
+
+  // Strike-through: two diagonals drawn by scroll, one after the other, then
+  // held and released as the letters start to move.
+  var wordWrap = document.querySelector('.word-wrap');
+  var strikeEl = document.getElementById('strike');
+  var strikeLines = [].slice.call(strikeEl.querySelectorAll('line')).map(function (ln) {
+    return { ln: ln, len: 1 };
+  });
+
+  // Size the viewBox to the word's real pixel box and lay the diagonals across
+  // it, overshooting the top and bottom so the mark reads as a strike rather
+  // than a neat inscribed X. Re-run whenever the word's box can change.
+  function layoutStrike() {
+    var r = wordWrap.getBoundingClientRect();
+    var w = Math.max(1, r.width), h = Math.max(1, r.height);
+    var over = h * 0.12;                       // vertical overshoot
+    var inset = w * 0.015;
+    strikeEl.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+    var pts = [
+      [inset, -over, w - inset, h + over],
+      [w - inset, -over, inset, h + over]
+    ];
+    for (var i = 0; i < strikeLines.length; i++) {
+      var ln = strikeLines[i].ln, p = pts[i];
+      ln.setAttribute('x1', p[0]); ln.setAttribute('y1', p[1]);
+      ln.setAttribute('x2', p[2]); ln.setAttribute('y2', p[3]);
+      ln.style.strokeWidth = Math.max(3, Math.min(11, h * 0.055));
+      var len = ln.getTotalLength();
+      strikeLines[i].len = len;
+      ln.style.strokeDasharray = len;
+      ln.style.strokeDashoffset = len;
+    }
+  }
+
+  layoutStrike();
+  window.addEventListener('resize', function () { layoutStrike(); applyWord(sp); });
+  // Web fonts change the word's width after first layout.
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function () { layoutStrike(); applyWord(sp); });
+  }
+  var STRIKE = [[0.02, 0.13], [0.12, 0.23]];   // draw windows, second overlaps
+  var STRIKE_FADE = [0.30, 0.38];              // released as the flips begin
+
+  function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+  function ease(x) { return x * x * (3 - 2 * x); }
 
   captionEl.style.opacity = '0';
   captionEl.style.transform = 'translate3d(0,14px,0)';
@@ -464,12 +528,21 @@ body{
 
   var fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
   var scrub = fine && window.innerWidth >= 760;
-  if (!scrub) trackEl.style.height = '150vh';
+  if (!scrub) trackEl.style.height = '200vh';   // strike + flip, played not scrubbed
 
   var p = 0, sp = 0, applied = -1, playing = 0;
 
   function applyWord(v) {
     var W = 0.055;
+
+    // Draw each diagonal, then fade the whole mark out as the letters go.
+    for (var k = 0; k < strikeLines.length; k++) {
+      var sw = STRIKE[k];
+      var drawn = ease(clamp01((v - sw[0]) / (sw[1] - sw[0])));
+      strikeLines[k].ln.style.strokeDashoffset = (strikeLines[k].len * (1 - drawn)).toFixed(2);
+    }
+    strikeEl.style.opacity =
+      (1 - ease(clamp01((v - STRIKE_FADE[0]) / (STRIKE_FADE[1] - STRIKE_FADE[0])))).toFixed(3);
     for (var i = 0; i < n; i++) {
       var s = spans[i], th = thresholds[i], on = v > th;
       if (on !== flipped[i]) {
@@ -489,7 +562,7 @@ body{
         s.style.filter = ''; s.style.opacity = ''; s.style.transform = ''; s.style.color = '';
       }
     }
-    var q = Math.min(1, Math.max(0, (v - 0.84) / 0.16));
+    var q = Math.min(1, Math.max(0, (v - 0.92) / 0.08));
     var cp = q * q * (3 - 2 * q);
     captionEl.style.opacity = cp.toFixed(3);
     captionEl.style.transform = 'translate3d(0,' + (14 * (1 - cp)).toFixed(2) + 'px,0)';
