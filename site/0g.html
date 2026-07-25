@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compute — 0G Confidential Compute | Lortnoc Tahc</title>
+<meta name="description" content="Why Lortnoc Tahc judges cover text inside 0G confidential compute, and why the reversible encoder stays local and deterministic.">
+<meta name="theme-color" content="#08080A">
+<link rel="preload" href="fonts/jost/jost-300.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a class="topbar__home" href="index.html">&larr; Lortnoc Tahc</a>
+  <a class="topbar__mark" href="index.html">02 &middot; Compute</a>
+</header>
+
+<main class="doc">
+
+  <div class="doc__hero">
+    <div class="eyebrow eyebrow--signal doc__partner">0G &middot; Confidential Compute</div>
+    <h1>The judgement that makes cover text pass.</h1>
+    <p class="lede">Every message is written several different ways, and sealed compute picks the one that reads most like a human being sent it. What it judges cannot be logged, retained, or read.</p>
+  </div>
+
+  <section>
+    <h2>Why it&rsquo;s essential</h2>
+    <p class="pull">Steganography fails the moment the disguise reads like a disguise.</p>
+    <p>Hiding a message inside ordinary language is only half the problem, and it is the easy half. What gets people caught is <strong>fluency</strong>. Cover text that is grammatical but subtly wrong &mdash; an odd turn of phrase, a sentence no real person would send to a friend &mdash; is itself a signal. Automated scanning is extremely good at noticing text that does not sit right, and a message flagged as anomalous is worse than one sent in the clear, because it marks you as someone with something to hide.</p>
+    <p>So something has to score naturalness. And that scorer necessarily sees candidate text derived from your message. Running it against a normal inference endpoint would mean handing that text to a provider who logs prompts &mdash; manufacturing exactly the record this product exists to prevent.</p>
+    <p>Confidential compute is what makes the judgement possible without creating the evidence. <strong>The scoring happens somewhere that cannot keep what it scored.</strong></p>
+
+    <h3>Why the encoder is local and the judge is not</h3>
+    <p>This is the part most descriptions of &ldquo;AI-powered encryption&rdquo; get wrong, so it is worth being exact.</p>
+    <p>Reversible steganography has an unforgiving requirement: the encoder and the decoder must walk <strong>byte-identical probability distributions</strong>, or the message does not come back. Not &ldquo;comes back garbled&rdquo; &mdash; does not come back at all.</p>
+    <p>Hosted GPU inference cannot promise that. Shared batched fleets, no seed guarantee; even at temperature zero, two runs of the same request can diverge. Route the reversible half of a codec through it and you have built something that silently loses messages.</p>
+    <p>So we split the work by which half tolerates nondeterminism. The reversible arithmetic coding runs on a <strong>pinned local model</strong>, deterministic and byte-exact. The naturalness judgement &mdash; a preference between finished candidates, not a computation anyone has to reproduce &mdash; runs on <strong>0G</strong>.</p>
+    <p>That is not a workaround for a limitation. It is the correct allocation of the two halves: determinism where reversibility depends on it, sealed compute where privacy does.</p>
+  </section>
+
+  <section>
+    <h2>How it works here</h2>
+    <ol class="steps">
+      <li><b>Encrypt locally.</b> The extension encrypts your message with AES-SIV under a key derived on your device. Everything downstream sees ciphertext and nothing else &mdash; never plaintext, never a key.</li>
+      <li><b>Generate several candidates.</b> A pinned local GPT-2 arithmetic-codes that ciphertext into multiple different cover texts. Same payload, genuinely different phrasings.</li>
+      <li><b>Score inside sealed compute.</b> The candidates go to our 0G sidecar, where confidential inference rates which one reads most naturally &mdash; which sounds most like a message a person would actually send.</li>
+      <li><b>Send the winner.</b> The highest-scoring cover text goes into the compose box. That sentence about coffee is the entire record the platform keeps.</li>
+      <li><b>Decode.</b> Your correspondent&rsquo;s local codec reverses the arithmetic coding and verifies the AES-SIV tag. Because both ends run the same pinned model deterministically, it round-trips exactly. The auth tag doubles as the detector: a valid tag means it was one of ours, an invalid one means it really was just small talk.</li>
+    </ol>
+
+    <h3>What 0G actually sees</h3>
+    <p>Candidate cover texts. Those encode ciphertext &mdash; never plaintext &mdash; and are useless without a key that never leaves your device. If the sidecar were fully compromised tomorrow, the attacker would hold a pile of innocuous sentences about coffee and weather, and no way to open any of them.</p>
+  </section>
+
+  <section>
+    <h2>The other half: anonymous membership</h2>
+    <p>0G Chain also hosts the membership contract, which solves a problem that has nothing to do with language and everything to do with money.</p>
+    <p>Paying inserts a commitment into an on-chain Merkle set. Later, claiming a handle proves you know the secret behind <em>some</em> commitment in that set and emits a nullifier that can only be spent once. Observers see that a wallet paid, and that the set grew. They never see which handle that payment unlocked.</p>
+    <p>The chain of <code>wallet &rarr; commitment</code> is public. The chain of <code>commitment &rarr; nullifier &rarr; handle</code> is not. That link is severed by construction, not by our discretion.</p>
+
+    <div class="spec-wrap">
+      <table class="spec">
+        <tr><th>Sealed inference</th><td>0G confidential compute &mdash; best-of-N cover selection</td></tr>
+        <tr><th>Deployment</th><td>0G broker sidecar</td></tr>
+        <tr><th>Local codec</th><td>GPT-2, pinned, CPU, greedy sampling &mdash; deterministic across restarts</td></tr>
+        <tr><th>Encryption</th><td>AES-SIV (RFC 5297), client-side, key never transmitted</td></tr>
+        <tr><th>Chain</th><td>0G Galileo, chain ID 16602</td></tr>
+        <tr><th>Membership</th><td>Semaphore commitment set + single-use nullifier</td></tr>
+      </table>
+    </div>
+
+    <div class="note">
+      <span class="eyebrow">What we don&rsquo;t claim</span>
+      <p><strong>0G does not run the encoder, and it cannot.</strong> Any claim that our steganographic model runs on confidential compute would be false. Hosted inference cannot provide the byte-determinism reversibility requires. We investigated deploying our own model into their trusted environment, which would genuinely solve it &mdash; the 0G team confirmed that isn&rsquo;t supported today. So we say what is true instead.</p>
+      <p><strong>Sealed compute sees candidate cover text.</strong> That is ciphertext-equivalent rather than plaintext, but it is not nothing, and we will not describe it as zero exposure.</p>
+      <p><strong>Best-of-N improves how natural the text reads. It is not a guarantee.</strong> A determined, purpose-built classifier is a different adversary from a general scanning pipeline, and we don&rsquo;t claim immunity from one by citing performance against the other.</p>
+    </div>
+  </section>
+
+  <nav class="docnav">
+    <div class="docnav__grid">
+      <a href="sui.html"><span>01 &mdash; Storage</span><b>A vault we can&rsquo;t open</b></a>
+      <a href="ens.html"><span>03 &mdash; Identity</span><b>A name you own, permission by permission</b></a>
+      <a href="index.html"><span>Back</span><b>Lortnoc Tahc</b></a>
+    </div>
+  </nav>
+
+</main>
+</body>
+</html>

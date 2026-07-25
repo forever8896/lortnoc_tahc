@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Identity — ENS v2 sub-names | Lortnoc Tahc</title>
+<meta name="description" content="Why Lortnoc Tahc accounts are ENS v2 sub-names with per-record write permissions — delegated one record at a time, revocable on-chain, without asking us.">
+<meta name="theme-color" content="#08080A">
+<link rel="preload" href="fonts/jost/jost-300.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a class="topbar__home" href="index.html">&larr; Lortnoc Tahc</a>
+  <a class="topbar__mark" href="index.html">03 &middot; Identity</a>
+</header>
+
+<main class="doc">
+
+  <div class="doc__hero">
+    <div class="eyebrow eyebrow--signal doc__partner">ENS v2 &middot; Permissioned Resolver</div>
+    <h1>A name you own, with permissions you hand out one at a time.</h1>
+    <p class="lede">Your account is a sub-name you hold, carrying the keys people reach you by. Every record on it is separately permissioned &mdash; enforced on-chain, revocable in a single transaction, without asking us for anything.</p>
+  </div>
+
+  <section>
+    <h2>Why it&rsquo;s essential</h2>
+    <p class="pull">An account a company can delete was never yours.</p>
+    <p>Two things had to be true at once. Your identity must <strong>survive us</strong> &mdash; if this company disappears tomorrow, or is ordered to close your account, the name and the keys people reach you by have to keep working. And the infrastructure that helps operate your account must hold the <strong>narrowest possible power</strong>, in a form you can inspect and withdraw yourself.</p>
+    <p>Conventional systems cannot express the second one honestly. An access-control row in our database is a claim about our future behaviour. What we needed was a permission that is itself a public, checkable fact.</p>
+    <p>It is also, plainly, the business model. Handles are what we sell. That only holds together if a handle is a real asset the buyer controls &mdash; not a row we could revoke, which is exactly the arrangement everyone is trying to escape.</p>
+
+    <h3>The thing ENS v1 cannot do</h3>
+    <p>In v1, a name has one resolver and one owner, and control is all-or-nothing: whoever can write, can write everything. Delegating &ldquo;please rotate this one pointer&rdquo; means handing over the ability to rewrite the messaging key your contacts use to find you. That is not delegation, it is surrender.</p>
+    <p>v2 introduces per-record roles through Enhanced Access Control, and a Permissioned Resolver that each account gets its <em>own</em> instance of. Write permission becomes granular: per record, per address, revocable in one transaction. That single capability is what the identity layer is built on.</p>
+  </section>
+
+  <section>
+    <h2>How it works here</h2>
+    <ol class="steps">
+      <li><b>You get your own resolver.</b> Claiming a handle deploys you a <code>VerifiableFactory</code> proxy of <code>PermissionedResolverImpl</code>. Not a shared resolver with a row for you &mdash; your own contract, of which you are the admin.</li>
+      <li><b>Records carry your routing.</b> <code>eth.lortnoc.pubkey</code> is your X25519 messaging key, <code>.walrus</code> points at your encrypted vault index, <code>.inbox</code> at where to deliver, <code>.stealth</code> at a meta-address for receiving funds at a fresh one-time address, <code>.knock</code> at the challenge someone must answer to reach you.</li>
+      <li><b>Delegate exactly one thing.</b> <code>authorizeTextRoles(name, "eth.lortnoc.inbox", gateway, true)</code> lets our sync gateway rotate your inbox pointer &mdash; and only that. Its attempt to write <code>.pubkey</code> <b>reverts</b>. Not &ldquo;is against policy&rdquo;: reverts, on-chain, every time.</li>
+      <li><b>Revoke without involving us.</b> The same call with <code>grant=false</code>. One transaction, your signature, no support ticket, no waiting on a company that may not want to comply.</li>
+      <li><b>Prove it&rsquo;s genuine.</b> <code>verifyContract(proxy)</code> returns the implementation your resolver was deployed from. Compare it against the canonical <code>PermissionedResolverImpl</code> and you have proven your resolver is real without trusting anything we say about it.</li>
+      <li><b>Issued without being linked to you.</b> The registry issues sub-names against a valid, unspent zero-knowledge nullifier rather than against &ldquo;this wallet paid,&rdquo; and the claim is relayed so the payer and the claimer are different addresses. Payment and handle stay unlinked.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Discoverability is a dial, not a switch</h2>
+    <p>Being reachable and being findable are different things, and most systems collapse them into one. Yours is a five-rung ladder held in <code>eth.lortnoc.discoverable</code>:</p>
+    <div class="spec-wrap">
+      <table class="spec">
+        <tr><th>Ghost</th><td>Not findable at all. Only someone you personally handed your handle to can reach you.</td></tr>
+        <tr><th>Unlisted</th><td>Resolvable if known, but not searchable and not reverse-linkable to your address.</td></tr>
+        <tr><th>Known</th><td>Findable only by someone who already has an identifier for you &mdash; they recompute a salted hash. Strangers cannot enumerate backwards.</td></tr>
+        <tr><th>Searchable</th><td>Appears in people-search, because you opted in.</td></tr>
+        <tr><th>Public</th><td>Fully linkable. Your on-chain footprint maps back to you, deliberately.</td></tr>
+      </table>
+    </div>
+    <p>This works because every handle resolves through our CCIP-Read gateway, which means real code runs on every lookup and can answer <strong>differently per record and per caller</strong>. ENS records are normally simply public; ours can be answered conditionally. The gate is the creative part, not the index behind it.</p>
+    <p>Reachability is the second axis. <code>eth.lortnoc.knock</code> publishes a question &mdash; never the answer &mdash; and a stranger must encrypt their introduction under a key derived from answering it correctly. Get it wrong and you are never notified at all. Different answers can route to different inboxes, which quietly gives you separate contact circles under one name.</p>
+  </section>
+
+  <section>
+    <h2>Specifics</h2>
+    <div class="spec-wrap">
+      <table class="spec">
+        <tr><th>Handle</th><td><code>&lt;name&gt;.lortnoc.eth</code></td></tr>
+        <tr><th>Registry</th><td><code>LortnocRegistry</code>, implements <code>IRegistry</code>, slotted under <code>lortnoc.eth</code></td></tr>
+        <tr><th>Resolver</th><td>Per-account <code>VerifiableFactory</code> proxy of <code>PermissionedResolverImpl</code></td></tr>
+        <tr><th>Permissions</th><td>Enhanced Access Control &mdash; per-record roles, resource is <code>keccak256(node, part)</code></td></tr>
+        <tr><th>Delegation</th><td><code>authorizeTextRoles(name, key, account, grant)</code></td></tr>
+        <tr><th>Proof</th><td><code>verifyContract(proxy)</code> &rarr; implementation address</td></tr>
+        <tr><th>Network</th><td>Sepolia, deployment snapshot pinned to 2026-06-29</td></tr>
+      </table>
+    </div>
+
+    <div class="note">
+      <span class="eyebrow">What we don&rsquo;t claim</span>
+      <p><strong>These roles gate writes, not reads.</strong> On-chain records are world-readable &mdash; anyone can read your <code>pubkey</code>, and that is deliberate, because it is how people reach you. The discoverability ladder above is an off-chain gateway policy: a genuinely separate mechanism. We don&rsquo;t conflate the two, and you shouldn&rsquo;t let anyone else conflate them either.</p>
+      <p><strong>On-chain issuance means the claim is a public transaction.</strong> We trade a zero on-chain footprint for real, verifiable v2 permissions. Unlinkability between payment and handle is preserved through the relayed claim and the nullifier &mdash; but that <em>a</em> handle was claimed is public, and we won&rsquo;t pretend otherwise.</p>
+      <p><strong>Free handles are deliberately not anonymous.</strong> They are sponsored and metered, and only paid handles carry the unlinkability guarantee. Free <em>messaging</em>, on the other hand, needs no handle at all &mdash; the first key exchange happens in-band, through the chat itself.</p>
+    </div>
+  </section>
+
+  <nav class="docnav">
+    <div class="docnav__grid">
+      <a href="sui.html"><span>01 &mdash; Storage</span><b>A vault we can&rsquo;t open</b></a>
+      <a href="0g.html"><span>02 &mdash; Compute</span><b>Making cover text read like a person</b></a>
+      <a href="index.html"><span>Back</span><b>Lortnoc Tahc</b></a>
+    </div>
+  </nav>
+
+</main>
+</body>
+</html>

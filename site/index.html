@@ -14,207 +14,7 @@
 <link rel="preload" href="fonts/jost/jost-300.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/questrial/questrial-400.woff2" as="font" type="font/woff2" crossorigin>
 
-<style>
-/* ── brand type ─────────────────────────────────────────────── */
-@font-face { font-family:"Questrial"; font-style:normal; font-weight:400; font-display:swap; src:url("fonts/questrial/questrial-400.woff2") format("woff2"); }
-@font-face { font-family:"Jost"; font-style:normal; font-weight:300; font-display:swap; src:url("fonts/jost/jost-300.woff2") format("woff2"); }
-@font-face { font-family:"Jost"; font-style:normal; font-weight:400; font-display:swap; src:url("fonts/jost/jost-400.woff2") format("woff2"); }
-@font-face { font-family:"Jost"; font-style:normal; font-weight:500; font-display:swap; src:url("fonts/jost/jost-500.woff2") format("woff2"); }
-
-:root{
-  --bg:#08080A;
-  --ink:#EDEAE4;
-  --signal:#4ADE80;
-  --muted:rgba(237,234,228,0.5);
-  --rule:rgba(237,234,228,0.12);
-  --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
-  --shell:clamp(24px,6vw,88px);
-  --beat:clamp(140px,18vh,240px);
-}
-
-*,*::before,*::after{ box-sizing:border-box; }
-html,body{ margin:0; padding:0; background:var(--bg); }
-body{
-  color:var(--ink);
-  font-family:"Jost",system-ui,-apple-system,"Segoe UI",sans-serif;
-  font-weight:300;
-  overflow-x:hidden;
-  -webkit-font-smoothing:antialiased;
-  text-rendering:optimizeLegibility;
-}
-::selection{ background:var(--signal); color:var(--bg); }
-
-.wrap{ max-width:1560px; margin:0 auto; padding-left:var(--shell); padding-right:var(--shell); }
-
-.eyebrow{ font-family:var(--mono); font-size:11px; letter-spacing:0.24em; text-transform:uppercase; color:var(--muted); }
-.eyebrow--signal{ font-size:12px; letter-spacing:0.26em; color:var(--signal); }
-
-.lede{ margin:0; font-size:clamp(17px,1.15vw,19px); line-height:1.75; max-width:620px; color:var(--muted); }
-.lede strong{ color:var(--ink); font-weight:300; }
-
-/* ── 00–01 the film: cold open + the threat, scroll-scrubbed ── */
-/* Fallback track height; JS sets the real one per section from data-track
-   (~20vh of scroll per second of film). */
-.film{ height:560vh; position:relative; background:#000; }
-.film__pin{ position:sticky; top:0; height:100vh; overflow:hidden; }
-.film__video,.film__poster{
-  position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
-}
-.film__video{ opacity:0; transition:opacity 1.2s ease; }
-.film__video.is-ready{ opacity:1; }
-/* Keeps the copy legible when the searchlight blows out the left of frame. */
-.film__scrim{
-  position:absolute; inset:0; pointer-events:none;
-  background:
-    linear-gradient(90deg, rgba(8,8,10,0.88) 0%, rgba(8,8,10,0.55) 46%, rgba(8,8,10,0.15) 100%),
-    linear-gradient(180deg, rgba(8,8,10,0.55) 0%, transparent 26%, transparent 68%, rgba(8,8,10,0.75) 100%);
-}
-.film__copy{ position:absolute; inset:0; z-index:2; }
-.film__line{
-  position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center;
-  padding:0 var(--shell); max-width:1560px; margin:0 auto;
-  will-change:opacity, transform;
-}
-.film__line--end{ align-items:flex-end; text-align:right; }
-.film__line h1{
-  margin:0; font-weight:400;
-  font-size:clamp(48px,9vw,160px); line-height:0.95; letter-spacing:-0.035em;
-  max-width:17ch; text-wrap:balance;
-}
-.film__line p.big{
-  margin:0; font-weight:400;
-  font-size:clamp(34px,5.6vw,88px); line-height:1.02; letter-spacing:-0.028em; max-width:22ch;
-}
-.film__line--end p.big{
-  font-size:clamp(30px,4.6vw,74px); line-height:1.06; letter-spacing:-0.024em;
-  color:var(--signal); max-width:24ch;
-}
-/* The resolving half of a sentence: same weight and alignment, signal colour. */
-.film__line--signal p.big{ color:var(--signal); }
-.film__date{ margin-bottom:clamp(28px,4vw,56px); }
-.film__line .lede{ margin-top:clamp(32px,4vw,60px); }
-.cue{
-  position:absolute; left:var(--shell); bottom:clamp(28px,5vw,52px); z-index:3;
-  display:flex; align-items:center; gap:14px;
-}
-.cue__line{ display:block; width:1px; height:46px; background:linear-gradient(to bottom,rgba(237,234,228,0.35),transparent); animation:lt-cue 2.6s ease-in-out infinite; }
-
-/* ── 02 the reversal ────────────────────────────────────────── */
-/* Taller than the flip alone needs: the strike-through takes the first third
-   of the track before a single letter moves. */
-.reversal{ height:420vh; position:relative; }
-.reversal__pin{
-  position:sticky; top:0; height:100vh; overflow:hidden;
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
-  padding:0 clamp(20px,5vw,80px);
-}
-.word{
-  font-size:clamp(26px,11.2vw,168px); line-height:1; letter-spacing:-0.03em; font-weight:400;
-  text-align:center; text-transform:uppercase; white-space:nowrap;
-}
-.word span{ display:inline-block; min-width:0.28em; will-change:filter,opacity,transform; }
-.word-wrap{ position:relative; display:inline-block; }
-/* viewBox is set in JS to the element's real pixel box, so user units are CSS
-   pixels 1:1. That keeps stroke-dasharray honest — the reason not to stretch
-   the viewBox or reach for non-scaling-stroke. */
-.strike{
-  position:absolute; inset:0; width:100%; height:100%;
-  overflow:visible; opacity:0; pointer-events:none; will-change:opacity;
-}
-.strike line{ stroke:var(--signal); stroke-linecap:round; }
-.reversal__caption{ margin-top:clamp(36px,5vw,72px); text-align:center; }
-.reversal__caption p:first-child{ margin:0; font-size:clamp(20px,2.2vw,34px); line-height:1.2; letter-spacing:-0.015em; font-weight:400; }
-.reversal__caption p:last-child{ margin:16px auto 0; font-size:clamp(17px,1.15vw,19px); line-height:1.75; color:var(--muted); max-width:36ch; }
-
-/* ── 03 the trick ───────────────────────────────────────────── */
-.trick{ padding-top:var(--beat); padding-bottom:var(--beat); }
-.panes{ display:grid; grid-template-columns:repeat(auto-fit,minmax(258px,1fr)); gap:clamp(14px,1.6vw,24px); align-items:stretch; }
-.pane{
-  border:1px solid var(--rule); padding:clamp(20px,2vw,30px);
-  min-height:clamp(200px,26vh,280px); display:flex; flex-direction:column; gap:22px;
-}
-.pane p{ margin:0; font-size:clamp(17px,1.35vw,21px); line-height:1.55; letter-spacing:-0.005em; color:var(--ink); }
-.pane--watched{ position:relative; overflow:hidden; border-color:rgba(74,222,128,0.4); animation:lt-pulse 3.4s ease-in-out infinite; }
-.pane--watched .eyebrow{ color:var(--signal); }
-.pane--watched p{ min-height:3em; }
-.pane--out p{ min-height:3em; }
-.scan{ position:absolute; left:0; right:0; top:0; height:12%; pointer-events:none; background:linear-gradient(to bottom,transparent,rgba(74,222,128,0.13),transparent); animation:lt-scan 4.6s linear infinite; }
-
-.trick__claim{ margin-top:clamp(80px,10vh,150px); display:flex; flex-direction:column; gap:22px; }
-.trick__claim h2{ margin:0; font-size:clamp(30px,4.4vw,72px); line-height:1.04; letter-spacing:-0.03em; font-weight:400; }
-.trick__kicker{ margin-top:clamp(120px,16vh,220px); border-top:1px solid var(--rule); padding-top:clamp(36px,4vw,60px); }
-.trick__kicker p{ margin:0; font-size:clamp(24px,3.2vw,52px); line-height:1.1; letter-spacing:-0.024em; font-weight:400; max-width:30ch; }
-
-/* ── 04 the line ────────────────────────────────────────────── */
-.line{ min-height:100vh; padding-top:var(--beat); padding-bottom:var(--beat); display:flex; flex-direction:column; justify-content:center; }
-.line h2{ margin:0; font-size:clamp(44px,8.4vw,150px); line-height:0.96; letter-spacing:-0.038em; font-weight:400; max-width:19ch; }
-.line .lede{ margin-top:clamp(44px,6vw,88px); }
-
-/* ── 05 the trojan horse ────────────────────────────────────── */
-.horse{ padding-top:var(--beat); padding-bottom:var(--beat); }
-.horse__states{ display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:clamp(28px,4vw,72px); border-top:1px solid var(--rule); padding-top:clamp(36px,4vw,64px); }
-.horse__states p{ margin:0; font-size:clamp(26px,3.4vw,54px); line-height:1.08; letter-spacing:-0.026em; font-weight:400; }
-.horse__states p:first-child{ color:var(--muted); }
-.horse__body{ margin-top:clamp(110px,14vh,200px); display:flex; flex-direction:column; gap:26px; }
-
-/* ── 06 the stack ───────────────────────────────────────────── */
-.stack{ padding-top:var(--beat); padding-bottom:var(--beat); }
-.stack__grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:clamp(36px,4vw,64px); }
-.stack__item{ border-top:1px solid var(--rule); padding-top:26px; display:flex; flex-direction:column; gap:18px; }
-.stack__item h3{ margin:0; font-size:clamp(21px,1.8vw,29px); line-height:1.16; letter-spacing:-0.018em; font-weight:400; color:var(--signal); }
-.stack__item p{ margin:0; font-size:clamp(16px,1.05vw,18px); line-height:1.75; color:var(--muted); }
-
-/* ── 07 the close ───────────────────────────────────────────── */
-.close{ min-height:100vh; padding-top:var(--beat); padding-bottom:clamp(40px,5vw,64px); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
-.wordmark{ font-family:"Questrial","Jost",system-ui,sans-serif; font-size:clamp(44px,10vw,175px); line-height:0.94; letter-spacing:-0.04em; font-weight:400; }
-.close__claim{ margin:clamp(44px,5vw,80px) auto 0; font-size:clamp(22px,2.4vw,38px); line-height:1.18; letter-spacing:-0.02em; font-weight:400; max-width:24ch; }
-.actions{ margin-top:clamp(44px,5vw,72px); display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:clamp(20px,3vw,40px); }
-.btn{
-  background:var(--signal); color:var(--bg); text-decoration:none;
-  font-size:clamp(16px,1.1vw,18px); letter-spacing:0.01em; font-weight:400;
-  padding:20px 38px; min-height:44px; display:inline-flex; align-items:center;
-  transition:background .35s ease, color .35s ease;
-}
-.btn:hover,.btn:focus-visible{ background:var(--ink); color:var(--bg); }
-.btn--ghost{
-  background:none; color:var(--muted); padding:0;
-  font-size:clamp(15px,1vw,17px); text-decoration:underline; text-underline-offset:6px;
-  transition:color .35s ease;
-}
-.btn--ghost:hover,.btn--ghost:focus-visible{ background:none; color:var(--ink); }
-.signoff{ margin:clamp(110px,14vh,190px) 0 0; }
-
-:focus-visible{ outline:2px solid var(--signal); outline-offset:4px; }
-
-/* ── motion ─────────────────────────────────────────────────── */
-@keyframes lt-scan{ 0%{ transform:translateY(-120%); } 100%{ transform:translateY(920%); } }
-@keyframes lt-pulse{
-  0%,100%{ box-shadow:0 0 0 1px rgba(74,222,128,0.35), 0 0 44px -18px rgba(74,222,128,0.5); }
-  50%{ box-shadow:0 0 0 1px rgba(74,222,128,0.85), 0 0 60px -14px rgba(74,222,128,0.75); }
-}
-@keyframes lt-cue{ 0%,100%{ transform:translateY(0); opacity:0.35; } 50%{ transform:translateY(9px); opacity:0.9; } }
-
-/* JS drives the film copy; hide it up front only when JS is actually running,
-   so a failed script leaves the words on screen rather than a black hole. */
-.js .film__line{ opacity:0; }
-
-@media (prefers-reduced-motion: reduce){
-  *{ animation:none !important; transition:none !important; }
-  .reversal{ height:auto !important; }
-  .reversal__pin{ position:static; height:auto; min-height:100vh; }
-  /* Static tier: each film collapses to its poster frame with the copy
-     stacked underneath in normal document flow. */
-  .film{ height:auto !important; }
-  .film__pin{ position:relative; height:auto; padding:0 0 6vh; background:#000; }
-  .film__video,.film__scrim,.cue{ display:none; }
-  .film__poster{ position:static; width:100%; height:auto; display:block; }
-  .film__copy{ position:static; }
-  .film__line{
-    position:static; opacity:1 !important; transform:none !important;
-    padding:8vh var(--shell); margin:0 auto;
-  }
-}
-</style>
+<link rel="stylesheet" href="style.css">
 <script>document.documentElement.className += ' js';</script>
 </head>
 <body>
@@ -363,22 +163,107 @@ body{
     </div>
   </section>
 
-  <!-- 06 ─ the stack -->
-  <section class="wrap stack" aria-label="How it works">
-    <div class="stack__grid">
-      <div class="stack__item" data-reveal="1">
-        <h3>Your account is a name you own.</h3>
-        <p>Every Lortnoc DM account is an ENS subdomain you claim and hold. It&rsquo;s your identity, your inbox, and how you get paid &mdash; and it belongs to you, not to us.</p>
-      </div>
-      <div class="stack__item" data-reveal="2">
-        <h3>Your membership can&rsquo;t be traced to you.</h3>
-        <p>Access is proven with a zero-knowledge proof. We can verify that you paid without ever learning which handle is yours. Unlinkable to your payment &mdash; not by us, not by anyone.</p>
-      </div>
-      <div class="stack__item" data-reveal="3">
-        <h3>Your messages can&rsquo;t be deleted.</h3>
-        <p>Every encrypted message lives in decentralized storage. Uncensorable, undeletable, and yours to walk away with whenever you want.</p>
-      </div>
+  <!-- 06 ─ the stack. Three integrations, each its own band, each linking
+       to a page that explains why it's load-bearing rather than decorative. -->
+  <section class="wrap integrations" aria-label="What it's built on">
+    <div class="integrations__intro" data-reveal="1">
+      <h2>Three pieces. None of them optional.</h2>
+      <p class="lede">A privacy product that keeps your data has only moved the problem. Every piece below exists because something in this system had to be impossible for us to betray &mdash; not merely something we promise not to do.</p>
     </div>
+
+    <!-- ── Sui ── -->
+    <article class="integration" data-reveal="1">
+      <div class="integration__row">
+        <div class="integration__body">
+          <div class="integration__index">01 &mdash; Storage</div>
+          <h3>Your messages can&rsquo;t be deleted. Not even by us.</h3>
+          <p>Every conversation is batched, encrypted, and written to decentralized storage that has no idea what it&rsquo;s holding. Who may decrypt it is a rule enforced on-chain, not a promise sitting in our database. We couldn&rsquo;t hand over your history if we were ordered to.</p>
+          <div class="integration__partner">Sui &middot; Walrus &middot; Seal</div>
+          <a class="arrow" href="sui.html">How the vault works &rarr;</a>
+        </div>
+        <div class="integration__figure" aria-hidden="true">
+          <!-- One blob, erasure-coded into shards across many nodes. -->
+          <svg viewBox="0 0 200 125">
+            <rect class="dg-line" x="78" y="8" width="44" height="26"></rect>
+            <text class="dg-text" x="100" y="25" text-anchor="middle">BLOB</text>
+            <path class="dg-line" d="M100 34 V50"></path>
+            <path class="dg-line" d="M100 50 H24 V64 M100 50 H176 V64 M62 50 V64 M138 50 V64 M100 50 V64"></path>
+            <rect class="dg-fill--on" x="16" y="64" width="16" height="16"></rect>
+            <rect class="dg-fill" x="54" y="64" width="16" height="16"></rect>
+            <rect class="dg-fill--on" x="92" y="64" width="16" height="16"></rect>
+            <rect class="dg-fill" x="130" y="64" width="16" height="16"></rect>
+            <rect class="dg-fill--on" x="168" y="64" width="16" height="16"></rect>
+            <rect class="dg-dim" x="16" y="86" width="16" height="10"></rect>
+            <rect class="dg-dim" x="54" y="86" width="16" height="10"></rect>
+            <rect class="dg-dim" x="92" y="86" width="16" height="10"></rect>
+            <rect class="dg-dim" x="130" y="86" width="16" height="10"></rect>
+            <rect class="dg-dim" x="168" y="86" width="16" height="10"></rect>
+            <text class="dg-text" x="100" y="115" text-anchor="middle">SHARDS &middot; ANY SUBSET REBUILDS IT</text>
+          </svg>
+        </div>
+      </div>
+    </article>
+
+    <!-- ── 0G ── -->
+    <article class="integration integration--flip" data-reveal="1">
+      <div class="integration__row">
+        <div class="integration__body">
+          <div class="integration__index">02 &mdash; Compute</div>
+          <h3>Cover text only works if it doesn&rsquo;t look like cover text.</h3>
+          <p>A message that reads slightly wrong is worse than no disguise &mdash; it flags you. So every message is written several ways and judged on which sounds most human. That judgement runs inside sealed compute, where the thing being judged can&rsquo;t be logged, kept, or read.</p>
+          <div class="integration__partner">0G &middot; Confidential Compute</div>
+          <a class="arrow" href="0g.html">How the judgement works &rarr;</a>
+        </div>
+        <div class="integration__figure" aria-hidden="true">
+          <!-- Best-of-N: candidates in, one selected. -->
+          <svg viewBox="0 0 200 125">
+            <text class="dg-text" x="8" y="16">CANDIDATES</text>
+            <rect class="dg-line" x="8" y="26" width="86" height="14"></rect>
+            <rect class="dg-line" x="8" y="48" width="86" height="14"></rect>
+            <rect class="dg-line dg-line--on" x="8" y="70" width="86" height="14"></rect>
+            <rect class="dg-line" x="8" y="92" width="86" height="14"></rect>
+            <path class="dg-line" d="M94 33 H118 M94 55 H118 M94 99 H118"></path>
+            <path class="dg-line dg-line--on" d="M94 77 H118"></path>
+            <rect class="dg-line" x="118" y="40" width="52" height="46" rx="2"></rect>
+            <path class="dg-line" d="M132 40 V32 a12 12 0 0 1 24 0 V40"></path>
+            <text class="dg-text" x="144" y="66" text-anchor="middle">SEALED</text>
+            <path class="dg-line dg-line--on" d="M170 63 H190"></path>
+            <text class="dg-text dg-text--on" x="150" y="106">MOST HUMAN WINS</text>
+          </svg>
+        </div>
+      </div>
+    </article>
+
+    <!-- ── ENS ── -->
+    <article class="integration" data-reveal="1">
+      <div class="integration__row">
+        <div class="integration__body">
+          <div class="integration__index">03 &mdash; Identity</div>
+          <h3>A name you own, with permissions you hand out one at a time.</h3>
+          <p>Your account is a subname you hold, carrying the keys people reach you by. Each record is separately permissioned: our gateway can rotate your inbox pointer and is refused everything else, on-chain, and you revoke it in a single transaction without asking us.</p>
+          <div class="integration__partner">ENS v2 &middot; Permissioned Resolver</div>
+          <a class="arrow" href="ens.html">How the permissions work &rarr;</a>
+        </div>
+        <div class="integration__figure" aria-hidden="true">
+          <!-- Per-record write roles: one delegated, the rest refused. -->
+          <svg viewBox="0 0 200 125">
+            <text class="dg-text" x="8" y="14">YOU.LORTNOC.ETH</text>
+            <rect class="dg-line" x="8" y="24" width="184" height="20"></rect>
+            <text class="dg-text" x="16" y="37">PUBKEY</text>
+            <text class="dg-text" x="150" y="37">LOCKED</text>
+            <rect class="dg-line" x="8" y="48" width="184" height="20"></rect>
+            <text class="dg-text" x="16" y="61">WALRUS</text>
+            <text class="dg-text" x="150" y="61">LOCKED</text>
+            <rect class="dg-line dg-line--on" x="8" y="72" width="184" height="20"></rect>
+            <text class="dg-text dg-text--on" x="16" y="85">INBOX</text>
+            <text class="dg-text dg-text--on" x="128" y="85">GATEWAY MAY WRITE</text>
+            <rect class="dg-line" x="8" y="96" width="184" height="20"></rect>
+            <text class="dg-text" x="16" y="109">STEALTH</text>
+            <text class="dg-text" x="150" y="109">LOCKED</text>
+          </svg>
+        </div>
+      </div>
+    </article>
   </section>
 
   <!-- 07 ─ the close -->
