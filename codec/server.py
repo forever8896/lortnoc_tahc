@@ -19,6 +19,7 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import auth
 import codec
 
 HOST = os.environ.get("HOST", "127.0.0.1")
@@ -62,7 +63,13 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.rstrip("/") == "/health":
             return self._json(
                 200,
-                {"model": codec.MODEL, "digest": codec.DIGEST, "ready": True, "select": codec.select_info()},
+                {
+                    "model": codec.MODEL,
+                    "digest": codec.DIGEST,
+                    "ready": True,
+                    "select": codec.select_info(),
+                    "auth": auth.status(),
+                },
             )
         return self._json(404, {"error": "not found"})
 
@@ -73,7 +80,27 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/encode":
                 ct = base64.b64decode(req["ciphertext"], validate=True)
                 fast = bool(req.get("fast", False))  # handshake frames skip best-of-N
-                return self._json(200, {"coverText": codec.encode(ct, fast=fast)})
+
+                # Capability gate (§7/§9). Handshake frames (fast) carry only pubkeys — never
+                # metered, so key exchange is never blocked. Reading (/decode) is always free.
+                verdict = {"member": False, "remaining": -1}
+                if auth.ENFORCE and not fast:
+                    verdict = auth.authorize(req.get("handle"), req.get("membership"))
+                    if not verdict["allow"]:
+                        return self._json(
+                            402,
+                            {"error": "free limit reached", "upgrade": auth.UPGRADE_URL, "remaining": 0},
+                        )
+
+                cover = codec.encode(ct, fast=fast)
+
+                # Spend a free send only after a successful encode (members are unlimited).
+                if auth.ENFORCE and not fast and not verdict["member"]:
+                    verdict["remaining"] = max(0, auth.FREE_LIMIT - auth.spend(req.get("handle")))
+                return self._json(
+                    200,
+                    {"coverText": cover, "remaining": verdict["remaining"], "member": verdict["member"]},
+                )
             if path == "/decode":
                 ct = codec.decode(req["coverText"])
                 return self._json(200, {"ciphertext": base64.b64encode(ct).decode()})

@@ -6,13 +6,40 @@ Sees **ciphertext only** — never plaintext, never a key.
 ## Contract
 
 ```
-POST /encode  { "ciphertext": <base64> }  -> { "coverText": <string> }   # lowercase words + spaces
-POST /decode  { "coverText": <string> }    -> { "ciphertext": <base64> }
-GET  /health                               -> { "model", "digest", "ready" }
+POST /encode  { "ciphertext": <base64>, "handle"?: <str>, "membership"?: <token>, "fast"?: <bool> }
+                                          -> 200 { "coverText": <string>, "remaining": <int>, "member": <bool> }
+                                          -> 402 { "error", "upgrade", "remaining": 0 }   # free limit reached
+POST /decode  { "coverText": <string> }   -> { "ciphertext": <base64> }                   # always free (§7)
+GET  /health                              -> { "model", "digest", "ready", "auth": {...} }
 ```
 
 `decode(encode(x)) == x` for all byte strings, deterministically. One warm process serves **both**
 ends of a conversation, so the coder is identical on encode and decode.
+
+## Capability gate (`auth.py`, §7/§8/§9)
+
+`/encode` — the actual paid resource — is gated so the freemium limit is **enforced server-side**, not
+by a client-side counter a modified extension can reset. Off by default; flip on with a fly secret.
+
+- **Free tier** — metered server-side by the client-asserted `handle` (§9, non-anonymous). The count lives
+  here, so clearing browser storage no longer resets it; farming free quota costs a fresh Telegram account.
+  Over `FREE_LIMIT` → **402** with the `upgrade` URL.
+- **Paid tier** — a signed `membership` token (carries the Semaphore **nullifier**, never the handle or
+  payment wallet, so payment↔usage stays unlinkable, §8) bypasses metering → unlimited.
+- **Handshake frames** (`fast: true`, pubkey-only) and **`/decode`** are never gated — key exchange and
+  reading are always free.
+
+Honest limits: the handle is client-asserted (spoofable, but raises cheating cost from "clear storage" to
+"make TG accounts"); counts are in-memory (reset on redeploy); the membership token is a bearer capability
+(the clean version verifies a fresh nullifier proof on 0G per session — see `verify_nullifier_onchain`).
+
+| env | default | meaning |
+|---|---|---|
+| `CODEC_ENFORCE` | off | `"1"` turns the gate on |
+| `CODEC_SECRET` | — | HMAC secret for minting/verifying membership tokens (paid path) |
+| `FREE_LIMIT` | `10` | free sends per handle before 402 |
+| `UPGRADE_URL` | app `/upgrade` | where the 402 points the client |
+| `MEMBERSHIP_TTL` | `3600` | membership-token lifetime (s) |
 
 ## Backends (`CODEC_BACKEND`, default `auto`)
 
