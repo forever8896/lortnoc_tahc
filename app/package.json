@@ -12,11 +12,14 @@
   },
   "dependencies": {
     "@mysten/seal": "^0.5.0",
-    "@mysten/sui": "^1.30.0",
+    "@mysten/sui": "1.37.6",
     "@mysten/walrus": "^0.6.0",
     "@noble/ciphers": "^2.0.0",
     "@noble/curves": "^2.0.0",
     "@noble/hashes": "^2.0.0",
+    "@semaphore-protocol/group": "^4.14.3",
+    "@semaphore-protocol/identity": "^4.14.3",
+    "@semaphore-protocol/proof": "^4.14.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "viem": "^2.21.0"

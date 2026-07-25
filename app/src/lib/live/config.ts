@@ -28,12 +28,29 @@ export const LORTNOC = {
 
 export const SUI = {
   network: 'testnet' as const,
-  rpc: 'https://fullnode.testnet.sui.io:443',
+  // NB: https://fullnode.testnet.sui.io:443 now 404s for JSON-RPC (the CLI uses another
+  // transport). These public endpoints answer sui_getChainIdentifier -> 4c78adac.
+  rpc: (import.meta.env.VITE_SUI_RPC as string) || 'https://sui-testnet-rpc.publicnode.com',
   // Set after `sui client publish` of contracts/move (ConversationHead + seal_approve).
-  packageId: (import.meta.env.VITE_SUI_PACKAGE as string) || '',
+  packageId:
+    (import.meta.env.VITE_SUI_PACKAGE as string) ||
+    // Published 2026-07-25 (contracts/move: ConversationHead + seal_approve).
+    '0xb214da015f1f8f59fb9804f42185782f6f2ce34e398175b060fee266c8074faf',
+  /** Walrus storage term for a message blob. */
+  epochs: 3,
+  /** Mysten's public testnet upload relay. Writing direct to storage nodes fails from most
+   *  networks (NotEnoughBlobConfirmations); the relay fans out for us for a small SUI tip. */
+  uploadRelay: 'https://upload-relay.testnet.walrus.space',
+  /** Max tip in MIST we'll pay the relay per blob (it currently asks 105). */
+  uploadRelayMaxTip: 1000,
   // Seal key servers (testnet) — fill from @mysten/seal testnet config.
   sealKeyServers: (import.meta.env.VITE_SEAL_SERVERS as string)?.split(',').filter(Boolean) || [],
 } as const
+
+/** Testnet WAL — what Walrus charges for storage. Swap SUI→WAL at stake.walrus.site, or via
+ *  the wal_exchange contract (see app/docs/LIVE-SETUP.md). */
+export const WAL_COIN_TYPE =
+  '0x8270feb7375eee355e64fdb69c50abb6b5f9393a722883c1cf45f8e26048810a::wal::WAL'
 
 /** ENS text-record keys (§5.4). */
 export const REC = {
@@ -41,6 +58,9 @@ export const REC = {
   walrus: 'eth.lortnoc.walrus',
   inbox: 'eth.lortnoc.inbox',
   discoverable: 'eth.lortnoc.discoverable',
+  /** The holder's Sui address — where their ConversationHead objects live, and the address
+   *  `seal_approve` / `append` gate on. Published so a peer can address a thread to them. */
+  sui: 'eth.lortnoc.sui',
 } as const
 
 /** EAC role bit for `setText` (PermissionedResolverLib.ROLE_SET_TEXT = 1<<4). */

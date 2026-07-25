@@ -60,7 +60,8 @@ export class MockBackend implements Backend {
     const seed = crypto.getRandomValues(new Uint8Array(32))
     const ms = deriveMasterSecret(seed)
     this.kp = deriveMessagingKey(ms)
-    this.id = { handle: null, address: '0xdemo' + toHex(seed).slice(0, 8), pubkeyHex: toHex(this.kp.pub) }
+    const addr = '0xdemo' + toHex(seed).slice(0, 8)
+    this.id = { handle: null, address: addr, ownerAddress: addr, pubkeyHex: toHex(this.kp.pub) }
     this.persist()
     return this.id
   }
@@ -68,6 +69,19 @@ export class MockBackend implements Backend {
   currentIdentity(): Identity | null {
     this.restore()
     return this.id
+  }
+
+  /** Demo mode has no chain and therefore no paid tier. */
+  masterSecret(): Uint8Array | null {
+    return null
+  }
+
+  async paidClaimAvailable(): Promise<boolean> {
+    return false
+  }
+
+  async claimHandlePaid(): Promise<Identity> {
+    throw new Error('demo mode has no chain — the paid claim path needs ?live')
   }
 
   async isHandleAvailable(name: string): Promise<boolean> {

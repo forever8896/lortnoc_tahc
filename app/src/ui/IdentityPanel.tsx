@@ -61,7 +61,15 @@ export function IdentityPanel({ onClose }: { onClose: () => void }) {
             <span style={{ color: 'var(--muted)' }}>.lortnoctahc.eth</span>
           </div>
           <Field label="eth.lortnoc.pubkey" value={identity!.pubkeyHex} />
-          <Field label="identity wallet" value={identity!.address} />
+          <Field label="owns this handle (derived from your key)" value={identity!.ownerAddress} />
+          {identity!.address.toLowerCase() !== identity!.ownerAddress.toLowerCase() && (
+            <>
+              <Field label="wallet you connected / paid with" value={identity!.address} />
+              <div className="mono" style={{ fontSize: 11, color: 'var(--signal)', marginTop: 6, lineHeight: 1.6 }}>
+                ✓ two different addresses — nothing on-chain links the payment to this handle
+              </div>
+            </>
+          )}
         </div>
 
         <hr className="rule" />
@@ -107,6 +115,25 @@ export function IdentityPanel({ onClose }: { onClose: () => void }) {
 
           {note && <Note>{note}</Note>}
           {err && <Note bad>{err}</Note>}
+
+          {status?.store && (
+            <div style={{ border: '1px solid var(--rule)', padding: '10px 12px' }}>
+              <div className="eyebrow" style={{ fontSize: 10 }}>storage account (Sui — derived from your key, not your wallet)</div>
+              <div className="mono" style={{ fontSize: 11, color: 'var(--muted)', wordBreak: 'break-all', marginTop: 4 }}>
+                {status.store.address}
+              </div>
+              <div className="mono" style={{ fontSize: 11, marginTop: 6, color: status.store.ready ? 'var(--signal)' : '#f0806a' }}>
+                {status.store.ready
+                  ? `✓ ${status.store.sui} SUI · ${status.store.wal} WAL — ready to send`
+                  : `needs funding: ${status.store.sui} SUI · ${status.store.wal} WAL. Sending writes a Walrus blob, which costs both.`}
+              </div>
+              {!status.store.ready && (
+                <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 5, lineHeight: 1.6 }}>
+                  faucet.sui.io for SUI · stake.walrus.site to swap SUI→WAL
+                </div>
+              )}
+            </div>
+          )}
 
           {status?.explorer && (
             <a
