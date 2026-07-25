@@ -15,12 +15,13 @@ GPT2LMHeadModel.from_pretrained('gpt2'); GPT2TokenizerFast.from_pretrained('gpt2
 COPY . .
 
 ENV CODEC_BACKEND=gpt2 \
-    CODEC_K=3 \
+    CODEC_MODEL=gpt2 \
+    CODEC_K=4 \
     HOST=0.0.0.0 \
     PORT=8080 \
     TRANSFORMERS_OFFLINE=1 \
     HF_HUB_OFFLINE=1 \
-    OMP_NUM_THREADS=2
+    OMP_NUM_THREADS=4
 
 EXPOSE 8080
 CMD ["python", "server.py"]

@@ -18,8 +18,9 @@ def test_roundtrip_all_k():
             # and through the word layer (what actually travels over Telegram)
             cover = coder.encode(x, m, k)
             assert coder.decode(cover, m, k) == x, f"decode(encode) != x at k={k}"
-            # determinism
-            assert coder.encode(x, m, k) == cover
+            # encode is intentionally non-deterministic now (random nonce varies the
+            # opening) — but every cover must still decode back to x
+            assert coder.decode(coder.encode(x, m, k), m, k) == x
 
 
 def test_empty():
