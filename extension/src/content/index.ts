@@ -31,6 +31,8 @@ async function bytesToCover(bytes: Uint8Array, fast = false): Promise<string | n
 }
 
 async function sendOffer(): Promise<void> {
+  await session.reset() // fresh keypair + clean state (also recovers from a stuck session)
+  handledFrames.clear()
   const frame = await session.startOffer()
   const cover = await bytesToCover(frame, true) // fast: handshake frame, skip best-of-N
   if (cover && (await sendCoverText(cover))) toast('Invite sent. Waiting for the other side to accept…')
@@ -46,8 +48,18 @@ function logKeyFingerprint(): void {
   console.info('[lortnoc] convKey fingerprint:', k ? toHex(k.slice(0, 6)) : '(none)', '— must MATCH the other side')
 }
 
+// Every handshake frame is acted on AT MOST ONCE (by type+pubkey). Without this, the
+// inbound.reset() re-scan after a session establishes re-decodes the OFFER/ACK bubbles and
+// re-fires the accept banner / onAck → an infinite handshake loop that resends frames.
+const handledFrames = new Set<string>()
+
 async function handleFrame(type: number, pubkey: Uint8Array): Promise<void> {
   if (session.isMine(pubkey)) return // our own frame echoed back into the chat — ignore
+  // already connected? ignore further offers/acks entirely (one session per demo)
+  if (session.status() === 'established') return
+  const fkey = `${type}:${toHex(pubkey)}`
+  if (handledFrames.has(fkey)) return // already processed (e.g. re-scanned after reset)
+  handledFrames.add(fkey)
   if (type === FRAME.OFFER) {
     showAcceptBanner(async () => {
       const ack = await session.acceptOffer(pubkey)
