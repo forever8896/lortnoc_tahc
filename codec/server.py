@@ -60,7 +60,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.rstrip("/") == "/health":
-            return self._json(200, {"model": codec.MODEL, "digest": codec.DIGEST, "ready": True})
+            return self._json(
+                200,
+                {"model": codec.MODEL, "digest": codec.DIGEST, "ready": True, "select": codec.select_info()},
+            )
         return self._json(404, {"error": "not found"})
 
     def do_POST(self):

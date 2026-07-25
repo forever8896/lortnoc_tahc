@@ -19,6 +19,9 @@ primary_region = "cdg"   # pick one near you: iad, lhr, cdg, ams, sjc, ...
   OMP_NUM_THREADS = "4"     # let torch use all 4 shared cores
   # Tone dial — tweak this + `fly deploy` (no rebuild) to steer the vibe:
   CODEC_PRIME = "hey!! omg it has been way too long since we caught up, i have so much to tell you haha. ok so the other day i was just chatting with a friend about how"
+  # Best-of-N cover selection via 0G. Stays OFF (n=1) until the 0G secrets are set:
+  #   fly secrets set ZEROG_API_KEY=<key from pc.0g.ai> ZEROG_MODEL=<a served chat model id>
+  CODEC_VARIANTS = "3"
 
 [http_service]
   internal_port = 8080

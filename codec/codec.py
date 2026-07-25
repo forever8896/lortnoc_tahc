@@ -20,6 +20,7 @@ import threading
 
 import coder
 import wordmap
+import zerog
 
 # The gpt2 backend keeps stateful KV cache, so serialize access (server is threaded).
 _lock = threading.Lock()
@@ -81,11 +82,19 @@ def _load() -> None:
 _load()
 
 
+def select_info() -> str:
+    return f"0g-best-of-{zerog.VARIANTS}" if zerog.enabled() else "off"
+
+
 def encode(data: bytes) -> str:
-    if _kind in ("gpt2", "markov"):
-        with _lock:
-            return coder.encode(data, _model, K)
-    return wordmap.encode(data)
+    if _kind not in ("gpt2", "markov"):
+        return wordmap.encode(data)
+    # generate N candidate covers (only if 0G selection is enabled — else 1, no waste)
+    n = zerog.VARIANTS if zerog.enabled() else 1
+    with _lock:  # model is stateful; hold the lock only for generation
+        covers = [coder.encode(data, _model, K) for _ in range(n)]
+    best, _method = zerog.select_best(covers)  # 0G network call OUTSIDE the lock
+    return best
 
 
 def decode(cover: str) -> bytes:
