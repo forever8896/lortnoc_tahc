@@ -33,7 +33,7 @@ async function bytesToCover(bytes: Uint8Array, fast = false): Promise<string | n
 async function sendOffer(): Promise<void> {
   const frame = await session.startOffer()
   const cover = await bytesToCover(frame, true) // fast: handshake frame, skip best-of-N
-  if (cover && (await sendCoverText(cover))) toast('🤝 Invite sent. Waiting for the other side to accept…')
+  if (cover && (await sendCoverText(cover))) toast('Invite sent. Waiting for the other side to accept…')
   else toast('Could not send the invite — is Stego on and the codec reachable?')
 }
 
@@ -56,14 +56,14 @@ async function handleFrame(type: number, pubkey: Uint8Array): Promise<void> {
       console.info('[lortnoc] session established (accepted); re-scanning inbound')
       inbound?.reset() // decode any messages that arrived before the key
       logKeyFingerprint()
-      toast('🔒 Private session established — no passphrase needed.')
+      toast('Private session established — no passphrase needed.')
     })
   } else if (type === FRAME.ACK) {
     await session.onAck(pubkey)
     console.info('[lortnoc] session established (ack); re-scanning inbound')
     inbound?.reset() // KEY FIX: re-decode messages that arrived before the key was set
     logKeyFingerprint()
-    toast('🔒 They accepted — private session established.')
+    toast('They accepted — private session established.')
   }
 }
 

@@ -1,66 +1,94 @@
+/* Lortnoc tahc popup — matched to the landing site (site/index.html) */
+@font-face { font-family:"Questrial"; font-weight:400; font-display:swap; src:url("/fonts/questrial/questrial-400.woff2") format("woff2"); }
+@font-face { font-family:"Jost"; font-weight:300; font-display:swap; src:url("/fonts/jost/jost-300.woff2") format("woff2"); }
+@font-face { font-family:"Jost"; font-weight:400; font-display:swap; src:url("/fonts/jost/jost-400.woff2") format("woff2"); }
+@font-face { font-family:"Jost"; font-weight:500; font-display:swap; src:url("/fonts/jost/jost-500.woff2") format("woff2"); }
+
 :root {
-  --bg: #141310;
-  --ink: #efece3;
-  --muted: #948f83;
-  --rule: #2b2924;
-  --accent: #ff5a3c;
-  --ok: #7cfc9a;
+  --bg: #08080a;
+  --panel: #0e0e12;
+  --ink: #edeae4;
+  --signal: #4ade80;
+  --muted: rgba(237,234,228,0.52);
+  --faint: rgba(237,234,228,0.32);
+  --rule: rgba(237,234,228,0.12);
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 * { box-sizing: border-box; }
 body {
-  width: 300px;
-  margin: 0;
-  padding: 14px;
-  background: var(--bg);
-  color: var(--ink);
-  font: 13px/1.45 system-ui, -apple-system, Segoe UI, sans-serif;
+  width: 320px; margin: 0; padding: 16px;
+  background: var(--bg); color: var(--ink);
+  font-family: "Jost", system-ui, sans-serif; font-weight: 300;
+  -webkit-font-smoothing: antialiased;
 }
-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
+::selection { background: var(--signal); color: var(--bg); }
+.eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); }
+.eyebrow em { font-style: normal; color: var(--faint); text-transform: none; letter-spacing: 0; }
+
+/* header */
+.hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.brand { display: flex; align-items: center; gap: 9px; }
+.logo { width: 26px; height: 26px; border-radius: 7px; }
+.wordmark { font-family: "Questrial", sans-serif; font-size: 17px; letter-spacing: 0.01em; }
+.wordmark .dot { color: var(--signal); }
+
+/* chips */
+.chip { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; padding: 4px 9px; border: 1px solid var(--rule); color: var(--muted); }
+.chip .led { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .8; }
+.chip-on { color: var(--signal); border-color: rgba(74,222,128,0.35); }
+.chip-off { color: var(--muted); }
+
+/* master switch */
+.master {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  background: var(--panel); border: 1px solid var(--rule); color: var(--ink);
+  padding: 16px 18px; cursor: pointer; text-align: left; transition: border-color .2s, background .2s;
 }
-.mark { font-weight: 700; letter-spacing: 0.02em; }
-.pill {
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--rule);
-  color: var(--muted);
+.master:hover { border-color: rgba(237,234,228,0.24); }
+.master[data-on="true"] { border-color: rgba(74,222,128,0.45); background: linear-gradient(180deg, rgba(74,222,128,0.06), transparent); }
+.master__label { font-size: 18px; font-weight: 400; letter-spacing: -0.015em; }
+.master__sub { font-family: var(--mono); font-size: 10px; color: var(--faint); margin-top: 3px; letter-spacing: 0.02em; }
+.master[data-on="true"] .master__sub { color: var(--signal); }
+.switch { width: 52px; height: 30px; border-radius: 999px; background: #1b1b20; border: 1px solid var(--rule); position: relative; flex: 0 0 auto; transition: background .2s; }
+.master[data-on="true"] .switch { background: var(--signal); border-color: var(--signal); }
+.knob { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--ink); transition: transform .2s ease; }
+.master[data-on="true"] .knob { transform: translateX(22px); background: #08080a; }
+
+/* cards */
+.card { margin-top: 14px; padding: 14px; border: 1px solid var(--rule); background: var(--panel); }
+.card__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+
+/* buttons */
+.btn { width: 100%; background: var(--signal); color: #08080a; border: 0; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 400; padding: 12px 16px; min-height: 42px; display: inline-flex; align-items: center; justify-content: center; transition: background .2s, opacity .2s; }
+.btn:hover:not(:disabled) { background: var(--ink); }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn--ghost { background: transparent; color: var(--ink); border: 1px solid var(--rule); }
+.btn--ghost:hover:not(:disabled) { background: transparent; border-color: var(--ink); }
+.btn--sm { font-size: 12px; min-height: 34px; padding: 8px 12px; }
+.hint { color: var(--muted); font-size: 11px; line-height: 1.55; margin: 10px 0 0; }
+
+/* advanced */
+.adv { margin-top: 14px; }
+.adv summary { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); cursor: pointer; padding: 6px 0; }
+.adv summary:hover { color: var(--ink); }
+.field { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+.field input { width: 100%; padding: 10px 12px; border: 1px solid var(--rule); background: var(--bg); color: var(--ink); font: inherit; font-size: 13px; }
+.field input:focus { outline: 2px solid var(--signal); outline-offset: -1px; }
+.actions { display: flex; gap: 8px; margin-top: 6px; }
+.actions .btn { width: auto; flex: 1; }
+
+/* conversion CTA — the vampire-attack nudge to the real product */
+.cta {
+  display: block; margin-top: 16px; padding: 15px 16px 13px; text-decoration: none; color: var(--ink);
+  border: 1px solid rgba(74,222,128,0.3);
+  background: linear-gradient(180deg, rgba(74,222,128,0.08), rgba(74,222,128,0.02));
+  transition: border-color .2s, background .2s, transform .1s;
 }
-.pill-on { color: var(--ok); border-color: #2e5b3a; }
-.pill-off { color: var(--muted); }
-.row, .field { display: flex; gap: 8px; margin: 10px 0; }
-.field { flex-direction: column; }
-.field span, .toggle span { color: var(--muted); font-size: 12px; }
-.toggle { align-items: center; justify-content: space-between; }
-input[type='text'], input[type='password'] {
-  width: 100%;
-  padding: 7px 9px;
-  border-radius: 8px;
-  border: 1px solid var(--rule);
-  background: #100f0c;
-  color: var(--ink);
-  font: inherit;
-}
-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-input[type='checkbox'] { accent-color: var(--accent); width: 34px; height: 18px; }
-.actions { display: flex; gap: 8px; margin-top: 12px; }
-button {
-  flex: 1;
-  padding: 8px;
-  border-radius: 8px;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: #140f0d;
-  font-weight: 600;
-  cursor: pointer;
-}
-button.ghost { background: transparent; color: var(--ink); border-color: var(--rule); }
-.note { color: var(--muted); font-size: 11px; margin: 12px 0 0; }
-.handshake { margin: 12px 0; padding: 12px; border: 1px solid var(--rule); border-radius: 10px; }
-.handshake button { margin-top: 10px; }
-.hint { color: var(--muted); font-size: 11px; margin: 8px 0 0; }
-.fallback { margin-top: 10px; }
-.fallback summary { color: var(--muted); font-size: 12px; cursor: pointer; }
+.cta:hover { border-color: var(--signal); background: linear-gradient(180deg, rgba(74,222,128,0.14), rgba(74,222,128,0.04)); }
+.cta:active { transform: translateY(1px); }
+.cta__lead { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.cta__lead strong { color: var(--ink); font-weight: 400; }
+.cta__go { margin: 9px 0 0; font-size: 14px; font-weight: 400; color: var(--signal); letter-spacing: -0.01em; display: flex; align-items: center; justify-content: space-between; }
+.cta__arrow { transition: transform .2s; }
+.cta:hover .cta__arrow { transform: translateX(4px); }
+.cta__host { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--rule); font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--faint); text-align: right; }

@@ -3,40 +3,55 @@ import { sendToCodec } from '../shared/messages'
 import type { HealthData } from '../shared/messages'
 
 const byId = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T
-const enabled = byId<HTMLInputElement>('enabled')
+const master = byId<HTMLButtonElement>('masterSwitch')
+const masterSub = byId<HTMLElement>('masterSub')
 const passphrase = byId<HTMLInputElement>('passphrase')
 const codecUrl = byId<HTMLInputElement>('codecUrl')
 const status = byId<HTMLElement>('status')
 
-function setPill(text: string, kind: 'on' | 'off'): void {
-  status.textContent = text
-  status.className = 'pill ' + (kind === 'on' ? 'pill-on' : 'pill-off')
+let stegoOn = false
+
+function paintMaster(): void {
+  master.dataset.on = String(stegoOn)
+  master.setAttribute('aria-pressed', String(stegoOn))
+  masterSub.textContent = stegoOn ? 'on · hiding your messages' : 'off · sending normally'
+}
+
+function setChip(el: HTMLElement, text: string, on: boolean, led = false): void {
+  el.className = 'chip ' + (on ? 'chip-on' : 'chip-off')
+  el.innerHTML = (led ? '<i class="led"></i>' : '') + text
 }
 
 async function checkHealth(): Promise<void> {
-  setPill('checking…', 'off')
+  setChip(status, 'checking…', false, true)
   const res = await sendToCodec<HealthData>({ type: 'HEALTH' })
-  if (res.ok && res.data.ready) setPill(`codec ok · ${res.data.model}`, 'on')
-  else setPill('codec offline', 'off')
+  if (res.ok && res.data.ready) setChip(status, res.data.model ?? 'codec ok', true, true)
+  else setChip(status, 'offline', false, true)
 }
 
 async function load(): Promise<void> {
   const local = await chrome.storage.local.get([LOCAL.enabled, LOCAL.codecUrl])
   const session = await chrome.storage.session.get(SESSION.passphrase)
-  enabled.checked = Boolean(local[LOCAL.enabled])
+  stegoOn = Boolean(local[LOCAL.enabled])
+  paintMaster()
   codecUrl.value = (local[LOCAL.codecUrl] as string) || DEFAULT_CODEC_URL
   passphrase.value = (session[SESSION.passphrase] as string) || ''
   void checkHealth()
 }
 
-async function save(): Promise<void> {
+async function persist(): Promise<void> {
   await chrome.storage.local.set({
-    [LOCAL.enabled]: enabled.checked,
+    [LOCAL.enabled]: stegoOn,
     [LOCAL.codecUrl]: codecUrl.value.trim() || DEFAULT_CODEC_URL,
   })
   await chrome.storage.session.set({ [SESSION.passphrase]: passphrase.value })
-  void checkHealth()
 }
+
+master.addEventListener('click', async () => {
+  stegoOn = !stegoOn
+  paintMaster()
+  await persist() // SW picks up the change → toolbar icon lights up green
+})
 
 // ---- Tier-1 handshake (no passphrase) ----
 const hsStatus = byId<HTMLElement>('hsStatus')
@@ -46,14 +61,13 @@ async function activeTab(): Promise<chrome.tabs.Tab | undefined> {
   return tab
 }
 
-/** Find the active Telegram tab; if the content script is orphaned (after an extension
- *  reload), re-inject it so the popup self-heals instead of saying "open a telegram tab". */
+/** Re-inject the content script if it's orphaned (after an extension reload), so the
+ *  popup self-heals instead of reporting a dead tab. */
 async function reachContentScript(tabId: number): Promise<boolean> {
   try {
     await chrome.tabs.sendMessage(tabId, { type: 'HS_STATUS' })
     return true
   } catch {
-    // orphaned/missing — re-inject the content script and retry once
     try {
       const js = chrome.runtime.getManifest().content_scripts?.[0]?.js ?? []
       if (js.length) await chrome.scripting.executeScript({ target: { tabId }, files: js })
@@ -68,15 +82,12 @@ async function reachContentScript(tabId: number): Promise<boolean> {
 async function refreshHsStatus(): Promise<void> {
   const tab = await activeTab()
   if (!tab?.id) return
-  const onTelegram = (tab.url ?? '').includes('web.telegram.org')
-  if (!onTelegram) {
-    hsStatus.textContent = 'open web.telegram.org/k/'
-    hsStatus.className = 'pill pill-off'
+  if (!(tab.url ?? '').includes('web.telegram.org')) {
+    setChip(hsStatus, 'open Telegram', false)
     return
   }
   if (!(await reachContentScript(tab.id))) {
-    hsStatus.textContent = 'reload the Telegram tab'
-    hsStatus.className = 'pill pill-off'
+    setChip(hsStatus, 'reload the tab', false)
     return
   }
   try {
@@ -86,20 +97,18 @@ async function refreshHsStatus(): Promise<void> {
       client: string
     }
     if (r?.client && r.client !== 'k') {
-      hsStatus.textContent = 'use web.telegram.org/k/'
-      hsStatus.className = 'pill pill-off'
+      setChip(hsStatus, 'use /k/', false)
       return
     }
-    const map: Record<string, string> = {
-      none: 'not connected',
-      offered: 'invite sent…',
-      established: '🔒 connected',
+    const map: Record<string, [string, boolean]> = {
+      none: ['not connected', false],
+      offered: ['invite sent…', false],
+      established: ['connected', true],
     }
-    hsStatus.textContent = map[r?.status] ?? 'not connected'
-    hsStatus.className = 'pill ' + (r?.status === 'established' ? 'pill-on' : 'pill-off')
+    const [text, on] = map[r?.status] ?? ['not connected', false]
+    setChip(hsStatus, text, on)
   } catch {
-    hsStatus.textContent = 'reload the Telegram tab'
-    hsStatus.className = 'pill pill-off'
+    setChip(hsStatus, 'reload the tab', false)
   }
 }
 
@@ -107,21 +116,20 @@ byId('connect').addEventListener('click', async () => {
   const tab = await activeTab()
   if (!tab?.id) return
   if (!(tab.url ?? '').includes('web.telegram.org')) {
-    hsStatus.textContent = 'open web.telegram.org/k/'
+    setChip(hsStatus, 'open Telegram', false)
     return
   }
-  await reachContentScript(tab.id) // ensure the content script is alive (re-inject if needed)
+  await reachContentScript(tab.id)
   try {
     await chrome.tabs.sendMessage(tab.id, { type: 'START_HANDSHAKE' })
-    hsStatus.textContent = 'invite sent…'
-    window.close() // let the user watch the chat for the handshake
+    setChip(hsStatus, 'invite sent…', false)
+    window.close()
   } catch {
-    hsStatus.textContent = 'reload the Telegram tab'
+    setChip(hsStatus, 'reload the tab', false)
   }
 })
 
-byId('save').addEventListener('click', () => void save())
+byId('save').addEventListener('click', () => void persist().then(checkHealth))
 byId('check').addEventListener('click', () => void checkHealth())
-enabled.addEventListener('change', () => void save())
 void load()
 void refreshHsStatus()

@@ -3,12 +3,27 @@ import { defineManifest } from '@crxjs/vite-plugin'
 export default defineManifest({
   manifest_version: 3,
   name: 'lortnoc tahc',
-  version: '0.3.4',
+  version: '0.3.7',
   description: 'Type real, send cover text, decode inline — a stego overlay for Telegram Web.',
+  icons: {
+    16: 'icons/on-16.png',
+    32: 'icons/on-32.png',
+    48: 'icons/on-48.png',
+    128: 'icons/on-128.png',
+  },
   action: {
     default_popup: 'src/popup/index.html',
-    default_title: 'lortnoc tahc',
+    default_title: 'lortnoc tahc — stego for Telegram',
+    default_icon: {
+      16: 'icons/off-16.png',
+      32: 'icons/off-32.png',
+      48: 'icons/off-48.png',
+      128: 'icons/off-128.png',
+    },
   },
+  web_accessible_resources: [
+    { resources: ['icons/*', 'fonts/*'], matches: ['<all_urls>'] },
+  ],
   background: {
     service_worker: 'src/background/index.ts',
     type: 'module',
