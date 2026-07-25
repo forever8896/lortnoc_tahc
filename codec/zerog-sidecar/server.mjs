@@ -19,9 +19,11 @@ import { createZGComputeNetworkBroker } from '@0glabs/0g-serving-broker'
 const RPC = process.env.ZG_RPC || 'https://evmrpc-testnet.0g.ai'
 const PORT = Number(process.env.PORT || 8090)
 const PK = process.env.ZG_PRIVATE_KEY || ''
-// Qwen2.5-7B-Instruct testnet provider (from the 0G starter kit service list):
+// The only live testnet chat provider right now is qwen2.5-omni-7b (verify with
+// broker.inference.listService()). Override with ZG_PROVIDER as the fleet changes.
 const PROVIDER = process.env.ZG_PROVIDER || '0xa48f01287233509FD694a22Bf840225062E67836'
 const LEDGER_MIN = 3 // OG; ledger setup minimum in broker v0.6.x
+const PROVIDER_FUND = 1n * 10n ** 18n // 1 OG into the provider's inference sub-account
 
 let broker = null
 let modelName = null
@@ -36,6 +38,14 @@ async function init() {
     await broker.ledger.addLedger(LEDGER_MIN)
   } catch (e) {
     if (!String(e).match(/exist|already/i)) console.warn('addLedger:', String(e))
+  }
+  // fund THIS provider's inference sub-account (auto-transfer inside inference reverts if
+  // the sub-account is empty; doing it explicitly is the reliable path).
+  try {
+    await broker.ledger.transferFund(PROVIDER, 'inference', PROVIDER_FUND)
+    console.log('[zerog] funded provider sub-account (1 OG)')
+  } catch (e) {
+    console.log('[zerog] transferFund:', String(e).slice(0, 100), '(ok if already funded)')
   }
   await broker.inference.acknowledgeProviderSigner(PROVIDER)
   const meta = await broker.inference.getServiceMetadata(PROVIDER)
@@ -53,11 +63,13 @@ async function chat(prompt) {
       model: modelName,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0,
-      max_tokens: 4,
+      max_tokens: 16, // provider requires >= 10
     }),
+    signal: AbortSignal.timeout(25000),
   })
-  if (!res.ok) throw new Error(`inference ${res.status}`)
-  const data = await res.json()
+  const body = await res.text()
+  if (!res.ok) throw new Error(`inference ${res.status}: ${body.slice(0, 200)}`)
+  const data = JSON.parse(body)
   return data.choices?.[0]?.message?.content ?? ''
 }
 
@@ -96,6 +108,7 @@ const server = http.createServer(async (req, res) => {
     }
     json(404, { error: 'not found' })
   } catch (e) {
+    console.error('[zerog] request error:', String(e))
     json(500, { error: String(e) })
   }
 })
