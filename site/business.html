@@ -25,7 +25,7 @@
 
     <div class="metrics">
       <div class="metric"><b>$50</b><span>One-time, per handle</span></div>
-      <div class="metric"><b>$30</b><span>Per day, per capacity unit</span></div>
+      <div class="metric"><b>$30</b><span>Per day, per codec server</span></div>
       <div class="metric"><b>800</b><span>Daily active users per unit</span></div>
       <div class="metric"><b>$13.69</b><span>Cost per active user, per year</span></div>
     </div>
@@ -43,22 +43,25 @@
 
   <section>
     <h2>Cost of goods sold</h2>
-    <p>Encrypted messaging over Telegram runs on a codec service we host. <strong>One capacity unit costs $30/day and serves roughly 800 daily active users</strong>, on an unlimited-use model &mdash; heavy simultaneous load makes it slower, not more expensive.</p>
-    <p>When demand outgrows a unit, we buy another one. Capacity scales in flat $30/day increments with no step-function capex, so COGS tracks usage closely in both directions.</p>
+    <p>Effectively the whole cost base is one line: the server running Natural Language Encryption. <strong>$30/day buys a dedicated machine hosting our pinned, deterministic language model</strong> &mdash; the thing that turns an encrypted message into innocent small talk and back again.</p>
+    <p>It has to be a single machine, and that&rsquo;s the interesting part. Reversibility requires both ends to walk byte-identical probability distributions, so the model stays warm in one pinned process rather than autoscaling across a fleet. <strong>That technical constraint is what makes the cost a flat line instead of a per-request meter.</strong></p>
+    <p>One server serves roughly <strong>800 daily active users</strong> on an unlimited-use model. Heavy simultaneous load queues against the warm model &mdash; it gets slower, not more expensive. When demand outgrows a server, we buy another for $30/day.</p>
+    <p>So capacity scales in flat increments with no step-function capex, and COGS tracks usage closely in both directions.</p>
 
     <div class="spec-wrap">
       <table class="spec">
-        <tr><th>Capacity unit</th><td>$30/day &mdash; $10,950/year</td></tr>
+        <tr><th>The unit</th><td>One codec server &mdash; pinned deterministic model, kept warm</td></tr>
+        <tr><th>Cost</th><td>$30/day &mdash; $10,950/year</td></tr>
         <tr><th>Serves</th><td>~800 daily active users, unlimited messages</td></tr>
         <tr><th>Cost per DAU</th><td>$13.69/year &mdash; $0.0375/day</td></tr>
         <tr><th>Scaling</th><td>Linear. Add a unit per additional 800 DAU.</td></tr>
-        <tr><th>Degradation</th><td>Latency under concurrent load, not overage billing</td></tr>
+        <tr><th>Under load</th><td>Requests queue against the warm model &mdash; slower, never billed as overage</td></tr>
       </table>
     </div>
 
     <h3>Where a payment goes</h3>
     <p>Each $50 funds the account it bought: minting the user&rsquo;s sub-name, and standing up a Walrus wallet on Sui that we fund by delegation so storage is sponsored rather than billed to the user. Nobody has to hold a token or think about gas to use a messaging app.</p>
-    <p>At current scale those on-chain costs are immaterial next to the $30/day compute line.</p>
+    <p>At current scale those on-chain costs are immaterial next to the $30/day codec line.</p>
   </section>
 
   <section>
