@@ -137,10 +137,44 @@ your resolver was deployed from. Compare it to the canonical `PermissionedResolv
 proven the handle is genuine without trusting anything we say.
 
 **Records we publish** (§5.4): `eth.lortnoc.pubkey` (messaging key), `.sui` (storage account),
-`.inbox` (relay pointer), `.walrus` (vault pointer), `.discoverable` (findability rung).
+`.inbox` (relay pointer), `.walrus` (vault pointer), `.discoverable` (findability rung),
+`.knock` (the contact challenge, below).
+
+The panel is an admin surface, not a readout: every record can be edited, and every record can be
+delegated or revoked independently.
+
+![Records](docs/screenshots/app-records.jpg)
 
 > `lortnoc.eth` is registered to the same owner and deliberately unused — it's what makes the
 > `eth.lortnoc.*` record namespace a name we control rather than a borrowed prefix.
+
+### Knock — challenge-gated contact
+
+Publishing a handle means anyone can reach you. Knock (§6.8) makes reachability something you set,
+without a public directory and without trusting a server.
+
+1. You publish `eth.lortnoc.knock = {prompt, salt, kdf}` — **the question, never the answer**.
+2. A stranger derives `k = Argon2id(answer, salt)` and sends `XChaCha20-Poly1305(k, {pubkey, intro})`.
+3. You derive `k` from the answer *you* know and try to open each pending knock. Auth tag verifies
+   ⇒ *"X wants to connect"*, with their key attached. Auth tag fails ⇒ silently dropped, and you
+   are never told it happened.
+
+![Knock](docs/screenshots/app-knock.jpg)
+
+Two properties fall out of that shape:
+
+- **No offline brute-force.** Nothing published commits to the answer, so there is nothing to
+  attack at rest. Guessing is online-only, costs an Argon2id derivation (~0.9s at RFC 9106
+  settings) per attempt, and the relay rate-limits to 6/minute.
+- **The knock *is* the key exchange.** A successful one carries the sender's X25519 key, so
+  accepting bootstraps `K_conv` in the same step — no separate handshake.
+
+The relay stores sealed blobs it cannot read and cannot classify: a wrong-answer knock and a
+right-answer knock are indistinguishable to it, and to the sender. Only the recipient can tell.
+
+> **Honest limit:** trivia is low-entropy. This is spam-resistance and intentional contact, **not**
+> cryptographic access control. Argon2id and rate-limiting slow guessing; they don't stop someone
+> who knows you well. Use a high-entropy shared password if you need real secrecy.
 
 ---
 

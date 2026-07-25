@@ -5,7 +5,12 @@
 // mocked (localStorage instead of Walrus/Sui) — the encryption is real.
 import type { Backend } from './backend'
 import { fullHandle } from './backend'
-import type { Conversation, EnsStatus, Health, Identity, Message, RecordPerm } from './types'
+import type { Conversation, EnsStatus, Health, Identity, Message, OpenedKnock, RecordPerm } from './types'
+import { createKnockConfig, deriveKnockKey, openKnock, parseKnockConfig, sealKnock } from './live/knock'
+import { RECORD_SPECS } from './live/config'
+
+/** Demo records are keyed by the short name, since there is no resolver to namespace them. */
+const short = (key: string): string => key.replace('eth.lortnoc.', '')
 import {
   deriveConvKey,
   deriveMasterSecret,
@@ -23,6 +28,8 @@ const ME = 'lortnoc.me.v1' // per-tab identity (sessionStorage)
 type Net = {
   directory: Record<string, string> // handle -> pubkeyHex
   blobs: Record<string, { from: string; to: string; ct: string; ts: number }[]> // convId -> encrypted msgs
+  records?: Record<string, string> // "<handle>|<key>" -> value (stands in for ENS text records)
+  knocks?: Record<string, { id: string; sealed: string; ts: number }[]> // handle -> sealed knocks
 }
 const loadNet = (): Net => JSON.parse(localStorage.getItem(NET) || '{"directory":{},"blobs":{}}')
 const saveNet = (n: Net): void => localStorage.setItem(NET, JSON.stringify(n))
@@ -169,22 +176,27 @@ export class MockBackend implements Backend {
   // here it is asserted, not measured — never present it as an on-chain reading.
 
   async ensStatus(): Promise<EnsStatus> {
-    const rec = (key: string, value: string | null, gatewayCanWrite: boolean): RecordPerm => ({
-      key, value, ownerCanWrite: true, gatewayCanWrite,
-    })
+    // Read back whatever was actually written, so the table reflects reality in demo mode too —
+    // a panel that always says "unset" teaches the wrong thing about the live one.
+    const net = loadNet()
+    const handle = this.id?.handle ?? null
+    const stored = (key: string): string | null =>
+      key.endsWith('pubkey') ? (this.id?.pubkeyHex ?? null) : (net.records?.[`${handle}|${short(key)}`] ?? null)
+
     return {
       live: false,
-      handle: this.id?.handle ?? null,
+      handle,
       resolver: null,
       factoryVerified: false,
       impl: '',
       gateway: '0x000000000000000000000000000000000000dEaD',
       inboxDelegated: this.delegated,
-      perms: [
-        rec('eth.lortnoc.pubkey', this.id?.pubkeyHex ?? null, false),
-        rec('eth.lortnoc.inbox', this.delegated ? 'relay://demo' : null, this.delegated),
-        rec('eth.lortnoc.walrus', null, false),
-      ],
+      perms: RECORD_SPECS.map((spec): RecordPerm => ({
+        key: spec.key,
+        value: stored(spec.key),
+        ownerCanWrite: true,
+        gatewayCanWrite: spec.key.endsWith('inbox') ? this.delegated : false,
+      })),
       explorer: null,
     }
   }
@@ -196,5 +208,72 @@ export class MockBackend implements Backend {
     return grant
       ? 'demo: authorizeTextRoles(eth.lortnoc.inbox → gateway) — the gateway may rotate the inbox pointer only; a pubkey write reverts.'
       : 'demo: role revoked in one tx — the gateway can no longer write anything.'
+  }
+
+  async delegateRecord(key: string, to: string, grant: boolean): Promise<string> {
+    if (key.endsWith('inbox')) this.delegated = grant
+    return `demo: authorizeTextRoles(${key} → ${to.slice(0, 8)}…, ${grant}) — on-chain in live mode.`
+  }
+
+  async setRecord(key: string, value: string): Promise<string> {
+    const net = loadNet()
+    ;(net.records ||= {})[`${this.id?.handle}|${short(key)}`] = value
+    saveNet(net)
+    return `demo: ${key} set locally (a real setText on ENS v2 in live mode).`
+  }
+
+  // ---- knock (§6.8) — real crypto, localStorage instead of the relay -------------------------
+  // The Argon2id + AEAD path here is EXACTLY the live one; only the transport is faked. So a
+  // wrong answer fails in demo mode for the same reason it fails on-chain.
+
+  async setKnock(prompt: string, answer: string): Promise<string> {
+    if (!this.id?.handle) throw new Error('claim a handle first')
+    if (!answer.trim()) throw new Error('an answer is required — it never leaves this device')
+    const config = createKnockConfig(prompt)
+    await deriveKnockKey(answer, config)
+    const net = loadNet()
+    ;(net.records ||= {})[`${this.id.handle}|knock`] = JSON.stringify(config)
+    saveNet(net)
+    return `demo: knock published — "${config.prompt}"`
+  }
+
+  async peerKnockPrompt(handle: string): Promise<string | null> {
+    const net = loadNet()
+    return parseKnockConfig(net.records?.[`${fullHandle(handle)}|knock`] ?? null)?.prompt ?? null
+  }
+
+  async sendKnock(toHandle: string, answer: string, intro: string): Promise<'sent' | 'no-knock'> {
+    const handle = fullHandle(toHandle)
+    const net = loadNet()
+    const config = parseKnockConfig(net.records?.[`${handle}|knock`] ?? null)
+    if (!config) return 'no-knock'
+    const key = await deriveKnockKey(answer, config)
+    const sealed = sealKnock(key, {
+      v: 1,
+      pubkey: this.id?.pubkeyHex ?? '',
+      from: this.id?.handle ?? undefined,
+      intro: intro.slice(0, 280),
+      ts: Date.now(),
+    })
+    ;(net.knocks ||= {})[handle] = [
+      ...(net.knocks?.[handle] ?? []),
+      { id: `${Date.now()}`, sealed, ts: Date.now() },
+    ]
+    saveNet(net)
+    return 'sent'
+  }
+
+  async readKnocks(answer: string): Promise<OpenedKnock[]> {
+    if (!this.id?.handle) throw new Error('claim a handle first')
+    const net = loadNet()
+    const config = parseKnockConfig(net.records?.[`${this.id.handle}|knock`] ?? null)
+    if (!config) throw new Error('you have not published a knock question yet')
+    const key = await deriveKnockKey(answer, config)
+    const out: OpenedKnock[] = []
+    for (const k of net.knocks?.[this.id.handle] ?? []) {
+      const p = openKnock(key, k.sealed)
+      if (p) out.push({ id: k.id, pubkey: p.pubkey, from: p.from, intro: p.intro, ts: p.ts })
+    }
+    return out.sort((a, b) => b.ts - a.ts)
   }
 }

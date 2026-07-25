@@ -50,6 +50,15 @@ export async function relayerReady(): Promise<boolean> {
 /** The member set. The caller MUST verify `root` against the chain before proving against it. */
 export const fetchGroup = (): Promise<GroupSnapshot> => call<GroupSnapshot>('/group', {}, 20_000)
 
+/** Deliver a sealed knock (§6.8). The relay stores an opaque blob — it cannot read one, and
+ *  cannot distinguish a correct knock from a wrong-answer one. */
+export const sendKnock = (toHandle: string, sealed: string): Promise<{ ok: boolean; pending: number }> =>
+  call('/knock', { method: 'POST', body: JSON.stringify({ toHandle, sealed }) }, 20_000)
+
+/** Every sealed knock waiting for a handle. Public on purpose: unreadable without the answer. */
+export const fetchKnocks = (handle: string): Promise<{ knocks: { id: string; sealed: string; ts: number }[] }> =>
+  call(`/knocks/${encodeURIComponent(handle)}`, {}, 20_000)
+
 /** Hand over the ticket. Idempotent server-side: a retry after a partial failure resumes. */
 export const submitClaim = (body: {
   label: string

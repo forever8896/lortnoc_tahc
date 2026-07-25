@@ -4,7 +4,9 @@
 // fund that derived address with testnet SUI/WAL). Marked where live setup is required.
 import type { Backend } from './backend'
 import { fullHandle, shortName } from './backend'
-import type { ClaimStage, Conversation, EnsStatus, Health, Identity, Message, RecordPerm } from './types'
+import type {
+  ClaimStage, Conversation, EnsStatus, Health, Identity, Message, OpenedKnock, RecordPerm,
+} from './types'
 import {
   deriveConvKey, deriveMasterSecret, deriveMessagingKey, deriveOwnerKey, fromHex, toHex, type KeyPair,
 } from './crypto'
@@ -12,9 +14,10 @@ import { privateKeyToAccount } from 'viem/accounts'
 import type { PrivateKeyAccount } from 'viem'
 import * as ens from './live/ens'
 import { sendMessage, readMessages, findHeads, sui } from './live/sui'
-import { GATEWAY_ADDR, LORTNOC, REC, ensReady } from './live/config'
+import { GATEWAY_ADDR, LORTNOC, REC, RECORD_SPECS, ensReady } from './live/config'
 import { commitmentOf, generateTicket } from './live/proof'
-import { fetchGroup, relayerReady, submitClaim } from './live/relayerClient'
+import { fetchGroup, fetchKnocks, relayerReady, sendKnock, submitClaim } from './live/relayerClient'
+import { createKnockConfig, deriveKnockKey, openKnock, parseKnockConfig, sealKnock } from './live/knock'
 import { deliverMembershipToExtension } from './live/extensionBridge'
 import { isMember, membershipReady, zeroG } from './live/membership'
 import type { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519'
@@ -305,7 +308,7 @@ export class LiveBackend implements Backend {
     const { ok, resolver, impl } = await ens.verifyResolver(handle)
     if (!resolver) return base
 
-    const keys = [REC.pubkey, REC.inbox, REC.walrus]
+    const keys = RECORD_SPECS.map((r) => r.key)
     const perms: RecordPerm[] = await Promise.all(
       keys.map(async (key) => ({
         key,
@@ -346,6 +349,82 @@ export class LiveBackend implements Backend {
     } catch {
       return undefined
     }
+  }
+
+  /** authorizeTextRoles on ONE key, for any address. This is the ENS v2 flagship: the grantee
+   *  can write that record and nothing else, and one transaction takes it back. */
+  async delegateRecord(key: string, to: string, grant: boolean): Promise<string> {
+    if (!this.id?.handle) throw new Error('claim a handle first')
+    const tx = await ens.setTextDelegation(
+      this.id.handle, key, to as `0x${string}`, grant, this.owner ?? undefined,
+    )
+    return `${grant ? 'granted' : 'revoked'} ${key} → ${to.slice(0, 8)}… (tx ${tx.slice(0, 12)}…)`
+  }
+
+  /** Write one of your own records. Signed by the derived owner, not the connected wallet. */
+  async setRecord(key: string, value: string): Promise<string> {
+    if (!this.id?.handle) throw new Error('claim a handle first')
+    const tx = await ens.setText(this.id.handle, key, value, this.owner ?? undefined)
+    return `${key} updated (tx ${tx.slice(0, 12)}…)`
+  }
+
+  // ---- knock (§6.8) -------------------------------------------------------------------------
+
+  /** Publish the QUESTION. The answer derives a key here and is then dropped on the floor — we
+   *  never store it, never send it, and nothing published commits to it, so there is nothing to
+   *  attack offline. */
+  async setKnock(prompt: string, answer: string): Promise<string> {
+    if (!this.id?.handle) throw new Error('claim a handle first')
+    if (!answer.trim()) throw new Error('an answer is required — it never leaves this device')
+    const config = createKnockConfig(prompt)
+    await deriveKnockKey(answer, config) // fail early if the answer is unusable
+    const tx = await ens.setText(this.id.handle, REC.knock, JSON.stringify(config), this.owner ?? undefined)
+    return `knock published — "${config.prompt}" (tx ${tx.slice(0, 12)}…)`
+  }
+
+  async peerKnockPrompt(handle: string): Promise<string | null> {
+    const config = parseKnockConfig(await ens.readText(fullHandle(handle), REC.knock))
+    return config?.prompt ?? null
+  }
+
+  /** Knock on someone's door. Their published question tells us the salt and KDF; our answer
+   *  produces the key. A wrong answer still "sends" — it simply never opens, and they are never
+   *  told it arrived. */
+  async sendKnock(toHandle: string, answer: string, intro: string): Promise<'sent' | 'no-knock'> {
+    if (!this.id) throw new Error('connect first')
+    const handle = fullHandle(toHandle)
+    const config = parseKnockConfig(await ens.readText(handle, REC.knock))
+    if (!config) return 'no-knock'
+
+    const key = await deriveKnockKey(answer, config)
+    const sealed = sealKnock(key, {
+      v: 1,
+      pubkey: this.id.pubkeyHex,
+      from: this.id.handle ?? undefined,
+      intro: intro.slice(0, 280),
+      ts: Date.now(),
+    })
+    await sendKnock(handle, sealed)
+    return 'sent'
+  }
+
+  /** Try our own answer against every pending knock. One Argon2id derivation covers all of them,
+   *  because the key depends on our salt and answer, not on the sender. */
+  async readKnocks(answer: string): Promise<OpenedKnock[]> {
+    if (!this.id?.handle) throw new Error('claim a handle first')
+    const config = parseKnockConfig(await ens.readText(this.id.handle, REC.knock))
+    if (!config) throw new Error('you have not published a knock question yet')
+
+    const key = await deriveKnockKey(answer, config)
+    const { knocks } = await fetchKnocks(this.id.handle)
+    const opened: OpenedKnock[] = []
+    for (const k of knocks) {
+      const payload = openKnock(key, k.sealed)
+      // A failed open is indistinguishable from a knock meant for a different answer, and both
+      // are simply skipped — never surfaced, never counted.
+      if (payload) opened.push({ id: k.id, pubkey: payload.pubkey, from: payload.from, intro: payload.intro, ts: payload.ts })
+    }
+    return opened.sort((a, b) => b.ts - a.ts)
   }
 
   /** authorizeTextRoles on ONE key. Grant → the gateway can rotate the inbox pointer and

@@ -42,6 +42,16 @@ export type ClaimStage =
   | 'verifying-pubkey'
   | 'done'
 
+/** A knock that opened — i.e. someone answered your question correctly (§6.8). */
+export type OpenedKnock = {
+  id: string
+  /** Their X25519 key. A successful knock IS the key exchange, so this bootstraps K_conv. */
+  pubkey: string
+  from?: string
+  intro: string
+  ts: number
+}
+
 /** One text record and who may currently write it — read live off the resolver's EAC state. */
 export type RecordPerm = {
   key: string

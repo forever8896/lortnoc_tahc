@@ -61,7 +61,20 @@ export const REC = {
   /** The holder's Sui address — where their ConversationHead objects live, and the address
    *  `seal_approve` / `append` gate on. Published so a peer can address a thread to them. */
   sui: 'eth.lortnoc.sui',
+  /** Challenge-gated contact (§6.8): {prompt, salt, kdf} — the QUESTION, never the answer. */
+  knock: 'eth.lortnoc.knock',
 } as const
+
+/** Every record the owner can publish, in the order the identity panel lists them. `owned` marks
+ *  the ones a user edits directly; the rest are written by the app or a delegate. */
+export const RECORD_SPECS = [
+  { key: REC.pubkey, label: 'pubkey', hint: 'your X25519 messaging key — how people encrypt to you', owned: false },
+  { key: REC.sui, label: 'sui', hint: 'storage account that holds your conversation objects', owned: false },
+  { key: REC.inbox, label: 'inbox', hint: 'relay pointer — the record you can safely delegate', owned: true },
+  { key: REC.walrus, label: 'walrus', hint: 'pointer to your encrypted vault manifest', owned: true },
+  { key: REC.discoverable, label: 'discoverable', hint: 'ghost | unlisted | known | searchable | public', owned: true },
+  { key: REC.knock, label: 'knock', hint: 'the question strangers must answer to reach you', owned: false },
+] as const
 
 /** EAC role bit for `setText` (PermissionedResolverLib.ROLE_SET_TEXT = 1<<4). */
 export const ROLE_SET_TEXT = 1n << 4n

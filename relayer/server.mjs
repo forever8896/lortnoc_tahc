@@ -339,6 +339,59 @@ async function payStipend(recipient) {
   return res.digest
 }
 
+// ---- knock relay (§6.8) --------------------------------------------------------------------
+//
+// Knocks are sealed with a key derived from an answer we never see, to a question we never see
+// the answer to. This endpoint stores opaque blobs and hands them to whoever asks for a handle's
+// inbox — it cannot read one, and cannot tell a correct knock from a wrong-answer one.
+//
+// The rate limit is load-bearing rather than hygiene: an answer like "the bar we met at" is
+// low-entropy, and the ONLY thing making guessing expensive is that each attempt costs an
+// Argon2id derivation and a round trip through here (§6.8 "online-only, rate-limited").
+const KNOCK_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const KNOCK_MAX_PER_HANDLE = 50
+const KNOCK_RATE_PER_MIN = 6
+const knocks = new Map() // handle -> [{ id, sealed, ts }]
+const knockHits = new Map() // ip|handle -> [timestamps]
+
+function rateLimited(bucket) {
+  const now = Date.now()
+  const hits = (knockHits.get(bucket) ?? []).filter((t) => now - t < 60_000)
+  hits.push(now)
+  knockHits.set(bucket, hits)
+  return hits.length > KNOCK_RATE_PER_MIN
+}
+
+/** POST /knock { toHandle, sealed } — deliver a sealed knock. */
+app.post('/knock', (req, res) => {
+  const { toHandle, sealed } = req.body ?? {}
+  if (!toHandle || !sealed) return res.status(400).json({ error: 'toHandle and sealed are required' })
+  if (typeof sealed !== 'string' || sealed.length > 4096) {
+    return res.status(400).json({ error: 'sealed must be a base64 string under 4KB' })
+  }
+  const ip = req.headers['fly-client-ip'] ?? req.ip ?? 'local'
+  if (rateLimited(`${ip}|${toHandle}`)) {
+    return res.status(429).json({ error: 'too many knocks — slow down', retryAfter: 60 })
+  }
+
+  const now = Date.now()
+  const list = (knocks.get(toHandle) ?? []).filter((k) => now - k.ts < KNOCK_TTL_MS)
+  list.push({ id: `${now}-${Math.round(now % 1e6)}-${list.length}`, sealed, ts: now })
+  // Oldest-out, so a flood cannot bury real knocks indefinitely.
+  knocks.set(toHandle, list.slice(-KNOCK_MAX_PER_HANDLE))
+  log(`knock -> ${toHandle} (${list.length} pending)`)
+  res.json({ ok: true, pending: Math.min(list.length, KNOCK_MAX_PER_HANDLE) })
+})
+
+/** GET /knocks/:handle — every sealed knock waiting. Public on purpose: they are unreadable
+ *  without the answer, and gating this would mean knowing who is allowed to look. */
+app.get('/knocks/:handle', (req, res) => {
+  const now = Date.now()
+  const list = (knocks.get(req.params.handle) ?? []).filter((k) => now - k.ts < KNOCK_TTL_MS)
+  knocks.set(req.params.handle, list)
+  res.json({ knocks: list })
+})
+
 app.listen(PORT, '0.0.0.0', () => {
   log(`lortnoc relayer on :${PORT}`)
   log(`  relayer  ${account.address}`)
