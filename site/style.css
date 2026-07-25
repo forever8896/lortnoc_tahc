@@ -414,3 +414,18 @@ body{
   .sitemark{ top:16px; }
   .sitemark img{ height:44px; }
 }
+
+/* Headline figures for the business page. */
+.metrics{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:clamp(20px,3vw,44px); margin:clamp(28px,3.5vw,48px) 0 0;
+}
+.metric{ border-top:1px solid var(--rule); padding-top:20px; display:flex; flex-direction:column; gap:8px; }
+.metric b{
+  font-weight:400; font-size:clamp(30px,3.6vw,52px); line-height:1;
+  letter-spacing:-0.03em; color:var(--signal);
+}
+.metric span{
+  font-family:var(--mono); font-size:10px; letter-spacing:0.18em;
+  text-transform:uppercase; color:rgba(237,234,228,0.45); line-height:1.5;
+}
