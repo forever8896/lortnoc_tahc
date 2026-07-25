@@ -30,7 +30,7 @@ Idempotent — safe to re-run after a failure, it skips whatever is already on-c
 6. deploys **LortnocRegistrar** and grants it `ROLE_REGISTRAR` — and nothing else — so any wallet
    can claim a handle without us in the loop.
 
-Rebuild afterwards and `?live` works.
+Rebuild afterwards and live mode is armed.
 
 ### Check and demo
 
@@ -78,7 +78,7 @@ an ERC-1155 receiver, so registering a name to it reverts on a fork.
    ```
    Put the package id in `VITE_SUI_PACKAGE`.
 2. **Fund the store signer.** The app derives a Sui Ed25519 keypair from your MS (no separate Sui
-   wallet). On first `?live` connect, log `suiSigner().kp.toSuiAddress()` and send it testnet
+   wallet). On first live connect, log `suiSigner().kp.toSuiAddress()` and send it testnet
    **SUI** (faucet.sui.io) + **WAL** (swap SUI→WAL at stake.walrus.site).
 3. Walrus uses Mysten's public testnet upload relay — nothing to host.
 
@@ -87,7 +87,8 @@ an ERC-1155 receiver, so registering a name to it reverts on a fork.
 ```bash
 cp .env.example .env.local    # optional — only for a custom RPC or gateway address
 npm run dev
-# open http://localhost:5273/?live  → MetaMask on Sepolia
+# open http://localhost:5273/  → live by default; MetaMask on Sepolia
+# open http://localhost:5273/?mock → offline demo, no chain, nothing spent
 ```
 
 Claiming sends one transaction that deploys your own resolver proxy, publishes

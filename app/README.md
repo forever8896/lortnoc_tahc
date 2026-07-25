@@ -16,11 +16,11 @@ npm run build      # tsc + vite build
 
 Everything goes through one `Backend` interface (`src/lib/backend.ts`), with two implementations:
 
-- **`MockBackend`** (`src/lib/mock.ts`) — **default, fully working.** Real end-to-end crypto (X25519 ECDH
+- **`MockBackend`** (`src/lib/mock.ts`) — **behind `?mock`.** Real end-to-end crypto (X25519 ECDH
   + AES-SIV, the same `src/lib/crypto.ts` as the extension) over a **localStorage "network"**. Two tabs of
   the same browser share localStorage → they act as two real users chatting, genuinely encrypted. Only the
   *transport* is mocked (localStorage instead of Walrus/Sui).
-- **`LiveBackend`** (to add, `src/lib/live.ts`) — real **ENS v2** (viem, pinned Sepolia addresses) for
+- **`LiveBackend`** (`src/lib/live.ts`) — **the default.** Real **ENS v2** (viem, pinned Sepolia addresses) for
   claim/resolve/delegate/verify, and **Sui/Walrus/Seal** for the message store. Swap in behind the same
   interface; the on-chain txs are validated in-browser with a wallet.
 

@@ -8,11 +8,15 @@ type Ctx = { backend: Backend; identity: Identity | null; setIdentity: (i: Ident
 const BackendCtx = createContext<Ctx | null>(null)
 
 export function BackendProvider({ children }: { children: ReactNode }) {
-  // ?live → real ENS (Sepolia) + Sui/Walrus store; default is the fully-working mock
-  // (real crypto, localStorage transport). Live needs the day-0 setup (docs/LIVE-SETUP.md).
+  // LIVE IS THE DEFAULT: real wallet signature, real membership payment on 0G mainnet, real ENS
+  // handle on Sepolia, real Sui/Walrus store. The deployed product is the product.
+  //
+  // `?mock` opts back down to the offline demo (real crypto, localStorage transport, no chain) —
+  // kept for development and for showing the UI without spending anything. `?live` still works
+  // so older links and the docs' instructions don't break.
   const backend = useMemo<Backend>(() => {
-    const live = new URLSearchParams(location.search).has('live')
-    return live ? new LiveBackend() : new MockBackend()
+    const q = new URLSearchParams(location.search)
+    return q.has('mock') && !q.has('live') ? new MockBackend() : new LiveBackend()
   }, [])
   const [identity, setIdentity] = useState<Identity | null>(null)
 
