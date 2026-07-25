@@ -23,6 +23,13 @@ export function injectStyles(): void {
       padding: 0 3px;
       cursor: help;
     }
+    /* inbound "decoding…" cue — dims the cover text + a pulsing teal dot while /decode runs */
+    .lortnoc-decoding { opacity: .5; }
+    .lortnoc-decoding::after {
+      content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 6px;
+      border-radius: 50%; background: ${SIGNAL}; vertical-align: baseline;
+      animation: lortnoc-pulse .9s ease-in-out infinite;
+    }
     /* hover card — appended to <body> with position:fixed so Telegram's overflow
        containers can't clip it (that was the old glitch) */
     .lortnoc-card {
@@ -93,10 +100,17 @@ export interface Progress {
 export function createProgress(steps: string[]): Progress {
   const el = document.createElement('div')
   el.className = 'lortnoc-prog'
+  const head = document.createElement('div')
+  head.style.cssText = 'display:flex;align-items:center;gap:9px;margin-bottom:12px'
+  const logo = document.createElement('img')
+  logo.src = chrome.runtime.getURL('logo.png')
+  logo.style.cssText = 'height:26px;width:auto;display:block;flex:0 0 auto'
   const eye = document.createElement('div')
   eye.className = 'lortnoc-prog__eye'
-  eye.textContent = 'lortnoc · sending privately'
-  el.appendChild(eye)
+  eye.style.margin = '0'
+  eye.textContent = 'sending privately'
+  head.append(logo, eye)
+  el.appendChild(head)
 
   const rows: HTMLElement[] = []
   const subEls: HTMLElement[] = []

@@ -88,8 +88,13 @@ export function startInbound(
         const text = readBubbleText(bubble, sel!.bubbleText, sel!.timeInMessage)
         if (!text) continue
         el.dataset.lortnocPending = '1'
+        // show the "decoding…" cue only if the decode is actually taking a moment (a GPT-2
+        // decode is seconds; a quick not-cover-text 422 shouldn't flash it)
+        const cueTimer = window.setTimeout(() => msg.classList.add('lortnoc-decoding'), 400)
         try {
           const decoded = await onDecode(text)
+          window.clearTimeout(cueTimer)
+          msg.classList.remove('lortnoc-decoding')
           if (typeof decoded === 'string') {
             renderDecoded(bubble, sel!.bubbleText, sel!.timeInMessage, decoded, text)
             if (mid) seen.set(mid, { decoded, cover: text })
@@ -98,6 +103,8 @@ export function startInbound(
           }
           // decoded === 'retry' → transient (no key yet / codec error): do NOT cache, retry
         } finally {
+          window.clearTimeout(cueTimer)
+          msg.classList.remove('lortnoc-decoding')
           delete el.dataset.lortnocPending
         }
       }
