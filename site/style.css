@@ -397,3 +397,24 @@ body{
   font-size:0.36em; line-height:1.14; letter-spacing:-0.02em;
   color:rgba(237,234,228,0.72);
 }
+
+/* Landing wordmark — fixed over the film, above the copy's optical centre. */
+.sitemark{
+  position:fixed; top:clamp(20px,3vw,34px); left:var(--shell); z-index:20;
+  display:block; line-height:0;
+}
+.sitemark img{
+  height:clamp(52px,6.5vw,96px); width:auto; display:block;
+  transition:opacity .3s ease;
+}
+.sitemark:hover img,.sitemark:focus-visible img{ opacity:0.75; }
+
+/* Sub-page back link carries the mark instead of its name in text. */
+.topbar__back{ display:flex; align-items:center; gap:10px; }
+.topbar__back img{ height:26px; width:auto; display:block; }
+.topbar__back span{ font-size:14px; color:var(--muted); }
+
+@media (max-width:640px){
+  .sitemark{ top:16px; }
+  .sitemark img{ height:44px; }
+}
