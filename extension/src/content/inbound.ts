@@ -3,6 +3,7 @@
 // bubbles are naturally skipped. `textContent` is lossy (custom emoji) — accepted (§6).
 import type { TgClient } from './selectors'
 import { selectorsFor } from './selectors'
+import { attachCoverCard } from './ui'
 
 /** onDecode(coverText) → decoded message, or null if not one of ours. */
 export type DecodeFn = (coverText: string) => Promise<string | null>
@@ -35,9 +36,8 @@ function renderDecoded(
   const span = document.createElement('span')
   span.className = 'lortnoc-decoded'
   span.textContent = decoded + ' '
-  // hover shows what Telegram actually stored (the cover text)
-  span.title = `Telegram stores:\n“${cover}”`
-  span.dataset.cover = cover
+  span.title = `Telegram stored: “${cover}”` // accessibility fallback
+  attachCoverCard(span, cover) // hover → floating card with the cover text
   msg.insertBefore(span, msg.firstChild)
   ;(msg as HTMLElement).dataset.lortnocRendered = '1'
 }
