@@ -50,6 +50,22 @@ async function handleFrame(type: number, pubkey: Uint8Array): Promise<void> {
   }
 }
 
+// Idempotency guard: the popup can re-inject this script to self-heal after an extension
+// reload (which orphans the previous instance). Run the side effects (listener + main)
+// only once per frame, so a second injection is a no-op.
+declare global {
+  interface Window {
+    __lortnocLoaded?: boolean
+  }
+}
+if (window.__lortnocLoaded) {
+  console.debug('[lortnoc] already loaded in this frame — skipping re-init')
+} else {
+  window.__lortnocLoaded = true
+  boot()
+}
+
+function boot(): void {
 // Register the popup ↔ content-script listener IMMEDIATELY (before any awaits or the
 // client check) so the popup can always reach us — otherwise a slow init or an
 // unsupported client would make the popup report "open a telegram tab" wrongly.
@@ -128,4 +144,5 @@ async function main(): Promise<void> {
   console.info('[lortnoc] content script ready (Web K)')
 }
 
-void main()
+  void main()
+} // end boot()

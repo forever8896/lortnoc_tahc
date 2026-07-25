@@ -41,16 +41,46 @@ async function save(): Promise<void> {
 // ---- Tier-1 handshake (no passphrase) ----
 const hsStatus = byId<HTMLElement>('hsStatus')
 
-async function activeTabId(): Promise<number | undefined> {
+async function activeTab(): Promise<chrome.tabs.Tab | undefined> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-  return tab?.id
+  return tab
+}
+
+/** Find the active Telegram tab; if the content script is orphaned (after an extension
+ *  reload), re-inject it so the popup self-heals instead of saying "open a telegram tab". */
+async function reachContentScript(tabId: number): Promise<boolean> {
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: 'HS_STATUS' })
+    return true
+  } catch {
+    // orphaned/missing — re-inject the content script and retry once
+    try {
+      const js = chrome.runtime.getManifest().content_scripts?.[0]?.js ?? []
+      if (js.length) await chrome.scripting.executeScript({ target: { tabId }, files: js })
+      await chrome.tabs.sendMessage(tabId, { type: 'HS_STATUS' })
+      return true
+    } catch {
+      return false
+    }
+  }
 }
 
 async function refreshHsStatus(): Promise<void> {
-  const id = await activeTabId()
-  if (id === undefined) return
+  const tab = await activeTab()
+  if (!tab?.id) return
+  const onTelegram = (tab.url ?? '').includes('web.telegram.org')
+  if (!onTelegram) {
+    hsStatus.textContent = 'open web.telegram.org/k/'
+    hsStatus.className = 'pill pill-off'
+    return
+  }
+  if (!(await reachContentScript(tab.id))) {
+    hsStatus.textContent = 'reload the Telegram tab'
+    hsStatus.className = 'pill pill-off'
+    return
+  }
   try {
-    const r = (await chrome.tabs.sendMessage(id, { type: 'HS_STATUS' })) as {
+    const r = (await chrome.tabs.sendMessage(tab.id, { type: 'HS_STATUS' })) as {
       status: string
       hasKey: boolean
       client: string
@@ -68,16 +98,21 @@ async function refreshHsStatus(): Promise<void> {
     hsStatus.textContent = map[r?.status] ?? 'not connected'
     hsStatus.className = 'pill ' + (r?.status === 'established' ? 'pill-on' : 'pill-off')
   } catch {
-    hsStatus.textContent = 'open/reload a Telegram tab'
+    hsStatus.textContent = 'reload the Telegram tab'
     hsStatus.className = 'pill pill-off'
   }
 }
 
 byId('connect').addEventListener('click', async () => {
-  const id = await activeTabId()
-  if (id === undefined) return
+  const tab = await activeTab()
+  if (!tab?.id) return
+  if (!(tab.url ?? '').includes('web.telegram.org')) {
+    hsStatus.textContent = 'open web.telegram.org/k/'
+    return
+  }
+  await reachContentScript(tab.id) // ensure the content script is alive (re-inject if needed)
   try {
-    await chrome.tabs.sendMessage(id, { type: 'START_HANDSHAKE' })
+    await chrome.tabs.sendMessage(tab.id, { type: 'START_HANDSHAKE' })
     hsStatus.textContent = 'invite sent…'
     window.close() // let the user watch the chat for the handshake
   } catch {
