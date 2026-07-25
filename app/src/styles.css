@@ -60,8 +60,10 @@ button { font-family: inherit; }
 .chip {
   display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono);
   font-size: 11px; letter-spacing: 0.06em; padding: 4px 9px; border: 1px solid var(--rule);
-  color: var(--muted);
+  color: var(--muted); background: transparent; /* reset UA button bg (chip is used on <button>) */
 }
+button.chip { cursor: pointer; }
+button.chip:hover { color: var(--ink); border-color: var(--ink); }
 .chip--ok { color: var(--signal); border-color: rgba(18, 196, 190, 0.35); }
 
 .card { background: var(--panel); border: 1px solid var(--rule); }
