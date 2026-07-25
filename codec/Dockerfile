@@ -8,15 +8,15 @@ WORKDIR /app
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
  && pip install --no-cache-dir transformers
 
-# Pre-download gpt2 (124M) at build time → fast, offline startup.
+# Pre-download gpt2-medium (355M) at build time → fast, offline startup.
 RUN python -c "from transformers import GPT2LMHeadModel, GPT2TokenizerFast; \
-GPT2LMHeadModel.from_pretrained('gpt2'); GPT2TokenizerFast.from_pretrained('gpt2')"
+GPT2LMHeadModel.from_pretrained('gpt2-medium'); GPT2TokenizerFast.from_pretrained('gpt2-medium')"
 
 COPY . .
 
 ENV CODEC_BACKEND=gpt2 \
-    CODEC_MODEL=gpt2 \
-    CODEC_K=4 \
+    CODEC_MODEL=gpt2-medium \
+    CODEC_K=6 \
     HOST=0.0.0.0 \
     PORT=8080 \
     TRANSFORMERS_OFFLINE=1 \
