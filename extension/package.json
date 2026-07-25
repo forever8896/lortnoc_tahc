@@ -1,7 +1,7 @@
 {
   "name": "lortnoc-tahc-extension",
   "private": true,
-  "version": "0.3.8",
+  "version": "0.3.10",
   "type": "module",
   "description": "Telegram Web stego overlay — type real, send cover text, decode inline.",
   "scripts": {
