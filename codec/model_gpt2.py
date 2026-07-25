@@ -30,14 +30,24 @@ DEFAULT_PRIME = (
 
 DEFAULT_MODEL = "gpt2"  # base gpt2 with a friendly prime (fast KV path). Override w/ CODEC_MODEL.
 
-# Keep cover text friendly: drop profanity / slurs / strongly-negative words from the
-# candidate vocab so higher k can't grab them. (Not exhaustive — a demo hygiene filter.)
+# Keep cover text friendly: drop profanity / slurs / sexual / strongly-negative words
+# from the candidate vocab so the coder can't grab them. (Demo hygiene, not exhaustive.)
 BLOCKLIST = set(
-    "fuck fucking fucked fuckin shit shitty bullshit ass asshole bitch bastard dick "
-    "cock pussy cunt slut whore damn goddamn hell crap piss prick douche fag faggot "
-    "nigger nigga retard rape raped raping kill killed killing kill murder murdered "
-    "suicide die died dying death dead corpse blood bloody hate hatred hell damn "
-    "sex sexy porn nude nsfw".split()
+    (
+        # profanity / slurs
+        "fuck fucking fucked fuckin shit shitty bullshit ass asshole bitch bastard dick "
+        "cock pussy cunt slut whore damn goddamn crap piss prick douche fag faggot "
+        "nigger nigga retard "
+        # sexual / suggestive
+        "sex sexy porn porno nude naked nsfw tits tit titties boobs boob breast breasts "
+        "wet horny penis vagina vaginal orgasm cum cumming semen sperm erection boner "
+        "masturbate blowjob handjob anal anus nipple nipples clit clitoris dildo kinky "
+        "fetish thong panties lingerie seductive aroused moan moaning thrust penetrate "
+        "hole holes butt booty twerk stripper strip laid banged humping "
+        # violence / dark
+        "rape raped raping kill killed killing murder murdered suicide die died dying "
+        "death dead corpse blood bloody gore hate hatred hell"
+    ).split()
 )
 
 
