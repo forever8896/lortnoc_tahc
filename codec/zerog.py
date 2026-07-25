@@ -24,9 +24,29 @@ KEY = os.environ.get("ZEROG_API_KEY", "")
 MODEL = os.environ.get("ZEROG_MODEL", "")
 VARIANTS = max(1, int(os.environ.get("CODEC_VARIANTS", "1")))
 
+# Preferred path: a local broker SIDECAR that runs 0G TESTNET inference (faucet-funded).
+# If set, we call it instead of the mainnet router (which needs a paid app-sk key).
+SIDECAR = os.environ.get("ZEROG_SIDECAR", "").rstrip("/")
+
 
 def enabled() -> bool:
-    return bool(KEY and MODEL and VARIANTS > 1)
+    if VARIANTS <= 1:
+        return False
+    return bool(SIDECAR) or bool(KEY and MODEL)
+
+
+def _ask_sidecar(covers: list[str]) -> int | None:
+    """Ask the testnet broker sidecar to pick the most natural cover."""
+    try:
+        body = json.dumps({"covers": covers}).encode()
+        req = urllib.request.Request(
+            f"{SIDECAR}/select", data=body, headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=25) as r:
+            idx = json.load(r).get("index")
+        return idx if isinstance(idx, int) and 0 <= idx < len(covers) else None
+    except Exception:
+        return None
 
 
 def _ask_0g(covers: list[str]) -> int | None:
@@ -64,10 +84,15 @@ def _ask_0g(covers: list[str]) -> int | None:
 
 
 def select_best(covers: list[str]) -> tuple[str, str]:
-    """(chosen cover, method: '0g' | 'fallback' | 'single')."""
+    """(chosen cover, method: '0g-testnet' | '0g-router' | 'fallback' | 'single')."""
     if len(covers) <= 1:
         return covers[0], "single"
-    idx = _ask_0g(covers)
-    if idx is not None:
-        return covers[idx], "0g"
+    if SIDECAR:
+        idx = _ask_sidecar(covers)
+        if idx is not None:
+            return covers[idx], "0g-testnet"
+    elif KEY and MODEL:
+        idx = _ask_0g(covers)
+        if idx is not None:
+            return covers[idx], "0g-router"
     return covers[0], "fallback"

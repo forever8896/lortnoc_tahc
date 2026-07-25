@@ -1,0 +1,12 @@
+{
+  "name": "lortnoc-zerog-sidecar",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Tiny HTTP sidecar: bridges the Python codec to 0G Compute testnet inference via the broker SDK.",
+  "scripts": { "start": "node server.mjs" },
+  "dependencies": {
+    "@0glabs/0g-serving-broker": "^0.6.2",
+    "ethers": "^6.13.0"
+  }
+}
