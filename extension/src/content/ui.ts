@@ -55,6 +55,44 @@ export function shuffle(el: HTMLElement): void {
   window.setTimeout(() => el.classList.remove('lortnoc-shuffle'), 550)
 }
 
+function baseCard(): HTMLElement {
+  const el = document.createElement('div')
+  el.style.cssText =
+    'position:fixed;right:18px;bottom:18px;z-index:2147483647;max-width:320px;' +
+    'background:#14130f;color:#efece3;border:1px solid #ff5a3c;border-radius:11px;' +
+    'padding:13px 15px;font:13px/1.5 system-ui,sans-serif;box-shadow:0 12px 34px rgba(0,0,0,.55)'
+  return el
+}
+
+/** Transient status toast (auto-dismisses). */
+export function toast(msg: string, ms = 4000): void {
+  const el = baseCard()
+  el.textContent = msg
+  document.body.appendChild(el)
+  window.setTimeout(() => el.remove(), ms)
+}
+
+/** One-tap Accept prompt for an incoming handshake offer (consent-first, §5.3). */
+export function showAcceptBanner(onAccept: () => void): void {
+  const el = baseCard()
+  const p = document.createElement('div')
+  p.textContent = '🤝 Someone here wants to start a private session (no passphrase needed).'
+  p.style.marginBottom = '10px'
+  const btn = document.createElement('button')
+  btn.textContent = 'Accept & connect'
+  btn.style.cssText =
+    'background:#ff5a3c;color:#140f0d;border:0;border-radius:8px;padding:7px 12px;' +
+    'font-weight:600;cursor:pointer;font:inherit'
+  btn.addEventListener('click', () => {
+    el.remove()
+    onAccept()
+  })
+  el.appendChild(p)
+  el.appendChild(btn)
+  document.body.appendChild(el)
+  window.setTimeout(() => el.remove(), 30000)
+}
+
 /** Hover the decoded text → a floating card shows what Telegram actually stored. */
 export function attachCoverCard(el: HTMLElement, cover: string): void {
   let card: HTMLElement | null = null

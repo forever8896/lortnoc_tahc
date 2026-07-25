@@ -17,10 +17,19 @@
       <input type="checkbox" id="enabled" />
     </label>
 
-    <label class="field">
-      <span>Passphrase (both sides type the same)</span>
-      <input type="password" id="passphrase" autocomplete="off" spellcheck="false" placeholder="shared secret" />
-    </label>
+    <div class="handshake">
+      <div class="row"><span>Session</span><span id="hsStatus" class="pill pill-off">not connected</span></div>
+      <button id="connect">🤝 Connect securely (no passphrase)</button>
+      <p class="hint">Both people just need the extension + Stego on. Click connect; the other side taps Accept. Keys are exchanged invisibly through the chat.</p>
+    </div>
+
+    <details class="fallback">
+      <summary>or use a shared passphrase</summary>
+      <label class="field">
+        <span>Passphrase (both sides type the same)</span>
+        <input type="password" id="passphrase" autocomplete="off" spellcheck="false" placeholder="shared secret" />
+      </label>
+    </details>
 
     <label class="field">
       <span>Codec URL</span>

@@ -1,69 +1,118 @@
-// Content-script entry: wires compose interception and inbound decoding to the codec
-// (via the service worker) and the in-page crypto. Plaintext + key never leave here.
+// Content-script entry: wires compose interception, inbound decoding, and the Tier-1
+// in-band handshake (§5.3) to the codec (via the SW) and the in-page crypto. Plaintext
+// and keys never leave here.
 import { detectClient, selectorsFor, activeCompose } from './selectors'
-import { injectStyles } from './ui'
-import { initState, get, ready } from './state'
-import { installSendInterceptor } from './compose'
+import { injectStyles, toast, showAcceptBanner } from './ui'
+import { initState, get } from './state'
+import { installSendInterceptor, sendCoverText } from './compose'
 import { startInbound } from './inbound'
 import { encrypt, tryDecrypt, toB64, fromB64 } from './crypto'
+import { parseFrame, FRAME } from './handshake'
+import * as session from './session'
 import { sendToCodec } from '../shared/messages'
 import type { EncodeData, DecodeData } from '../shared/messages'
 
+// The active messaging key: the handshake's ECDH key once established, else the
+// passphrase-derived key (fallback). Handshake means no shared passphrase is needed.
+function activeKey(): Uint8Array | null {
+  return session.convKey() ?? get().key
+}
+function haveKey(): boolean {
+  return activeKey() !== null
+}
+
+/** Encode arbitrary bytes to cover text via the codec (used for handshake frames). */
+async function bytesToCover(bytes: Uint8Array): Promise<string | null> {
+  const res = await sendToCodec<EncodeData>({ type: 'ENCODE', ciphertextB64: toB64(bytes) })
+  return res.ok ? res.data.coverText : null
+}
+
+async function sendOffer(): Promise<void> {
+  const frame = await session.startOffer()
+  const cover = await bytesToCover(frame)
+  if (cover && (await sendCoverText(cover))) toast('🤝 Invite sent. Waiting for the other side to accept…')
+  else toast('Could not send the invite — is Stego on and the codec reachable?')
+}
+
+async function handleFrame(type: number, pubkey: Uint8Array): Promise<void> {
+  if (session.isMine(pubkey)) return // our own frame echoed back into the chat — ignore
+  if (type === FRAME.OFFER) {
+    showAcceptBanner(async () => {
+      const ack = await session.acceptOffer(pubkey)
+      const cover = await bytesToCover(ack)
+      if (cover) await sendCoverText(cover)
+      toast('🔒 Private session established — no passphrase needed.')
+    })
+  } else if (type === FRAME.ACK) {
+    await session.onAck(pubkey)
+    toast('🔒 They accepted — private session established.')
+  }
+}
+
 async function main(): Promise<void> {
   injectStyles()
-  await initState(() => {
-    const s = get()
-    console.debug('[lortnoc] state changed — enabled=%s hasKey=%s ready=%s', s.enabled, s.key !== null, ready())
-  })
+  await session.loadSession()
+  await initState()
 
   const client = detectClient()
   console.info('[lortnoc] loaded on', location.pathname, '→ client:', client)
   if (client !== 'k') {
-    console.warn(
-      '[lortnoc] Unsupported Telegram Web client at',
-      location.pathname,
-      '— switch to the K version (web.telegram.org/k/). Popup status still works.',
-    )
+    console.warn('[lortnoc] Unsupported Telegram Web client — use web.telegram.org/k/.')
     return
   }
-
   const sel = selectorsFor(client)!
-  const composeFound = !!activeCompose(sel)
-  const s0 = get()
   console.info(
-    '[lortnoc] compose found=%s · enabled=%s · hasKey=%s · ready=%s (set passphrase + toggle Stego on)',
-    composeFound,
-    s0.enabled,
-    s0.key !== null,
-    ready(),
+    '[lortnoc] compose=%s · enabled=%s · session=%s · hasKey=%s',
+    !!activeCompose(sel),
+    get().enabled,
+    session.status(),
+    haveKey(),
   )
 
-  // Outbound: real text → AES-SIV → /encode → cover text (or null to fail-closed).
-  installSendInterceptor(client, ready, async (real) => {
-    const s = get()
-    if (!s.key) return null
+  // Popup → content-script commands (start handshake, query status, reset).
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === 'START_HANDSHAKE') {
+      void sendOffer().then(() => sendResponse({ ok: true }))
+      return true
+    }
+    if (msg?.type === 'HS_STATUS') {
+      sendResponse({ status: session.status(), hasKey: haveKey() })
+      return true
+    }
+    if (msg?.type === 'HS_RESET') {
+      void session.reset().then(() => sendResponse({ ok: true }))
+      return true
+    }
+    return false
+  })
+
+  // Outbound: real text → AES-SIV(activeKey) → /encode → cover text (or null = fail-closed).
+  installSendInterceptor(client, haveKey, async (real) => {
+    const key = activeKey()
+    if (!key) return null
     try {
-      const ciphertextB64 = toB64(encrypt(s.key, real))
-      const res = await sendToCodec<EncodeData>({ type: 'ENCODE', ciphertextB64 })
-      if (!res.ok) {
-        console.warn('[lortnoc] encode failed:', res.error)
-        return null
-      }
-      return res.data.coverText
+      const cover = await bytesToCover(encrypt(key, real))
+      if (!cover) console.warn('[lortnoc] encode failed')
+      return cover
     } catch (e) {
       console.warn('[lortnoc] encrypt error:', e)
       return null
     }
   })
 
-  // Inbound: cover text → /decode → AES-SIV verify → decoded (or null if not ours).
-  startInbound(client, ready, async (cover) => {
-    const s = get()
-    if (!s.key) return null
+  // Inbound: cover → /decode → bytes → handshake frame? handle it : AES-SIV decrypt.
+  startInbound(client, () => get().enabled, async (cover) => {
     try {
       const res = await sendToCodec<DecodeData>({ type: 'DECODE', coverText: cover })
       if (!res.ok) return null
-      return tryDecrypt(s.key, fromB64(res.data.ciphertext))
+      const bytes = fromB64(res.data.ciphertext)
+      const frame = parseFrame(bytes)
+      if (frame) {
+        await handleFrame(frame.type, frame.pubkey)
+        return null // handled as handshake — not rendered as a message
+      }
+      const key = activeKey()
+      return key ? tryDecrypt(key, bytes) : null
     } catch {
       return null
     }

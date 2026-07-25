@@ -59,3 +59,8 @@ button {
 }
 button.ghost { background: transparent; color: var(--ink); border-color: var(--rule); }
 .note { color: var(--muted); font-size: 11px; margin: 12px 0 0; }
+.handshake { margin: 12px 0; padding: 12px; border: 1px solid var(--rule); border-radius: 10px; }
+.handshake button { margin-top: 10px; }
+.hint { color: var(--muted); font-size: 11px; margin: 8px 0 0; }
+.fallback { margin-top: 10px; }
+.fallback summary { color: var(--muted); font-size: 12px; cursor: pointer; }

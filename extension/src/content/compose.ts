@@ -8,6 +8,7 @@ import { shuffle } from './ui'
 
 let swapping = false // true from the moment a send is intercepted until the cover is sent
 let allowNextClick = false // set right before OUR programmatic send-button click, so it passes through
+let activeClient: TgClient | null = null // remembered so sendCoverText() can send on its own
 
 export function readCompose(el: HTMLElement): string {
   return el.innerText.replace(/ /g, ' ').trim()
@@ -47,11 +48,41 @@ function visibleSendButton(selector: string): HTMLElement | null {
  */
 export type SwapFn = (realText: string) => Promise<string | null>
 
+/**
+ * Programmatically send an already-encoded cover text (used for handshake offer/ack
+ * frames, which are NOT user-typed). Guards so the interceptor doesn't re-encode it.
+ */
+export async function sendCoverText(coverText: string): Promise<boolean> {
+  if (!activeClient) return false
+  const sel = selectorsFor(activeClient)
+  if (!sel) return false
+  const input = activeCompose(sel)
+  if (!input) return false
+  if (swapping) return false
+  swapping = true
+  try {
+    replaceCompose(input, coverText)
+    const btn = visibleSendButton(sel.sendButton)
+    if (!btn) return false
+    allowNextClick = true
+    btn.click()
+    window.setTimeout(() => {
+      allowNextClick = false
+    }, 300)
+    return true
+  } finally {
+    window.setTimeout(() => {
+      swapping = false
+    }, 100)
+  }
+}
+
 export function installSendInterceptor(
   client: TgClient,
   isReady: () => boolean,
   onSwap: SwapFn,
 ): void {
+  activeClient = client
   const sel = selectorsFor(client)
   if (!sel) return
 

@@ -38,7 +38,46 @@ async function save(): Promise<void> {
   void checkHealth()
 }
 
+// ---- Tier-1 handshake (no passphrase) ----
+const hsStatus = byId<HTMLElement>('hsStatus')
+
+async function activeTabId(): Promise<number | undefined> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  return tab?.id
+}
+
+async function refreshHsStatus(): Promise<void> {
+  const id = await activeTabId()
+  if (id === undefined) return
+  try {
+    const r = (await chrome.tabs.sendMessage(id, { type: 'HS_STATUS' })) as { status: string; hasKey: boolean }
+    const map: Record<string, string> = {
+      none: 'not connected',
+      offered: 'invite sent…',
+      established: '🔒 connected',
+    }
+    hsStatus.textContent = map[r?.status] ?? 'not connected'
+    hsStatus.className = 'pill ' + (r?.status === 'established' ? 'pill-on' : 'pill-off')
+  } catch {
+    hsStatus.textContent = 'open a Telegram tab'
+    hsStatus.className = 'pill pill-off'
+  }
+}
+
+byId('connect').addEventListener('click', async () => {
+  const id = await activeTabId()
+  if (id === undefined) return
+  try {
+    await chrome.tabs.sendMessage(id, { type: 'START_HANDSHAKE' })
+    hsStatus.textContent = 'invite sent…'
+    window.close() // let the user watch the chat for the handshake
+  } catch {
+    hsStatus.textContent = 'reload the Telegram tab'
+  }
+})
+
 byId('save').addEventListener('click', () => void save())
 byId('check').addEventListener('click', () => void checkHealth())
 enabled.addEventListener('change', () => void save())
 void load()
+void refreshHsStatus()
