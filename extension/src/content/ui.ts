@@ -1,42 +1,51 @@
 // Injected styles + the "shuffle" animation (masks codec latency on send) and the
-// inline-decoded marker. These touch our own UI only — emoji/markup here is fine
-// (it never becomes cover text).
+// inline-decoded marker. Our overlay UI only — brand palette (Signal-green), brand type
+// (Jost), no emoji.
 
 const STYLE_ID = 'lortnoc-style'
+const SIGNAL = '#4ade80'
+
+// Brand font, loaded from the extension's bundled woff2 (web_accessible_resources).
+const jostUrl = (w: string): string => chrome.runtime.getURL(`fonts/jost/jost-${w}.woff2`)
 
 export function injectStyles(): void {
   if (document.getElementById(STYLE_ID)) return
   const s = document.createElement('style')
   s.id = STYLE_ID
   s.textContent = `
-    /* decoded text reads as an intentional, clearly-"ours" pill */
+    @font-face { font-family:"LortnocJost"; font-weight:300; font-display:swap; src:url("${jostUrl('300')}") format("woff2"); }
+    @font-face { font-family:"LortnocJost"; font-weight:400; font-display:swap; src:url("${jostUrl('400')}") format("woff2"); }
+    /* decoded text reads as an intentional, clearly-"ours" pill — Signal-green */
     .lortnoc-decoded {
-      background: rgba(227,58,32,.12);
-      box-shadow: inset 0 -1px 0 rgba(227,58,32,.45);
-      border-radius: 4px;
+      background: rgba(74,222,128,.11);
+      box-shadow: inset 0 -1px 0 rgba(74,222,128,.5);
+      border-radius: 3px;
       padding: 0 3px;
       cursor: help;
     }
-    .lortnoc-decoded::before { content: "🔓 "; opacity: .7; font-size: .9em; }
     /* hover card — appended to <body> with position:fixed so Telegram's overflow
        containers can't clip it (that was the old glitch) */
     .lortnoc-card {
       position: fixed;
       z-index: 2147483647;
       max-width: 340px;
-      background: #14130f;
-      color: #efece3;
-      border: 1px solid #ff5a3c;
-      border-radius: 9px;
-      padding: 8px 11px;
-      font: 12px/1.5 system-ui, sans-serif;
-      box-shadow: 0 10px 30px rgba(0,0,0,.55);
+      background: #0b0b0e;
+      color: #edeae4;
+      border: 1px solid rgba(74,222,128,.4);
+      border-radius: 4px;
+      padding: 10px 12px;
+      font: 300 12px/1.55 "LortnocJost", system-ui, sans-serif;
+      box-shadow: 0 12px 34px rgba(0,0,0,.6);
       pointer-events: none;
       opacity: 0;
-      transition: opacity .1s ease;
+      transition: opacity .12s ease;
     }
     .lortnoc-card.show { opacity: 1; }
-    .lortnoc-card b { color: #ff8a6e; font-weight: 600; }
+    .lortnoc-card b {
+      display: block; margin-bottom: 5px; color: ${SIGNAL}; font-weight: 400;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase;
+    }
     /* "working" cue while the codec runs (GPT-2 takes seconds) */
     .lortnoc-busy { opacity: .6; animation: lortnoc-pulse 1.1s ease-in-out infinite; }
     @keyframes lortnoc-pulse { 0%,100% { opacity: .55; } 50% { opacity: .9; } }
@@ -58,16 +67,30 @@ export function shuffle(el: HTMLElement): void {
 function baseCard(): HTMLElement {
   const el = document.createElement('div')
   el.style.cssText =
-    'position:fixed;right:18px;bottom:18px;z-index:2147483647;max-width:320px;' +
-    'background:#14130f;color:#efece3;border:1px solid #ff5a3c;border-radius:11px;' +
-    'padding:13px 15px;font:13px/1.5 system-ui,sans-serif;box-shadow:0 12px 34px rgba(0,0,0,.55)'
+    'position:fixed;right:20px;bottom:20px;z-index:2147483647;max-width:320px;' +
+    'background:#0b0b0e;color:#edeae4;border:1px solid rgba(237,234,228,.14);' +
+    'border-left:2px solid ' + SIGNAL + ';border-radius:4px;padding:14px 16px;' +
+    'font:300 13px/1.55 "LortnocJost",system-ui,sans-serif;box-shadow:0 14px 40px rgba(0,0,0,.6)'
   return el
 }
 
-/** Transient status toast (auto-dismisses). */
-export function toast(msg: string, ms = 4000): void {
+/** Small mono eyebrow, brand style. */
+function eyebrow(text: string): HTMLElement {
+  const e = document.createElement('div')
+  e.textContent = text
+  e.style.cssText =
+    'font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9.5px;letter-spacing:.16em;' +
+    'text-transform:uppercase;color:' + SIGNAL + ';margin-bottom:7px'
+  return e
+}
+
+/** Transient status toast (auto-dismisses). Pass an optional mono eyebrow label. */
+export function toast(msg: string, ms = 4000, label = 'lortnoc tahc'): void {
   const el = baseCard()
-  el.textContent = msg
+  el.appendChild(eyebrow(label))
+  const body = document.createElement('div')
+  body.textContent = msg
+  el.appendChild(body)
   document.body.appendChild(el)
   window.setTimeout(() => el.remove(), ms)
 }
@@ -75,14 +98,15 @@ export function toast(msg: string, ms = 4000): void {
 /** One-tap Accept prompt for an incoming handshake offer (consent-first, §5.3). */
 export function showAcceptBanner(onAccept: () => void): void {
   const el = baseCard()
+  el.appendChild(eyebrow('Private session request'))
   const p = document.createElement('div')
-  p.textContent = '🤝 Someone here wants to start a private session (no passphrase needed).'
-  p.style.marginBottom = '10px'
+  p.textContent = 'Someone here wants to start a private, passphrase-free session with you.'
+  p.style.marginBottom = '12px'
   const btn = document.createElement('button')
   btn.textContent = 'Accept & connect'
   btn.style.cssText =
-    'background:#ff5a3c;color:#140f0d;border:0;border-radius:8px;padding:7px 12px;' +
-    'font-weight:600;cursor:pointer;font:inherit'
+    'background:' + SIGNAL + ';color:#08080a;border:0;border-radius:0;padding:9px 16px;' +
+    'font-weight:400;font-size:13px;cursor:pointer;font-family:"LortnocJost",system-ui,sans-serif'
   btn.addEventListener('click', () => {
     el.remove()
     onAccept()
@@ -101,7 +125,7 @@ export function attachCoverCard(el: HTMLElement, cover: string): void {
     card = document.createElement('div')
     card.className = 'lortnoc-card'
     const label = document.createElement('b')
-    label.textContent = '🕵 What Telegram stored'
+    label.textContent = 'What Telegram stored'
     card.appendChild(label)
     card.appendChild(document.createElement('br'))
     card.appendChild(document.createTextNode(cover))

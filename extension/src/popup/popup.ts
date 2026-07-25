@@ -103,7 +103,7 @@ async function refreshHsStatus(): Promise<void> {
     const map: Record<string, [string, boolean]> = {
       none: ['not connected', false],
       offered: ['invite sent…', false],
-      established: ['🔒 connected', true],
+      established: ['connected', true],
     }
     const [text, on] = map[r?.status] ?? ['not connected', false]
     setChip(hsStatus, text, on)
