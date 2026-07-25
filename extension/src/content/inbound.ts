@@ -5,8 +5,10 @@ import type { TgClient } from './selectors'
 import { selectorsFor } from './selectors'
 import { attachCoverCard } from './ui'
 
-/** onDecode(coverText) → decoded message, or null if not one of ours. */
-export type DecodeFn = (coverText: string) => Promise<string | null>
+/** onDecode(coverText) → decoded message string, `null` if DEFINITELY not ours (safe to
+ *  cache), or `'retry'` if it couldn't be decided now (no key yet / codec error) and should
+ *  be tried again later. */
+export type DecodeFn = (coverText: string) => Promise<string | null | 'retry'>
 
 function readBubbleText(bubble: Element, textSel: string, timeSel: string): string {
   const msg = bubble.querySelector(textSel)
@@ -42,13 +44,18 @@ function renderDecoded(
   ;(msg as HTMLElement).dataset.lortnocRendered = '1'
 }
 
-export function startInbound(client: TgClient, isReady: () => boolean, onDecode: DecodeFn): void {
+export function startInbound(
+  client: TgClient,
+  isReady: () => boolean,
+  onDecode: DecodeFn,
+): { reset: () => void } {
   const sel = selectorsFor(client)
-  if (!sel) return
+  if (!sel) return { reset: () => {} }
 
   let scanning = false
-  // decode decision cached per data-mid: {…}=ours, null=not ours. Each message hits the
-  // codec at most ONCE — critical now that a GPT-2 decode costs seconds.
+  // decode decision cached per data-mid: {…}=ours, null=DEFINITELY not ours. Only a
+  // definitive verdict is cached — a transient failure (no key yet / codec error) is NOT
+  // cached, so the message is retried (e.g. after a handshake establishes the key).
   const seen = new Map<string, { decoded: string; cover: string } | null>()
 
   async function scan(): Promise<void> {
@@ -83,12 +90,13 @@ export function startInbound(client: TgClient, isReady: () => boolean, onDecode:
         el.dataset.lortnocPending = '1'
         try {
           const decoded = await onDecode(text)
-          if (decoded != null) {
+          if (typeof decoded === 'string') {
             renderDecoded(bubble, sel!.bubbleText, sel!.timeInMessage, decoded, text)
             if (mid) seen.set(mid, { decoded, cover: text })
-          } else if (mid) {
-            seen.set(mid, null) // not ours — remember, so we never decode it again
+          } else if (decoded === null && mid) {
+            seen.set(mid, null) // DEFINITELY not ours — safe to never retry
           }
+          // decoded === 'retry' → transient (no key yet / codec error): do NOT cache, retry
         } finally {
           delete el.dataset.lortnocPending
         }
@@ -110,4 +118,13 @@ export function startInbound(client: TgClient, isReady: () => boolean, onDecode:
     characterData: true,
   })
   void scan()
+
+  // Called when the conversation key changes (handshake establishes): drop cached "not
+  // ours" verdicts and re-scan so pre-key messages decode.
+  return {
+    reset() {
+      seen.clear()
+      void scan()
+    },
+  }
 }
