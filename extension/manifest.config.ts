@@ -3,7 +3,7 @@ import { defineManifest } from '@crxjs/vite-plugin'
 export default defineManifest({
   manifest_version: 3,
   name: 'lortnoc tahc',
-  version: '0.4.0',
+  version: '0.4.1',
   description: 'Type real, send cover text, decode inline — a stego overlay for Telegram Web.',
   icons: {
     16: 'icons/on-16.png',
@@ -22,7 +22,7 @@ export default defineManifest({
     },
   },
   web_accessible_resources: [
-    { resources: ['icons/*', 'fonts/*'], matches: ['<all_urls>'] },
+    { resources: ['icons/*', 'fonts/*', 'logo.png'], matches: ['<all_urls>'] },
   ],
   background: {
     service_worker: 'src/background/index.ts',
