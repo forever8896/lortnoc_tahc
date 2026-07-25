@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createWalletClient, custom, type Address, type Hex } from 'viem'
 import { Eyebrow, Spinner } from './atoms'
+import { arbitrum, base, mainnet, optimism } from 'viem/chains'
 import {
-  quoteToZeroG, waitForBridge, ZEROG_CHAIN_ID, type BridgeQuote,
+  DUST, fundedSources, isBridgeSource, quoteToZeroG, waitForBridge, ZEROG_CHAIN_ID,
+  type BridgeQuote,
 } from '../lib/live/lifi'
 import {
   balanceOn0G, fmt0G, join, memberCount, membershipReady, price, usdPerZeroG, zeroGChain,
@@ -70,11 +72,30 @@ export function Membership({ ms, onPaid }: { ms: Uint8Array | null; onPaid: () =
       const eth = (window as unknown as { ethereum?: Parameters<typeof custom>[0] }).ethereum
       if (!eth) throw new Error('No wallet found.')
       const client = createWalletClient({ transport: custom(eth) })
-      const fromChain = await client.getChainId()
+      let fromChain = await client.getChainId()
       if (fromChain === ZEROG_CHAIN_ID) {
         setErr('You are already on 0G — switch your wallet to Ethereum, Base or Arbitrum to bridge from.')
         setStep('bridge')
         return
+      }
+
+      // Signing in leaves the wallet on Sepolia (that is where ENS v2 identity lives), and no
+      // bridge routes testnet value — LI.FI rejects the chain id outright. So before quoting,
+      // move to a real chain this wallet can actually pay from: the one it holds the most gas on.
+      if (!isBridgeSource(fromChain)) {
+        setNote('finding a chain you hold ETH on…')
+        const sources = await fundedSources(account)
+        const best = sources.find((c) => c.balance > DUST)
+        if (!best) {
+          throw new Error(
+            'No ETH found on Base, Arbitrum, Optimism or Ethereum. Bridging pays for membership ' +
+              'with real funds, so top one of those up (about $1.50 covers membership and gas) ' +
+              'and press Bridge again.',
+          )
+        }
+        setNote(`switching your wallet to ${best.name}…`)
+        await switchTo(client, best.id)
+        fromChain = best.id
       }
 
       // Bridge enough for the membership plus headroom for the two 0G transactions.
@@ -107,6 +128,18 @@ export function Membership({ ms, onPaid }: { ms: Uint8Array | null; onPaid: () =
     } catch (e) {
       setErr(String(e instanceof Error ? e.message : e))
       setStep('bridge')
+    }
+  }
+
+  /** Ask the wallet to move chains, adding the network first if it has never seen it. */
+  async function switchTo(client: ReturnType<typeof createWalletClient>, id: number) {
+    const known = [base, arbitrum, optimism, mainnet].find((c) => c.id === id)
+    try {
+      await client.switchChain({ id })
+    } catch (e) {
+      if (!known) throw e
+      await client.addChain({ chain: known })
+      await client.switchChain({ id })
     }
   }
 
@@ -174,8 +207,9 @@ export function Membership({ ms, onPaid }: { ms: Uint8Array | null; onPaid: () =
           <Row label="you need" value={cost ? `${fmt0G(cost)}${dollars(cost) ? ` (${dollars(cost)})` : ''}` : '—'} />
           <button className="btn" onClick={bridge}>Bridge ~$1 of ETH → 0G</button>
           <Hint>
-            One transaction from Ethereum, Base, Arbitrum or Optimism. Takes about 12 seconds.
-            Your wallet stays in control the whole way.
+            One transaction from Ethereum, Base, Arbitrum or Optimism — we'll switch your wallet
+            to whichever of those you hold ETH on, since sign-in leaves it on Sepolia. Takes about
+            12 seconds. Your wallet stays in control the whole way.
           </Hint>
         </>
       )}

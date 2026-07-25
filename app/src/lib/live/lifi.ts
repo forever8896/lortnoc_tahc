@@ -4,7 +4,7 @@
 // We call the REST API rather than dropping in @lifi/widget: the widget expects a wagmi context
 // and this app is raw viem + window.ethereum, and a quote response already contains a
 // ready-to-send `transactionRequest`. One request, one signature, ~12s.
-import type { Address, Hex } from 'viem'
+import { createPublicClient, http, type Address, type Hex } from 'viem'
 
 export const ZEROG_CHAIN_ID = 16661
 export const NATIVE = '0x0000000000000000000000000000000000000000'
@@ -37,6 +37,15 @@ export async function quoteToZeroG(params: {
   fromAmountWei: bigint
   toAddress?: Address
 }): Promise<BridgeQuote> {
+  // Fail with something a human can act on. Left to the API this surfaces as a raw schema error
+  // ("/fromChain must be equal to one of the allowed values"), which reads like a bug in us.
+  if (!isBridgeSource(params.fromChain)) {
+    throw new Error(
+      `Your wallet is on chain ${params.fromChain}, which no bridge supports as a source. ` +
+        `Switch it to ${SOURCE_CHAINS.map((c) => c.name).join(', ')} and try again.`,
+    )
+  }
+
   const q = new URLSearchParams({
     fromChain: String(params.fromChain),
     toChain: String(ZEROG_CHAIN_ID),
@@ -108,10 +117,43 @@ export async function waitForBridge(
   }
 }
 
-/** Chains we can bridge from, in the order we'd suggest them (cheapest gas first). */
-export const SUGGESTED_SOURCE_CHAINS = [
-  { id: 8453, name: 'Base' },
-  { id: 42161, name: 'Arbitrum' },
-  { id: 10, name: 'Optimism' },
-  { id: 1, name: 'Ethereum' },
+/** Chains we can bridge from, in the order we'd suggest them (cheapest gas first).
+ *
+ *  LI.FI routes mainnet value only — its `fromChain` is a closed enum of real chains, so a
+ *  testnet id is rejected by schema validation before any routing is attempted:
+ *  "/fromChain must be equal to one of the allowed values". That matters here because signing in
+ *  puts the wallet on **Sepolia** (identity lives on ENS v2 there), which is exactly such an id.
+ *  The bridge step therefore cannot assume the wallet's current chain is usable — see
+ *  `fundedSources` and the switch in Membership.tsx. */
+export const SOURCE_CHAINS = [
+  { id: 8453, name: 'Base', rpc: 'https://base-rpc.publicnode.com' },
+  { id: 42161, name: 'Arbitrum', rpc: 'https://arbitrum-one-rpc.publicnode.com' },
+  { id: 10, name: 'Optimism', rpc: 'https://optimism-rpc.publicnode.com' },
+  { id: 1, name: 'Ethereum', rpc: 'https://ethereum-rpc.publicnode.com' },
 ] as const
+
+export type SourceChain = { id: number; name: string; balance: bigint }
+
+/** Can we quote a bridge from this chain at all? */
+export const isBridgeSource = (chainId: number): boolean =>
+  SOURCE_CHAINS.some((c) => c.id === chainId)
+
+/** Below this a balance is dust — not enough to cover ~$1 of membership plus source-chain gas. */
+export const DUST = 250_000_000_000_000n // 0.00025 ETH
+
+/** Where does this wallet actually hold gas? Read every supported source chain at once and
+ *  return them richest-first, so the flow can move the wallet somewhere it can pay from instead
+ *  of failing on whichever chain sign-in happened to leave it on. Best-effort per chain: one
+ *  unreachable RPC must not sink the others. */
+export async function fundedSources(address: Address): Promise<SourceChain[]> {
+  const read = async (c: (typeof SOURCE_CHAINS)[number]): Promise<SourceChain> => {
+    try {
+      const client = createPublicClient({ transport: http(c.rpc) })
+      return { id: c.id, name: c.name, balance: await client.getBalance({ address }) }
+    } catch {
+      return { id: c.id, name: c.name, balance: 0n }
+    }
+  }
+  const all = await Promise.all(SOURCE_CHAINS.map(read))
+  return all.sort((a, b) => (b.balance > a.balance ? 1 : b.balance < a.balance ? -1 : 0))
+}
