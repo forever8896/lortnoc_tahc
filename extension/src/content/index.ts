@@ -2,11 +2,13 @@
 // in-band handshake (§5.3) to the codec (via the SW) and the in-page crypto. Plaintext
 // and keys never leave here.
 import { detectClient, selectorsFor, activeCompose } from './selectors'
-import { injectStyles, toast, showAcceptBanner } from './ui'
+import { injectStyles, toast, showAcceptBanner, showPaywall } from './ui'
 import { initState, get } from './state'
 import { installSendInterceptor, sendCoverText } from './compose'
 import { startInbound } from './inbound'
 import { encrypt, tryDecrypt, toB64, fromB64 } from './crypto'
+import { loadMeter, isBlocked, isRunningLow, increment, remaining, sends } from './metering'
+import { UPGRADE_URL } from '../shared/config'
 
 const toHex = (u: Uint8Array): string => [...u].map((b) => b.toString(16).padStart(2, '0')).join('')
 import { parseFrame, FRAME } from './handshake'
@@ -137,6 +139,7 @@ async function main(): Promise<void> {
     console.warn('[lortnoc] loadSession failed (continuing):', e)
   }
   await initState()
+  await loadMeter() // freemium counter + paid flag (§9)
 
   const client = detectClient()
   console.info('[lortnoc] loaded on', location.pathname, '→ client:', client)
@@ -156,6 +159,13 @@ async function main(): Promise<void> {
   // Outbound: real text → AES-SIV(activeKey) → /encode → cover text (or null = fail-closed).
   // Reports each real stage to the progress stepper so the ~10s send is legible.
   installSendInterceptor(client, haveKey, async (real, progress) => {
+    // Freemium gate (§9): out of free sends and not a member → fail-closed + funnel to pay.
+    // Reading/decoding stays free; only sending is metered.
+    if (isBlocked()) {
+      progress.fail('Free trial used up — unlock to keep sending')
+      showPaywall(UPGRADE_URL, sends())
+      return null
+    }
     const key = activeKey()
     if (!key) return null
     try {
@@ -166,7 +176,16 @@ async function main(): Promise<void> {
       const tSelect = window.setTimeout(() => progress.set(2, '0G · judging 3 covers for the most natural'), 6500)
       try {
         const cover = await bytesToCover(ct)
-        if (!cover) console.warn('[lortnoc] encode failed')
+        if (!cover) {
+          console.warn('[lortnoc] encode failed')
+          return cover
+        }
+        // Successful hidden send → count it toward the free quota.
+        await increment()
+        if (isRunningLow()) {
+          const n = remaining()
+          toast(`${n} free message${n === 1 ? '' : 's'} left — members send unlimited.`, 5000)
+        }
         return cover
       } finally {
         window.clearTimeout(tSelect)

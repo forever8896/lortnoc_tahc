@@ -1,4 +1,4 @@
-import { LOCAL, SESSION, DEFAULT_CODEC_URL } from '../shared/config'
+import { LOCAL, SESSION, DEFAULT_CODEC_URL, FREE_LIMIT, WARN_AT } from '../shared/config'
 import { sendToCodec } from '../shared/messages'
 import type { HealthData } from '../shared/messages'
 
@@ -29,6 +29,36 @@ async function checkHealth(): Promise<void> {
   else setChip(status, 'offline', false, true)
 }
 
+// Freemium meter readout — reads the same storage.local the content script writes, so the
+// trial state is legible before you ever hit the send-time wall.
+const trial = byId<HTMLElement>('trial')
+const trialFill = byId<HTMLElement>('trialFill')
+const trialLabel = byId<HTMLElement>('trialLabel')
+async function paintTrial(): Promise<void> {
+  const m = (await chrome.storage.local.get(LOCAL.meter))[LOCAL.meter] as
+    | { sends: number; paid: boolean }
+    | undefined
+  const sends = m?.sends ?? 0
+  const paid = Boolean(m?.paid)
+  trial.className = 'trial'
+  if (paid) {
+    trial.classList.add('trial--member')
+    trialLabel.textContent = 'member · unlimited'
+    return
+  }
+  const left = Math.max(0, FREE_LIMIT - sends)
+  trialFill.style.width = `${Math.min(100, (sends / FREE_LIMIT) * 100)}%`
+  if (left === 0) {
+    trial.classList.add('trial--spent')
+    trialLabel.textContent = 'free trial used — upgrade to keep sending'
+  } else if (sends >= WARN_AT) {
+    trial.classList.add('trial--low')
+    trialLabel.textContent = `${left} of ${FREE_LIMIT} free messages left`
+  } else {
+    trialLabel.textContent = `${left} of ${FREE_LIMIT} free messages left`
+  }
+}
+
 async function load(): Promise<void> {
   const local = await chrome.storage.local.get([LOCAL.enabled, LOCAL.codecUrl])
   const session = await chrome.storage.session.get(SESSION.passphrase)
@@ -37,6 +67,7 @@ async function load(): Promise<void> {
   codecUrl.value = (local[LOCAL.codecUrl] as string) || DEFAULT_CODEC_URL
   passphrase.value = (session[SESSION.passphrase] as string) || ''
   void checkHealth()
+  void paintTrial()
 }
 
 async function persist(): Promise<void> {
@@ -169,4 +200,7 @@ byId('check').addEventListener('click', () => void checkHealth())
 void load()
 void refreshHsStatus()
 // poll while the popup is open so the button/status update live as the peer accepts
-setInterval(() => void refreshHsStatus(), 1500)
+setInterval(() => {
+  void refreshHsStatus()
+  void paintTrial()
+}, 1500)

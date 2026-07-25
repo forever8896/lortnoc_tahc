@@ -232,6 +232,50 @@ export function showAcceptBanner(onAccept: () => void): void {
   window.setTimeout(() => el.remove(), 30000)
 }
 
+/** Free-limit paywall (§9): the conversion moment. Blocks nothing itself — the caller has
+ *  already fail-closed the send — it just funnels the user to pay + upgrade their identity. */
+export function showPaywall(upgradeUrl: string, sent: number): void {
+  document.getElementById('lortnoc-paywall')?.remove()
+  const el = baseCard()
+  el.id = 'lortnoc-paywall'
+  el.style.maxWidth = '340px'
+
+  const head = document.createElement('div')
+  head.style.cssText = 'display:flex;align-items:center;gap:9px;margin-bottom:10px'
+  const logo = document.createElement('img')
+  logo.src = chrome.runtime.getURL('logo.png')
+  logo.style.cssText = 'height:26px;width:auto;display:block;flex:0 0 auto'
+  head.append(logo, eyebrow('Free trial used up'))
+  el.appendChild(head)
+
+  const body = document.createElement('div')
+  body.innerHTML =
+    `You've sent <b style="color:${SIGNAL};font-weight:400">${sent} hidden messages</b> — that's the free trial. ` +
+    `Become a member for <b style="color:#edeae4;font-weight:400">unlimited private messaging</b>, ` +
+    `plus a name you own and a real identity key.`
+  body.style.marginBottom = '13px'
+  el.appendChild(body)
+
+  const btn = document.createElement('button')
+  btn.textContent = 'Unlock unlimited →'
+  btn.style.cssText =
+    'width:100%;background:' + SIGNAL + ';color:#08080a;border:0;border-radius:0;padding:11px 16px;' +
+    'font-weight:400;font-size:13px;cursor:pointer;font-family:"LortnocJost",system-ui,sans-serif'
+  btn.addEventListener('click', () => {
+    window.open(upgradeUrl, '_blank', 'noopener')
+    el.remove()
+  })
+  el.appendChild(btn)
+
+  const note = document.createElement('div')
+  note.textContent = 'Pay once, unlinkably — your handle is never tied to the payment.'
+  note.style.cssText = 'font-size:10.5px;color:rgba(237,234,228,.4);margin-top:9px;line-height:1.5'
+  el.appendChild(note)
+
+  document.body.appendChild(el)
+  window.setTimeout(() => el.remove(), 16000)
+}
+
 /** Hover the decoded text → a floating card shows what Telegram actually stored. */
 export function attachCoverCard(el: HTMLElement, cover: string): void {
   let card: HTMLElement | null = null
