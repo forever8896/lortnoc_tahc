@@ -381,17 +381,3 @@ body{
 .topbar__logo{ height:22px; width:auto; display:block; }
 .topbar__brand{ display:flex; align-items:center; gap:11px; text-decoration:none; }
 
-/* Landing "built on" row — one last unmistakable statement of the stack. */
-.builton{ padding-top:clamp(60px,7vw,96px); padding-bottom:clamp(60px,7vw,96px); border-top:1px solid var(--rule); }
-.builton__label{ margin-bottom:clamp(28px,3.5vw,48px); }
-.builton__row{
-  display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
-  gap:clamp(28px,4vw,64px); align-items:center;
-}
-.builton__item{ display:flex; flex-direction:column; gap:14px; text-decoration:none; }
-.builton__item img{ height:clamp(38px,4.4vw,60px); width:auto; align-self:flex-start; }
-.builton__item span{
-  font-family:var(--mono); font-size:10px; letter-spacing:0.2em; text-transform:uppercase;
-  color:rgba(237,234,228,0.45); transition:color .3s ease;
-}
-.builton__item:hover span,.builton__item:focus-visible span{ color:var(--signal); }
