@@ -1,0 +1,70 @@
+/* Lortnoc DM — design system, matched to site/index.html */
+@font-face { font-family:"Questrial"; font-weight:400; font-display:swap; src:url("/fonts/questrial/questrial-400.woff2") format("woff2"); }
+@font-face { font-family:"Jost"; font-weight:300; font-display:swap; src:url("/fonts/jost/jost-300.woff2") format("woff2"); }
+@font-face { font-family:"Jost"; font-weight:400; font-display:swap; src:url("/fonts/jost/jost-400.woff2") format("woff2"); }
+@font-face { font-family:"Jost"; font-weight:500; font-display:swap; src:url("/fonts/jost/jost-500.woff2") format("woff2"); }
+
+:root {
+  --bg: #08080A;
+  --panel: #0e0e11;
+  --raise: #141418;
+  --ink: #edeae4;
+  --signal: #4ade80;
+  --muted: rgba(237, 234, 228, 0.5);
+  --faint: rgba(237, 234, 228, 0.32);
+  --rule: rgba(237, 234, 228, 0.12);
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --shell: clamp(18px, 4vw, 40px);
+}
+* , *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Jost", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-weight: 300;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection { background: var(--signal); color: var(--bg); }
+a { color: inherit; }
+button { font-family: inherit; }
+
+.mono { font-family: var(--mono); }
+.eyebrow {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.24em;
+  text-transform: uppercase; color: var(--muted);
+}
+.signal { color: var(--signal); }
+.muted { color: var(--muted); }
+
+/* buttons — sharp corners, signal fill, invert on hover (site parity) */
+.btn {
+  background: var(--signal); color: #08080a; border: 0; cursor: pointer;
+  font-size: 15px; font-weight: 400; letter-spacing: 0.01em;
+  padding: 14px 26px; min-height: 44px; display: inline-flex; align-items: center; gap: 8px;
+  transition: background .25s ease, color .25s ease, opacity .2s ease;
+}
+.btn:hover:not(:disabled) { background: var(--ink); }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn--ghost { background: transparent; color: var(--ink); border: 1px solid var(--rule); }
+.btn--ghost:hover:not(:disabled) { background: transparent; border-color: var(--ink); }
+.btn--sm { padding: 9px 16px; min-height: 36px; font-size: 13px; }
+
+.input {
+  width: 100%; background: var(--panel); color: var(--ink);
+  border: 1px solid var(--rule); padding: 14px 16px; font: inherit; font-size: 16px;
+}
+.input:focus { outline: 2px solid var(--signal); outline-offset: -1px; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono);
+  font-size: 11px; letter-spacing: 0.06em; padding: 4px 9px; border: 1px solid var(--rule);
+  color: var(--muted);
+}
+.chip--ok { color: var(--signal); border-color: rgba(74, 222, 128, 0.35); }
+
+.card { background: var(--panel); border: 1px solid var(--rule); }
+.rule { height: 1px; background: var(--rule); border: 0; margin: 0; }
+.spin { animation: sp 0.8s linear infinite; display: inline-block; }
+@keyframes sp { to { transform: rotate(360deg); } }
