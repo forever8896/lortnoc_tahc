@@ -44,6 +44,22 @@ FREE_LIMIT = int(os.environ.get("FREE_LIMIT", "10"))
 UPGRADE_URL = os.environ.get("UPGRADE_URL", "https://app.lortnoctahc.com/upgrade")
 TOKEN_TTL = int(os.environ.get("MEMBERSHIP_TTL", "3600"))  # membership token lifetime (s)
 
+# ---- x402 (HTTP 402 payment protocol) — the paywall is a real x402 resource ----------------
+# The codec sells a MEMBERSHIP as an x402 resource: an unpaid request gets a spec-shaped 402
+# with `accepts` payment requirements; a request bearing a valid X-PAYMENT is settled (via a
+# facilitator) and gets a membership token back. Membership (not per-call) keeps §8 intact:
+# pay once via a wallet ≠ identity → reusable bearer token carrying a nullifier, never the
+# handle. All fields env-configurable so the chain/asset/price aren't hardcoded (prize req).
+X402_NETWORK = os.environ.get("X402_NETWORK", "base-sepolia")  # x402 network slug
+X402_PAY_TO = os.environ.get("X402_PAY_TO", "")  # 0x recipient (treasury; ≠ identity, §4)
+X402_ASSET = os.environ.get("X402_ASSET", "")  # 0x token (e.g. USDC); "" = native
+X402_PRICE = os.environ.get("X402_PRICE", "10000")  # atomic units (10000 = 0.01 USDC @ 6dp)
+X402_ASSET_NAME = os.environ.get("X402_ASSET_NAME", "USDC")  # EIP-712 domain name
+X402_ASSET_VERSION = os.environ.get("X402_ASSET_VERSION", "2")  # EIP-712 domain version
+X402_FACILITATOR = os.environ.get("X402_FACILITATOR", "https://x402.org/facilitator")
+X402_DEV_ACCEPT = os.environ.get("X402_DEV_ACCEPT", "") == "1"  # accept any payment (dev only)
+X402_TIMEOUT = int(os.environ.get("X402_TIMEOUT", "60"))  # maxTimeoutSeconds
+
 _counts = {}  # handle -> free sends used (in-memory; resets on restart)
 _lock = threading.Lock()
 
@@ -122,4 +138,86 @@ def spend(handle) -> int:
 
 def status() -> dict:
     """Non-sensitive gate config for /health."""
-    return {"enforce": ENFORCE, "freeLimit": FREE_LIMIT, "paid": "hmac-token" if SECRET else "off"}
+    return {
+        "enforce": ENFORCE,
+        "freeLimit": FREE_LIMIT,
+        "paid": "hmac-token" if SECRET else "off",
+        "x402": {"network": X402_NETWORK, "price": X402_PRICE, "payTo": bool(X402_PAY_TO)},
+    }
+
+
+# ---- x402 protocol helpers -----------------------------------------------------------------
+
+def x402_requirements(resource: str, description: str) -> dict:
+    """One `accepts` entry per the x402 spec (scheme=exact)."""
+    entry = {
+        "scheme": "exact",
+        "network": X402_NETWORK,
+        "maxAmountRequired": X402_PRICE,
+        "resource": resource,
+        "description": description,
+        "mimeType": "application/json",
+        "payTo": X402_PAY_TO,
+        "maxTimeoutSeconds": X402_TIMEOUT,
+        "asset": X402_ASSET,
+    }
+    if X402_ASSET:  # EIP-712 domain for ERC-3009 tokens (USDC etc.)
+        entry["extra"] = {"name": X402_ASSET_NAME, "version": X402_ASSET_VERSION}
+    return entry
+
+
+def x402_402_body(resource: str, description: str, error: str) -> dict:
+    """Spec-shaped 402 body: { x402Version, accepts[], error }."""
+    return {"x402Version": 1, "accepts": [x402_requirements(resource, description)], "error": error}
+
+
+def x402_settle_header(settlement: dict) -> str:
+    """Value for the X-PAYMENT-RESPONSE header (base64url JSON of the settlement receipt)."""
+    return _b64u(json.dumps(settlement, separators=(",", ":")).encode())
+
+
+def verify_payment(x_payment: str, requirements: dict):
+    """Verify + settle an X-PAYMENT header against `requirements`. Returns a settlement receipt
+    dict on success, else None. SEAM: real settlement is delegated to an x402 facilitator
+    (POST /verify then /settle); X402_DEV_ACCEPT short-circuits for local testing."""
+    if not x_payment:
+        return None
+    try:
+        payment = json.loads(_unb64u(x_payment))
+    except Exception:
+        return None
+
+    if X402_DEV_ACCEPT:  # dev/testing: trust a well-formed payment, no chain call
+        payer = ((payment.get("payload") or {}).get("authorization") or {}).get("from", "0xdev")
+        return {"success": True, "network": X402_NETWORK, "payer": payer, "txHash": "dev", "dev": True}
+
+    # Production: hand the payment + requirements to the facilitator to verify then settle.
+    try:
+        v = _facilitator("/verify", {"x402Version": 1, "paymentPayload": payment, "paymentRequirements": requirements})
+        if not v or not v.get("isValid"):
+            return None
+        s = _facilitator("/settle", {"x402Version": 1, "paymentPayload": payment, "paymentRequirements": requirements})
+        if not s or not s.get("success"):
+            return None
+        return {
+            "success": True,
+            "network": s.get("network", X402_NETWORK),
+            "payer": s.get("payer") or v.get("payer", ""),
+            "txHash": s.get("transaction") or s.get("txHash", ""),
+        }
+    except Exception:
+        return None
+
+
+def _facilitator(path: str, body: dict):
+    """POST to the x402 facilitator (stdlib urllib; kept tiny and dependency-free)."""
+    import urllib.request
+
+    req = urllib.request.Request(
+        X402_FACILITATOR.rstrip("/") + path,
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=X402_TIMEOUT) as resp:
+        return json.loads(resp.read().decode())

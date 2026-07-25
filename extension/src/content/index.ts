@@ -7,7 +7,18 @@ import { initState, get } from './state'
 import { installSendInterceptor, sendCoverText } from './compose'
 import { startInbound } from './inbound'
 import { encrypt, tryDecrypt, toB64, fromB64 } from './crypto'
-import { loadMeter, isBlocked, isRunningLow, increment, remaining, sends } from './metering'
+import {
+  loadMeter,
+  isBlocked,
+  isRunningLow,
+  increment,
+  remaining,
+  sends,
+  syncFromServer,
+  markBlocked,
+  getMembershipToken,
+} from './metering'
+import { getSelfHandle } from './identity'
 import { UPGRADE_URL } from '../shared/config'
 
 const toHex = (u: Uint8Array): string => [...u].map((b) => b.toString(16).padStart(2, '0')).join('')
@@ -47,6 +58,7 @@ async function sendOffer(): Promise<void> {
 }
 
 let inbound: { reset: () => void } | null = null
+let selfHandle = '' // metering bucket key (§9), resolved in main()
 
 /** Short fingerprint of the conversation key — BOTH users should see the SAME value once
  *  the handshake is established. If they differ, the ECDH keys crossed (retry the connect). */
@@ -140,6 +152,7 @@ async function main(): Promise<void> {
   }
   await initState()
   await loadMeter() // freemium counter + paid flag (§9)
+  selfHandle = await getSelfHandle() // stable metering bucket (§9), resolved once
 
   const client = detectClient()
   console.info('[lortnoc] loaded on', location.pathname, '→ client:', client)
@@ -162,6 +175,7 @@ async function main(): Promise<void> {
     // Freemium gate (§9): out of free sends and not a member → fail-closed + funnel to pay.
     // Reading/decoding stays free; only sending is metered.
     if (isBlocked()) {
+      // fast local pre-gate to skip a doomed round-trip; the codec is the real authority
       progress.fail('Free trial used up — unlock to keep sending')
       showPaywall(UPGRADE_URL, sends())
       return null
@@ -175,18 +189,34 @@ async function main(): Promise<void> {
       // best-of-N runs at the tail of /encode; surface it once generation is well underway
       const tSelect = window.setTimeout(() => progress.set(2, '0G · judging 3 covers for the most natural'), 6500)
       try {
-        const cover = await bytesToCover(ct)
-        if (!cover) {
-          console.warn('[lortnoc] encode failed')
-          return cover
+        const res = await sendToCodec<EncodeData>({
+          type: 'ENCODE',
+          ciphertextB64: toB64(ct),
+          handle: selfHandle, // server meters per handle (§9)
+          membership: await getMembershipToken(), // x402 token → unlimited when valid
+        })
+        if (!res.ok) {
+          if (res.status === 402) {
+            // x402: free limit reached server-side → paywall, funnel to pay
+            await markBlocked()
+            progress.fail('Free trial used up — unlock to keep sending')
+            showPaywall(UPGRADE_URL, sends())
+          } else {
+            console.warn('[lortnoc] encode failed:', res.error)
+          }
+          return null
         }
-        // Successful hidden send → count it toward the free quota.
-        await increment()
-        if (isRunningLow()) {
-          const n = remaining()
-          toast(`${n} free message${n === 1 ? '' : 's'} left — members send unlimited.`, 5000)
+        const { coverText, remaining: left, member } = res.data
+        if (typeof left === 'number' && (left >= 0 || member === true)) {
+          await syncFromServer(left, member === true) // server enforcing → mirror its count
+        } else {
+          await increment() // server not enforcing → local metering (pre-flip behaviour)
+          if (isRunningLow()) {
+            const n = remaining()
+            toast(`${n} free message${n === 1 ? '' : 's'} left — members send unlimited.`, 5000)
+          }
         }
-        return cover
+        return coverText
       } finally {
         window.clearTimeout(tSelect)
       }

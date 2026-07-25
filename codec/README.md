@@ -25,7 +25,8 @@ by a client-side counter a modified extension can reset. Off by default; flip on
   here, so clearing browser storage no longer resets it; farming free quota costs a fresh Telegram account.
   Over `FREE_LIMIT` → **402** with the `upgrade` URL.
 - **Paid tier** — a signed `membership` token (carries the Semaphore **nullifier**, never the handle or
-  payment wallet, so payment↔usage stays unlinkable, §8) bypasses metering → unlimited.
+  payment wallet, so payment↔usage stays unlinkable, §8) bypasses metering → unlimited. The token is sold
+  over **x402** (below).
 - **Handshake frames** (`fast: true`, pubkey-only) and **`/decode`** are never gated — key exchange and
   reading are always free.
 
@@ -40,6 +41,35 @@ Honest limits: the handle is client-asserted (spoofable, but raises cheating cos
 | `FREE_LIMIT` | `10` | free sends per handle before 402 |
 | `UPGRADE_URL` | app `/upgrade` | where the 402 points the client |
 | `MEMBERSHIP_TTL` | `3600` | membership-token lifetime (s) |
+
+## x402 — the paywall is a real payment resource
+
+The `402` isn't a bare error: it's a spec-shaped **x402** response, and membership is sold as an x402
+resource at **`POST/GET /membership`**.
+
+```
+GET /membership                         -> 402 { x402Version, accepts:[{scheme:"exact", network,
+                                                  maxAmountRequired, payTo, asset, ...}], error }
+GET /membership  (header X-PAYMENT: …)  -> 200 { token, member, expiresIn }   + X-PAYMENT-RESPONSE header
+```
+
+An x402-aware client reads `accepts`, constructs a payment, and retries with `X-PAYMENT`; the codec
+delegates verify+settle to an x402 **facilitator**, then mints the bearer `membership` token. `/encode`'s
+402 also embeds the same `accepts` (pay inline) alongside a plain `upgrade` URL (non-x402 clients).
+
+**§8 stays intact:** membership is bought **once** (reusable token), by a wallet ≠ identity, and the token
+carries a nullifier — so the public payment tx never links to the handle or per-message usage. The clean
+version binds a Semaphore nullifier at mint (`sign_token`) instead of the payer address, and funds a
+`join()` — see the `verify_nullifier_onchain` seam.
+
+| env | default | meaning |
+|---|---|---|
+| `X402_NETWORK` | `base-sepolia` | x402 network slug (chain is an open decision) |
+| `X402_PAY_TO` | — | `0x` treasury recipient (must be ≠ identity wallet, §4) |
+| `X402_ASSET` | — | `0x` token address (e.g. USDC); empty = native |
+| `X402_PRICE` | `10000` | membership price, atomic units |
+| `X402_FACILITATOR` | `x402.org/facilitator` | verify+settle endpoint |
+| `X402_DEV_ACCEPT` | off | `"1"` accepts any well-formed payment (LOCAL TESTING ONLY) |
 
 ## Backends (`CODEC_BACKEND`, default `auto`)
 

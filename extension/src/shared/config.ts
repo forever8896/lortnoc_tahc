@@ -9,6 +9,8 @@ export const LOCAL = {
   codecUrl: 'codecUrl',
   enabled: 'enabled', // global stego on/off for the demo (per-chat is a fast-follow)
   meter: 'meter', // freemium counter + paid flag ({ sends: number, paid: boolean })
+  membership: 'membership', // x402 membership bearer token (set by the unlock flow)
+  bucket: 'bucket', // stable per-install metering-bucket id (fallback when no TG id)
 } as const
 
 // Freemium gate (§9). Honor-system, client-side, bypassable by design — a conversion

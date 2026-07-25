@@ -33,19 +33,47 @@ class Handler(BaseHTTPRequestHandler):
     # ---- CORS (belt-and-suspenders; the SW path bypasses CORS via host_permissions) ----
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-PAYMENT")
+        self.send_header("Access-Control-Expose-Headers", "X-PAYMENT-RESPONSE")
         self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
         # PNA/LNA transition hedge (harmless if unused):
         self.send_header("Access-Control-Allow-Private-Network", "true")
 
-    def _json(self, code, obj):
+    def _json(self, code, obj, headers=None):
         body = json.dumps(obj).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         self._cors()
         self.end_headers()
         self.wfile.write(body)
+
+    def _membership_url(self):
+        """Best-effort absolute URL of this resource (x402 `resource` field)."""
+        host = self.headers.get("Host", f"{HOST}:{PORT}")
+        proto = self.headers.get("X-Forwarded-Proto", "https" if ":" not in host or host.endswith(":443") else "http")
+        return f"{proto}://{host}/membership"
+
+    def _membership(self):
+        """x402 resource: sells a membership token. No X-PAYMENT → 402 with payment
+        requirements; valid X-PAYMENT → settle + mint a token (§7/§8)."""
+        resource = self._membership_url()
+        xp = self.headers.get("X-PAYMENT")
+        if not xp:
+            return self._json(402, auth.x402_402_body(resource, "lortnoc membership", "payment required"))
+        settlement = auth.verify_payment(xp, auth.x402_requirements(resource, "lortnoc membership"))
+        if not settlement:
+            return self._json(402, auth.x402_402_body(resource, "lortnoc membership", "payment invalid or unsettled"))
+        # Mint the bearer token. NOTE (§8): the clean version binds a Semaphore NULLIFIER here,
+        # not the payer address — payer is a placeholder until the join()-on-pay path is wired.
+        token = auth.sign_token(settlement.get("payer", ""))
+        return self._json(
+            200,
+            {"token": token, "member": True, "expiresIn": auth.TOKEN_TTL},
+            headers={"X-PAYMENT-RESPONSE": auth.x402_settle_header(settlement)},
+        )
 
     def _read_json(self):
         n = int(self.headers.get("Content-Length", "0"))
@@ -60,6 +88,8 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if self.path.rstrip("/") == "/membership":
+            return self._membership()
         if self.path.rstrip("/") == "/health":
             return self._json(
                 200,
@@ -75,6 +105,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.rstrip("/")
+        if path == "/membership":  # x402 clients may POST the paid request
+            return self._membership()
         try:
             req = self._read_json()
             if path == "/encode":
@@ -87,10 +119,11 @@ class Handler(BaseHTTPRequestHandler):
                 if auth.ENFORCE and not fast:
                     verdict = auth.authorize(req.get("handle"), req.get("membership"))
                     if not verdict["allow"]:
-                        return self._json(
-                            402,
-                            {"error": "free limit reached", "upgrade": auth.UPGRADE_URL, "remaining": 0},
-                        )
+                        # x402-shaped 402: `accepts` lets an x402 client pay for membership
+                        # inline; `upgrade` is the simple funnel for a non-x402 client.
+                        body = auth.x402_402_body(self._membership_url(), "lortnoc membership", "free limit reached")
+                        body.update({"upgrade": auth.UPGRADE_URL, "remaining": 0})
+                        return self._json(402, body)
 
                 cover = codec.encode(ct, fast=fast)
 

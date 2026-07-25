@@ -58,3 +58,28 @@ export async function setPaid(paid: boolean): Promise<void> {
   state.paid = paid
   await persist()
 }
+
+/** Reconcile local state with the codec's authoritative count (§7). Called after each
+ *  /encode: the server owns the number once enforcing, so we mirror it instead of guessing.
+ *  remaining < 0 means the server isn't enforcing → caller keeps local metering instead. */
+export async function syncFromServer(remaining: number, member: boolean): Promise<void> {
+  if (member) {
+    state.paid = true
+  } else {
+    state.sends = Math.max(0, FREE_LIMIT - remaining)
+  }
+  await persist()
+}
+
+/** Mark blocked from a 402 so the popup bar reflects the server's verdict immediately. */
+export async function markBlocked(): Promise<void> {
+  state.sends = FREE_LIMIT
+  await persist()
+}
+
+/** The x402 membership bearer token, if the unlock flow has stored one. */
+export async function getMembershipToken(): Promise<string | undefined> {
+  const got = await chrome.storage.local.get(LOCAL.membership)
+  const tok = got[LOCAL.membership] as string | undefined
+  return tok || undefined
+}
