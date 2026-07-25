@@ -3,45 +3,60 @@
 Strict priority, so if time runs out you stop at a natural cut line and still have a winning demo.
 **Rule: the extension doing encrypt→cover→decode on Telegram Web is P0; everything else is negotiable.**
 
-## P0 — Hero demo: the extension on Telegram Web
-*Ship this first. If only this works, you win the room. Items build on each other in order.*
+## P0 — Hero demo: the extension on Telegram Web ✅ DONE & LIVE
 
-- [x] **Codec round-trips deterministically** — `codec/`: **real GPT-2 block-stego backend** (byte-safe lowercase-word tokens, self-tests on startup) + `wordmap` fallback. Reversibility proven model-independently in `test_coder.py`; run the GPT-2 path with `pip install -r requirements.txt` (torch not installable in the build sandbox, so verified via the mock + startup self-test)
-- [x] **Extension scaffold + loads on `web.telegram.org`** — CRXJS MV3, content script on `/k/`, SW, popup toggle; `npm run build` clean *(load-unpacked confirmation pending)*
-- [ ] **🔑 Telegram byte-exactness test** — **PENDING (needs live browser)**: load unpacked, confirm `execCommand('insertText')` + `.btn-send.click()` sends byte-identical cover text on the current Web K build. Code is in `content/compose.ts`; this is the one live gate.
-- [x] **Client-side AES-SIV** — `@noble/ciphers` in `content/crypto.ts`; `test/pipeline.test.mjs` proves round-trip + wrong-key detector
-- [x] **Outbound** — send-intercept → encrypt → `/encode` → replace → send *(logic verified end-to-end minus DOM)*
-- [x] **Inbound** — observer + dedupe-by-`data-mid` → `/decode` → AES-SIV verify → inline render *(logic verified minus DOM)*
-- [~] **Demo polish** — shuffle animation + fail-closed done; selector-miss messaging + transform-then-send fallback still to add
+- [x] **Codec, deployed & warm** — `codec/` GPT-2 block-stego on **fly** (`lortnoc-codec.fly.dev`, `gpt2/k6`),
+      byte-safe lowercase-word tokens, profanity/NSFW filter, random-nonce openings; markov + wordmap fallbacks;
+      reversibility proven model-independently (`test_coder.py`).
+- [x] **Extension loads & runs on `web.telegram.org/k/`** — CRXJS MV3, content script, SW codec broker, popup.
+- [x] **🔑 Telegram byte-exactness — CONFIRMED LIVE** — real messages round-trip through Telegram (tested in-browser).
+- [x] **Client-side AES-SIV** — `@noble/ciphers`; wrong-key detector works (`test/pipeline.test.mjs`).
+- [x] **Outbound** — send-intercept → encrypt → `/encode` → replace → send. No plaintext leak, no double-send.
+- [x] **Inbound** — observer, dedupe-by-`data-mid`, decode-cache, AES-SIV verify → inline render + hover card
+      showing what Telegram stored.
+- [x] **Demo polish** — shuffle/pulse busy cue, fail-closed everywhere, SW fetch timeout, selector-miss messaging.
 
-**Done when:** two accounts (or two browser profiles) hold a real hidden conversation through Telegram; onlookers see only chatter. *This is the whole pitch.*
+**Done:** two people hold a real hidden conversation through Telegram; onlookers see only chatter. *The pitch works, live.*
+
+## P0.5 — Shipped beyond the original P0 ✅
+
+- [x] **Passphrase-free Tier-1 handshake** *(was cut — we built it)* — X25519 ECDH keys smuggled as cover text,
+      one-tap Accept, no shared secret. Frames skip best-of-N (fast ~2-3s). `content/handshake.ts` + `session.ts`.
+- [x] **0G best-of-N cover selection — LIVE** — real 0G Compute **testnet** inference judges which of 3 covers reads
+      most natural, in the live send path. Broker sidecar on fly (`lortnoc-zerog.fly.dev`), funded testnet wallet.
+      *(This is genuine 0G Compute usage — see P1.)*
 
 ## P1 — Prize coverage
-*Each a minimal, standalone, parallelizable integration.*
 
-- [ ] **Sui** — Walrus `writeBlob`/`readBlob` of a `Seal.encrypt`ed blob + a real `seal_approve` policy (**session-key fallback**, not nullifier-in-policy)
-- [ ] **ENS** — one handle on a real **Permissioned Resolver** + **one per-record role delegation** (`inbox`→gateway; show `pubkey` write reverts, then revoke) + `verifyContract`
-- [ ] **0G** — Semaphore membership/verifier deployed on **Galileo (16602)** (the contract address) + **one non-codec** sealed-inference call + `<3-min` video
+- [~] **0G — partially done.** ✅ Compute inference is LIVE (best-of-N above). **Still needed:** deploy the Semaphore
+      membership/verifier contract on **Galileo (16602)** for the required "contract address" + a `<3-min` demo video.
+      Fine-tune path prepped (`codec/finetune/`, verified exportable) as a second, deeper 0G integration if wanted.
+- [ ] **Sui** — Walrus `writeBlob`/`readBlob` of a `Seal.encrypt`ed blob + a real `seal_approve` policy
+      (session-key fallback, not nullifier-in-policy). **Not started.**
+- [ ] **ENS** — one handle on a real **Permissioned Resolver** + one per-record role delegation
+      (`inbox`→gateway; `pubkey` write reverts; revoke) + `verifyContract`. **Not started.**
 
-## P2 — Differentiators & reliability
-*Only if P0 + P1 are solid.*
+## P2 — Differentiators & reliability *(only if P1 is moving)*
 
-- [ ] **Native-mode 1:1 DM** — reliable full-stack fallback demo (poll, single-writer head)
-- [ ] **Knock** (challenge-gated contact) — the creative headline
-- [ ] **Discoverability gateway** — conditional resolution / findability ladder
-- [ ] **Storage benchmark** artifact (Walrus+Seal vs 0G Storage)
-- [ ] **Unified inbox + conversion CTA**
+- [ ] **Wallet-signature identity** — swap the handshake's random keypair for a wallet-signature-derived one
+      (the handshake/ECDH piping is already built; this is the small next brick).
+- [ ] **Arithmetic-coding codec** — built + proven in a worktree (`CODEC_CODER=arith`, default off). More *natural*
+      cover text (not shorter — measured). Merge/deploy decision pending.
+- [ ] **Native-mode 1:1 DM** — reliable full-stack fallback demo (poll, single-writer head).
+- [ ] **Knock** (challenge-gated contact) — the creative headline.
+- [ ] **Discoverability gateway** — conditional resolution / findability ladder.
+- [ ] **Storage benchmark** artifact (Walrus+Seal vs 0G Storage).
+- [ ] **Unified inbox + conversion CTA.**
 
 ## ❌ OUT — do not build (scope guards)
 
 - Realtime relay / libp2p → **poll instead**
 - PWA as a full app
-- In-band Tier-1 handshake on the demo path → **pre-shared key**
 - nullifier-inside-`seal_approve` → **session-key fallback**
 - ERC-5564 stealth payment layer *(roadmap; beyond the messaging core)*
 - Multi-writer `ConversationHead`
 
 ---
 
-**Cut lines:** finish **P0** → hero demo. Add **P1** → prizes. **P2** is gravy.
-If behind, drop from the bottom up — never let P1/P2 steal hours from an unfinished P0.
+**Where we stand:** P0 hero demo is **done and live**, plus the passphrase-free handshake and a real **0G Compute**
+integration. **The winning-submission gap is now Sui + ENS + the 0G contract/video** (P1). P2 is all upside.
