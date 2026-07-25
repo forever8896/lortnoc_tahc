@@ -72,7 +72,8 @@ class Handler(BaseHTTPRequestHandler):
             req = self._read_json()
             if path == "/encode":
                 ct = base64.b64decode(req["ciphertext"], validate=True)
-                return self._json(200, {"coverText": codec.encode(ct)})
+                fast = bool(req.get("fast", False))  # handshake frames skip best-of-N
+                return self._json(200, {"coverText": codec.encode(ct, fast=fast)})
             if path == "/decode":
                 ct = codec.decode(req["coverText"])
                 return self._json(200, {"ciphertext": base64.b64encode(ct).decode()})

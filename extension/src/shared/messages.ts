@@ -2,7 +2,7 @@
 
 export type CodecRequest =
   | { type: 'HEALTH' }
-  | { type: 'ENCODE'; ciphertextB64: string }
+  | { type: 'ENCODE'; ciphertextB64: string; fast?: boolean }
   | { type: 'DECODE'; coverText: string }
 
 export type HealthData = { model: string; digest: string; ready: boolean }

@@ -38,7 +38,7 @@ async function handle(msg: CodecRequest): Promise<CodecResponse> {
       return r.ok ? { ok: true, data: await r.json() } : { ok: false, error: `health ${r.status}` }
     }
     if (msg.type === 'ENCODE') {
-      const r = await postJson(`${base}/encode`, { ciphertext: msg.ciphertextB64 })
+      const r = await postJson(`${base}/encode`, { ciphertext: msg.ciphertextB64, fast: msg.fast === true })
       return r.ok ? { ok: true, data: await r.json() } : { ok: false, error: `encode ${r.status}` }
     }
     if (msg.type === 'DECODE') {

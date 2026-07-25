@@ -21,15 +21,16 @@ function haveKey(): boolean {
   return activeKey() !== null
 }
 
-/** Encode arbitrary bytes to cover text via the codec (used for handshake frames). */
-async function bytesToCover(bytes: Uint8Array): Promise<string | null> {
-  const res = await sendToCodec<EncodeData>({ type: 'ENCODE', ciphertextB64: toB64(bytes) })
+/** Encode arbitrary bytes to cover text via the codec. `fast` skips best-of-N (used for
+ *  handshake frames — they carry only public keys, so cover polish isn't worth ~11s). */
+async function bytesToCover(bytes: Uint8Array, fast = false): Promise<string | null> {
+  const res = await sendToCodec<EncodeData>({ type: 'ENCODE', ciphertextB64: toB64(bytes), fast })
   return res.ok ? res.data.coverText : null
 }
 
 async function sendOffer(): Promise<void> {
   const frame = await session.startOffer()
-  const cover = await bytesToCover(frame)
+  const cover = await bytesToCover(frame, true) // fast: handshake frame, skip best-of-N
   if (cover && (await sendCoverText(cover))) toast('🤝 Invite sent. Waiting for the other side to accept…')
   else toast('Could not send the invite — is Stego on and the codec reachable?')
 }
@@ -39,7 +40,7 @@ async function handleFrame(type: number, pubkey: Uint8Array): Promise<void> {
   if (type === FRAME.OFFER) {
     showAcceptBanner(async () => {
       const ack = await session.acceptOffer(pubkey)
-      const cover = await bytesToCover(ack)
+      const cover = await bytesToCover(ack, true) // fast: handshake frame, skip best-of-N
       if (cover) await sendCoverText(cover)
       toast('🔒 Private session established — no passphrase needed.')
     })
