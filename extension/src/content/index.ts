@@ -127,13 +127,23 @@ async function main(): Promise<void> {
   )
 
   // Outbound: real text → AES-SIV(activeKey) → /encode → cover text (or null = fail-closed).
-  installSendInterceptor(client, haveKey, async (real) => {
+  // Reports each real stage to the progress stepper so the ~10s send is legible.
+  installSendInterceptor(client, haveKey, async (real, progress) => {
     const key = activeKey()
     if (!key) return null
     try {
-      const cover = await bytesToCover(encrypt(key, real))
-      if (!cover) console.warn('[lortnoc] encode failed')
-      return cover
+      progress.set(0, 'AES-SIV · never leaves this page')
+      const ct = encrypt(key, real)
+      progress.set(1, 'GPT-2 · hiding it as chatter')
+      // best-of-N runs at the tail of /encode; surface it once generation is well underway
+      const tSelect = window.setTimeout(() => progress.set(2, '0G · judging 3 covers for the most natural'), 6500)
+      try {
+        const cover = await bytesToCover(ct)
+        if (!cover) console.warn('[lortnoc] encode failed')
+        return cover
+      } finally {
+        window.clearTimeout(tSelect)
+      }
     } catch (e) {
       console.warn('[lortnoc] encrypt error:', e)
       return null

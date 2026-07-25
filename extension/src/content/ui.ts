@@ -54,9 +54,110 @@ export function injectStyles(): void {
       0%,100% { opacity: 1; }
       50%     { opacity: .45; filter: blur(.3px); }
     }
+    /* send-progress stepper */
+    .lortnoc-prog {
+      position: fixed; right: 20px; bottom: 20px; z-index: 2147483647; width: 272px;
+      background: #0b0b0e; border: 1px solid rgba(237,234,228,.14); border-left: 2px solid ${SIGNAL};
+      border-radius: 4px; padding: 14px 16px; color: #edeae4;
+      font: 300 13px/1.4 "LortnocJost", system-ui, sans-serif;
+      box-shadow: 0 14px 40px rgba(0,0,0,.6); transition: opacity .25s ease;
+    }
+    .lortnoc-prog__eye { font-family: ui-monospace,SFMono-Regular,Menlo,monospace; font-size: 9.5px;
+      letter-spacing: .18em; text-transform: uppercase; color: ${SIGNAL}; margin-bottom: 12px; }
+    .lortnoc-prog__step { display: flex; align-items: center; gap: 10px; padding: 3px 0;
+      color: rgba(237,234,228,.3); transition: color .25s ease; }
+    .lortnoc-prog__step[data-s="done"] { color: rgba(237,234,228,.85); }
+    .lortnoc-prog__step[data-s="active"] { color: ${SIGNAL}; }
+    .lortnoc-prog__step[data-s="fail"] { color: #f0806a; }
+    .lortnoc-prog__dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid currentColor;
+      box-sizing: border-box; flex: 0 0 auto; }
+    .lortnoc-prog__step[data-s="done"] .lortnoc-prog__dot { background: ${SIGNAL}; border-color: ${SIGNAL}; }
+    .lortnoc-prog__step[data-s="active"] .lortnoc-prog__dot { border-color: ${SIGNAL}; animation: lortnoc-pulse 1s ease-in-out infinite; }
+    .lortnoc-prog__sub { font-family: ui-monospace,SFMono-Regular,Menlo,monospace; font-size: 10px;
+      color: rgba(237,234,228,.42); margin: 0 0 4px 19px; }
+    .lortnoc-prog__bar { height: 2px; background: rgba(237,234,228,.1); margin-top: 11px; }
+    .lortnoc-prog__fill { height: 100%; width: 0; background: ${SIGNAL}; transition: width .5s ease; }
     @media (prefers-reduced-motion: reduce) { .lortnoc-shuffle, .lortnoc-busy { animation: none; } }
   `
   document.documentElement.appendChild(s)
+}
+
+export interface Progress {
+  /** Mark steps < i as done, step i active (with optional sub-label under it). */
+  set(i: number, sub?: string): void
+  done(msg?: string): void
+  fail(msg: string): void
+}
+
+/** A floating stepper that walks a send through its real stages (encrypt → cover → 0G → sent). */
+export function createProgress(steps: string[]): Progress {
+  const el = document.createElement('div')
+  el.className = 'lortnoc-prog'
+  const eye = document.createElement('div')
+  eye.className = 'lortnoc-prog__eye'
+  eye.textContent = 'lortnoc · sending privately'
+  el.appendChild(eye)
+
+  const rows: HTMLElement[] = []
+  const subEls: HTMLElement[] = []
+  steps.forEach((label) => {
+    const row = document.createElement('div')
+    row.className = 'lortnoc-prog__step'
+    row.dataset.s = 'pending'
+    const dot = document.createElement('span')
+    dot.className = 'lortnoc-prog__dot'
+    const txt = document.createElement('span')
+    txt.textContent = label
+    row.append(dot, txt)
+    el.appendChild(row)
+    rows.push(row)
+    const sub = document.createElement('div')
+    sub.className = 'lortnoc-prog__sub'
+    sub.style.display = 'none'
+    el.appendChild(sub)
+    subEls.push(sub)
+  })
+  const bar = document.createElement('div')
+  bar.className = 'lortnoc-prog__bar'
+  const fill = document.createElement('div')
+  fill.className = 'lortnoc-prog__fill'
+  bar.appendChild(fill)
+  el.appendChild(bar)
+  document.body.appendChild(el)
+
+  let removed = false
+  const remove = (delay: number): void => {
+    if (removed) return
+    removed = true
+    window.setTimeout(() => {
+      el.style.opacity = '0'
+      window.setTimeout(() => el.remove(), 250)
+    }, delay)
+  }
+
+  return {
+    set(i, sub) {
+      rows.forEach((r, k) => (r.dataset.s = k < i ? 'done' : k === i ? 'active' : 'pending'))
+      subEls.forEach((s, k) => {
+        s.style.display = k === i && sub ? 'block' : 'none'
+        if (k === i && sub) s.textContent = sub
+      })
+      fill.style.width = `${Math.round(((i + 0.5) / steps.length) * 100)}%`
+    },
+    done(msg) {
+      rows.forEach((r) => (r.dataset.s = 'done'))
+      subEls.forEach((s) => (s.style.display = 'none'))
+      fill.style.width = '100%'
+      eye.textContent = msg ?? 'sent'
+      remove(1500)
+    },
+    fail(msg) {
+      const active = rows.find((r) => r.dataset.s === 'active')
+      if (active) active.dataset.s = 'fail'
+      eye.textContent = msg
+      remove(3200)
+    },
+  }
 }
 
 export function shuffle(el: HTMLElement): void {

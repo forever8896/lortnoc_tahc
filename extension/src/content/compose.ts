@@ -4,7 +4,7 @@
 // send button. Swap ONLY at send-time so Telegram's draft autosave never persists text.
 import type { TgClient } from './selectors'
 import { selectorsFor, activeCompose } from './selectors'
-import { shuffle } from './ui'
+import { shuffle, createProgress, type Progress } from './ui'
 
 let swapping = false // true from the moment a send is intercepted until the cover is sent
 let allowNextClick = false // set right before OUR programmatic send-button click, so it passes through
@@ -46,7 +46,7 @@ function visibleSendButton(selector: string): HTMLElement | null {
  * onSwap(realText) → coverText to send, or null to ABORT the send (fail-closed:
  * never auto-send plaintext when encoding fails).
  */
-export type SwapFn = (realText: string) => Promise<string | null>
+export type SwapFn = (realText: string, progress: Progress) => Promise<string | null>
 
 /**
  * Programmatically send an already-encoded cover text (used for handshake offer/ack
@@ -101,18 +101,25 @@ export function installSendInterceptor(
     }
     input.classList.add('lortnoc-busy') // persistent "working" cue during the slow codec call
     shuffle(input)
+    const progress = createProgress(['Encrypting', 'Weaving cover text', 'Picking the most natural', 'Sending'])
     try {
-      const cover = await onSwap(real) // encrypt + /encode (GPT-2 → seconds)
+      const cover = await onSwap(real, progress) // encrypt + /encode (GPT-2 → seconds)
       console.debug('[lortnoc] swap: %o -> %o', real, cover)
-      if (cover == null) return // fail-closed: leave draft, do not send
+      if (cover == null) {
+        progress.fail('Encoding failed — not sent')
+        return // fail-closed: leave draft, do not send
+      }
       replaceCompose(input, cover)
       const btn = visibleSendButton(sel!.sendButton)
       if (!btn) {
         console.warn('[lortnoc] send button not found for', sel!.sendButton)
+        progress.fail('Send button not found')
         return
       }
+      progress.set(3, 'via Telegram')
       allowNextClick = true
       btn.click() // real send; our click passes the interceptor via allowNextClick
+      progress.done('Sent — reads like normal chatter')
       window.setTimeout(() => {
         allowNextClick = false
       }, 300)

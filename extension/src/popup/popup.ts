@@ -107,6 +107,8 @@ async function refreshHsStatus(): Promise<void> {
     }
     const [text, on] = map[r?.status] ?? ['not connected', false]
     setChip(hsStatus, text, on)
+    // keep the master-switch sub-label honest: "on" only hides once there's a key
+    if (stegoOn) masterSub.textContent = r?.hasKey ? 'on · hiding your messages' : 'on · connect a session first ↓'
   } catch {
     setChip(hsStatus, 'reload the tab', false)
   }
