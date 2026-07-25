@@ -1,42 +1,56 @@
-// Sui + Walrus store. Messages are AES-SIV-encrypted client-side (we hold K_conv), stored
-// as Walrus blobs, pointed at by a Sui ConversationHead object. Seal (threshold encryption
-// + seal_approve policy) is the differentiator to layer on top — marked below.
+// Sui + Walrus store. Messages are encrypted client-side under K_conv (ECDH-derived, §5.3),
+// written to Walrus as blobs, and pointed at by a shared `ConversationHead` Sui object.
 //
-// ⚠️ Needs the Move package published (contracts/move) + testnet SUI/WAL. Validate in-browser.
-import { SuiClient, getFullnodeUrl } from '@mysten/sui/client'
+// Walrus is the durable log, not a per-message bus (§6.4) — reads poll the head.
+//
+// The signer is an Ed25519 keypair derived from the user's MS (§5.1), so storage needs no
+// separate Sui wallet; that address just has to hold testnet SUI (gas) and WAL (storage).
+import { SuiClient } from '@mysten/sui/client'
 import { Transaction } from '@mysten/sui/transactions'
+import type { Signer } from '@mysten/sui/cryptography'
 import { SUI, assertSuiSetup } from './config'
 import { encrypt, tryDecrypt } from '../crypto'
 import type { Message } from '../types'
 
-export const sui = new SuiClient({ url: SUI.rpc || getFullnodeUrl('testnet') })
+export const sui = new SuiClient({ url: SUI.rpc })
 
-// A minimal blob store over Walrus. The @mysten/walrus WalrusClient signature can drift;
-// this wraps the two calls we need so the rest of the app is stable.
-async function walrusWrite(bytes: Uint8Array, signAndExecute: SignFn): Promise<string> {
+/** Walrus client, lazily constructed (the SDK pulls in a lot; keep it off the boot path). */
+async function walrus() {
   const { WalrusClient } = await import('@mysten/walrus')
-  const client = new WalrusClient({ network: 'testnet', suiClient: sui as any })
-  const res = await client.writeBlob({ blob: bytes, deletable: true, epochs: 3, signer: signAndExecute as any })
-  return res.blobId
+  return new WalrusClient({
+    network: SUI.network,
+    suiClient: sui as never,
+    uploadRelay: { host: SUI.uploadRelay, sendTip: { max: SUI.uploadRelayMaxTip } },
+  })
 }
+
+/** Write an encrypted blob to Walrus. `signer` pays WAL for storage and SUI for gas. */
+async function walrusWrite(bytes: Uint8Array, signer: Signer): Promise<string> {
+  const client = await walrus()
+  const { blobId } = await client.writeBlob({
+    blob: bytes,
+    deletable: true,
+    epochs: SUI.epochs,
+    signer,
+  })
+  return blobId
+}
+
 async function walrusRead(blobId: string): Promise<Uint8Array> {
-  const { WalrusClient } = await import('@mysten/walrus')
-  const client = new WalrusClient({ network: 'testnet', suiClient: sui as any })
+  const client = await walrus()
   return client.readBlob({ blobId })
 }
 
-type SignFn = (tx: Transaction) => Promise<{ digest: string; objectChanges?: unknown[] }>
-
-/** Append a message: encrypt → Walrus blob → bump the ConversationHead Sui object. */
+/** Append a message: encrypt → Walrus blob → create or bump the ConversationHead. */
 export async function sendMessage(
   headId: string | null,
   convKey: Uint8Array,
   msg: Message,
-  signAndExecute: SignFn,
+  signer: Signer,
+  peerAddress: string,
 ): Promise<{ headId: string; blobId: string }> {
   assertSuiSetup()
-  const blob = encrypt(convKey, JSON.stringify(msg))
-  const blobId = await walrusWrite(blob, signAndExecute)
+  const blobId = await walrusWrite(encrypt(convKey, JSON.stringify(msg)), signer)
 
   const tx = new Transaction()
   if (headId) {
@@ -47,35 +61,76 @@ export async function sendMessage(
   } else {
     tx.moveCall({
       target: `${SUI.packageId}::conversation::create`,
-      arguments: [tx.pure.string(msg.from), tx.pure.string(msg.to), tx.pure.string(blobId), tx.pure.u64(msg.ts)],
+      arguments: [
+        tx.pure.string(msg.from),
+        tx.pure.string(msg.to),
+        tx.pure.address(peerAddress),
+        tx.pure.string(blobId),
+        tx.pure.u64(msg.ts),
+      ],
     })
   }
-  const res = await signAndExecute(tx)
-  const created = (res.objectChanges as { type: string; objectId: string; objectType?: string }[] | undefined)?.find(
-    (c) => c.type === 'created' && c.objectType?.includes('conversation::ConversationHead'),
+
+  const res = await sui.signAndExecuteTransaction({
+    transaction: tx,
+    signer,
+    options: { showObjectChanges: true, showEffects: true },
+  })
+  await sui.waitForTransaction({ digest: res.digest })
+  if (res.effects?.status.status !== 'success') {
+    throw new Error(`Sui tx failed: ${res.effects?.status.error ?? 'unknown'}`)
+  }
+
+  const created = res.objectChanges?.find(
+    (c) => c.type === 'created' && 'objectType' in c && c.objectType.includes('conversation::ConversationHead'),
   )
-  return { headId: headId ?? created?.objectId ?? '', blobId }
+  const newHead = created && 'objectId' in created ? created.objectId : null
+  return { headId: headId ?? newHead ?? '', blobId }
 }
 
-/** Read a conversation's messages: fetch the head's blob ids → Walrus → decrypt. */
+/** Read a conversation: head → blob ids → Walrus → decrypt. Undecryptable blobs are skipped
+ *  (a wrong key is indistinguishable from a foreign blob, which is the point — §6.1). */
 export async function readMessages(headId: string, convKey: Uint8Array): Promise<Message[]> {
   assertSuiSetup()
   const head = await sui.getObject({ id: headId, options: { showContent: true } })
-  const fields = (head.data?.content as { fields?: { blobs?: string[] } } | undefined)?.fields
-  const blobIds = fields?.blobs ?? []
+  const content = head.data?.content
+  const fields = content && content.dataType === 'moveObject'
+    ? (content.fields as { blobs?: string[] })
+    : undefined
   const out: Message[] = []
-  for (const id of blobIds) {
+  for (const id of fields?.blobs ?? []) {
     try {
-      const bytes = await walrusRead(id)
-      const pt = tryDecrypt(convKey, bytes)
+      const pt = tryDecrypt(convKey, await walrusRead(id))
       if (pt) out.push(JSON.parse(pt) as Message)
     } catch {
-      /* skip unreadable blob */
+      /* blob unavailable or not ours — skip */
     }
   }
   return out.sort((a, b) => a.ts - b.ts)
 }
 
-// SEAL (differentiator, wire next): instead of our AES-SIV, Seal.encrypt to an identity
-// gated by an on-chain seal_approve policy; decryption needs a t-of-n key-server session.
-// See contracts/move/sources/conversation.move for the seal_approve stub + LIVE-SETUP.md.
+/** Find conversation heads this address participates in, so a second device (or the peer)
+ *  discovers threads without a local index. */
+export async function findHeads(address: string): Promise<string[]> {
+  assertSuiSetup()
+  const events = await sui.queryEvents({
+    query: { MoveEventType: `${SUI.packageId}::conversation::ConversationCreated` },
+    limit: 50,
+    order: 'descending',
+  })
+  const ids = events.data.map((e) => (e.parsedJson as { head?: string })?.head).filter(Boolean) as string[]
+  const mine: string[] = []
+  for (const id of ids) {
+    const o = await sui.getObject({ id, options: { showContent: true } })
+    const c = o.data?.content
+    if (c?.dataType !== 'moveObject') continue
+    const members = (c.fields as { members?: string[] }).members ?? []
+    if (members.some((m) => m.toLowerCase() === address.toLowerCase())) mine.push(id)
+  }
+  return mine
+}
+
+// SEAL (the differentiator, §6.4): the Move module already ships `seal_approve`, which gates a
+// key share on "caller is a participant in THIS head". Wiring @mysten/seal means encrypting to
+// an identity namespaced by the head's object id and fetching a t-of-n session key instead of
+// using our own AES-SIV here. The policy is deployed and callable; the client swap is next.
