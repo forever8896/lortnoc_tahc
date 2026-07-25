@@ -1,0 +1,13 @@
+{
+  "name": "lortnoc-scripts",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "One-off operational scripts (wallet sweeps, faucet plumbing). Not part of the app build.",
+  "scripts": {
+    "sweep": "node send-sepolia.mjs"
+  },
+  "dependencies": {
+    "ethers": "^6.13.0"
+  }
+}
