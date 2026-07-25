@@ -318,6 +318,28 @@ curl -s https://lortnoc-relayer.fly.dev/health
 Reproducing the deployment (a fresh chain, a rotated pin) is documented in
 [`app/docs/LIVE-SETUP.md`](app/docs/LIVE-SETUP.md).
 
+## Build it yourself
+
+The extension is distributed as a zip on [GitHub Releases](https://github.com/forever8896/lortnoc_tahc/releases/latest) —
+built in public CI from the tagged commit, never from anyone's laptop. You don't have to trust that:
+
+```bash
+git checkout v0.7.0            # the tag the release was cut from
+cd extension && npm ci && npm run build
+# compare extension/dist against the unzipped release
+```
+
+Every release ships a **SHA-256** (check it matches the zip you downloaded) and a GitHub
+**build-provenance attestation** you can verify against the source commit:
+
+```bash
+gh attestation verify lortnoc-tahc-v0.7.0.zip -R forever8896/lortnoc_tahc
+```
+
+Note: the build is *verifiable* (public CI, pinned `package-lock.json`, provenance), not bit-for-bit
+reproducible — Vite emits content-hashed filenames, so trust the provenance + checksum, not a byte diff
+of the archive. **Install:** unzip → `chrome://extensions` → Developer mode → Load unpacked → the folder.
+
 ---
 
 ## Known limits
