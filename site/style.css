@@ -429,3 +429,13 @@ body{
   font-family:var(--mono); font-size:10px; letter-spacing:0.18em;
   text-transform:uppercase; color:rgba(237,234,228,0.45); line-height:1.5;
 }
+
+/* Closing note on the integration pages, pointing at the business model. */
+.pscta{
+  border-top:1px solid var(--rule);
+  padding:clamp(52px,7vw,92px) 0 clamp(8px,1vw,16px);
+  display:flex; flex-direction:column; align-items:flex-start; gap:16px;
+}
+.pscta h2{ margin:0; color:var(--signal); max-width:26ch; }
+.pscta p{ margin:0; }
+.pscta .btn{ margin-top:12px; }
