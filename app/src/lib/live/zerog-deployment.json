@@ -1,0 +1,32 @@
+{
+  "chainId": 16602,
+  "network": "galileo",
+  "contracts": {
+    "semaphoreVerifier": "0xafaca9c12b67909ba87e4f073601361f30a9d628",
+    "poseidonT3": "0xb4022aa3f39504985d3bfe07b625e0d230afa1e3",
+    "semaphore": "0x794ec3b1fb8ad0d23f3f654c20993ba4ff762c19",
+    "membership": "0x219f68fdbfeda4576939de3f75c4e362ed00e11e"
+  },
+  "price": "1000000000000000",
+  "groupId": "0",
+  "deployer": "0x61eE2fBcf2841d9094e2D42406Dd4f83a7981Bb8",
+  "explorer": "https://chainscan-galileo.0g.ai/address/0x219f68fdbfeda4576939de3f75c4e362ed00e11e",
+  "mainnet": {
+    "chainId": 16661,
+    "network": "0g-mainnet",
+    "membership": "0xe9031484b6fd4f55bf94dc5b768f7031b04be3d6",
+    "groupId": "0",
+    "treasury": "0x61eE2fBcf2841d9094e2D42406Dd4f83a7981Bb8",
+    "deployedAt": "2026-07-25T18:18:33.058Z",
+    "contracts": {
+      "poseidonT3": "0x114e261b9d901aaea199544539c9873dc93565ef",
+      "semaphoreVerifier": "0x87997f3ca40693fb1e0c3c6f39f0f3fe287b8c67",
+      "semaphore": "0xd21f911570aad19d39e750fe0aa4e2ad161cbdd5",
+      "membership": "0xe9031484b6fd4f55bf94dc5b768f7031b04be3d6"
+    },
+    "price": "5666942000000000000",
+    "deployer": "0x61eE2fBcf2841d9094e2D42406Dd4f83a7981Bb8",
+    "priceUsd": 1,
+    "explorer": "https://chainscan.0g.ai/address/0xe9031484b6fd4f55bf94dc5b768f7031b04be3d6"
+  }
+}
