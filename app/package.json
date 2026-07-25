@@ -11,6 +11,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@mysten/seal": "^0.5.0",
+    "@mysten/sui": "^1.30.0",
+    "@mysten/walrus": "^0.6.0",
     "@noble/ciphers": "^2.0.0",
     "@noble/curves": "^2.0.0",
     "@noble/hashes": "^2.0.0",
