@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Identity — ENS v2 sub-names | Lortnoc Tahc</title>
-<meta name="description" content="Your account is an ENS v2 sub-name you hold, with every record separately permissioned — delegated one at a time, revocable on-chain, without asking us.">
+<meta name="description" content="How Lortnoc Tahc uses ENS v2 — custom registry, Permissioned Resolver, per-record EAC roles — and which v2 decisions made the identity layer possible.">
 <meta name="theme-color" content="#08080A">
 <link rel="preload" href="fonts/jost/jost-300.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
@@ -28,43 +28,55 @@
   </div>
 
   <section>
-    <h2>Why it matters</h2>
+    <h2>Why we built on it</h2>
     <p class="pull">An account a company can delete was never yours.</p>
-    <p>Your identity has to <strong>survive us</strong>. If we disappear, or get ordered to close your account, the name and the keys people reach you by keep working.</p>
-    <p>And the infrastructure helping run your account should hold the narrowest power possible &mdash; in a form you can check and withdraw yourself. A row in our database is a claim about our behaviour. We needed a permission that is a public fact.</p>
-    <p>It&rsquo;s also the business model. Handles are what we sell, and that only works if a handle is genuinely yours.</p>
-
-    <h3>What ENS v1 can&rsquo;t do</h3>
-    <p>In v1, control is all-or-nothing. Whoever can write, can write everything &mdash; so delegating &ldquo;rotate this one pointer&rdquo; means handing over the key people reach you by. That isn&rsquo;t delegation, it&rsquo;s surrender.</p>
-    <p>v2 gives every account its own resolver and per-record roles. Write permission becomes granular: per record, per address, revocable in one transaction.</p>
+    <p>Two things had to be true at once. A user&rsquo;s identity has to <strong>survive us</strong> &mdash; if we disappear or are ordered to close an account, the name and the keys people reach them by keep working. And the infrastructure operating that account has to hold the <strong>narrowest possible power</strong>, in a form the user can inspect and withdraw.</p>
+    <p>A row in our database is a claim about our future behaviour. We needed a permission that is a public, checkable fact. It&rsquo;s also the business model: handles are what we sell, and that only works if a handle is genuinely the buyer&rsquo;s.</p>
   </section>
 
   <section>
-    <h2>How it works</h2>
+    <h2>How it works here</h2>
     <ol class="steps">
-      <li><b>Your own resolver.</b> Claiming a handle deploys you your own contract &mdash; not a row in a shared one.</li>
-      <li><b>Records carry your routing.</b> Messaging key, vault index, inbox, stealth address, contact challenge.</li>
-      <li><b>Delegate exactly one thing.</b> Our gateway may rotate your inbox pointer. Its attempt to write your pubkey <b>reverts</b>.</li>
-      <li><b>Revoke without us.</b> One transaction, your signature. No support ticket, no waiting on a company that may not want to comply.</li>
-      <li><b>Prove it&rsquo;s real.</b> <code>verifyContract()</code> returns the implementation your resolver came from. Check it yourself &mdash; no trust in our backend.</li>
-      <li><b>Unlinkable.</b> Issued against a zero-knowledge nullifier, claimed by a relayer. Your payment and your handle never meet.</li>
+      <li><b>Own resolver per account.</b> Claiming a handle deploys a <code>VerifiableFactory</code> proxy of <code>PermissionedResolverImpl</code> &mdash; their contract, not a row in a shared one.</li>
+      <li><b>Records carry the routing.</b> <code>pubkey</code>, <code>walrus</code>, <code>inbox</code>, <code>stealth</code>, <code>knock</code>.</li>
+      <li><b>Delegate exactly one record.</b> <code>authorizeTextRoles(name, "eth.lortnoc.inbox", gateway, true)</code>. Our gateway rotates the inbox pointer and is <b>reverted</b> on everything else.</li>
+      <li><b>Revoke without us.</b> Same call, <code>grant=false</code>. One transaction, the user&rsquo;s signature.</li>
+      <li><b>Prove it&rsquo;s genuine.</b> <code>verifyContract(proxy)</code> returns the implementation &mdash; checkable without trusting our backend.</li>
+      <li><b>Unlinkable issuance.</b> Gated on an unspent zk nullifier, claim relayed so payer &ne; claimer.</li>
     </ol>
   </section>
 
   <section>
+    <h2>For the ENS team</h2>
+    <p>v2 didn&rsquo;t just add features to v1. It made the registry pluggable, and our entire identity layer hangs off that one decision.</p>
+
+    <h3><code>IRegistry</code> with a different ownership model</h3>
+    <p>Being able to slot our own registry under <code>lortnoc.eth</code> and have it issue names on a rule that isn&rsquo;t <em>&ldquo;this wallet paid&rdquo;</em> is the reason handles can be unlinkable to payment. In v1 that thought isn&rsquo;t expressible &mdash; you&rsquo;d be bolting policy onto a system whose ownership model already disagreed with you.</p>
+
+    <h3>Per-record roles, resourced by <code>keccak256(node, part)</code></h3>
+    <p>This is the detail that makes least-privilege real rather than aspirational. Our gateway holds write access to exactly one text key and is reverted on every other. Not &ldquo;shouldn&rsquo;t&rdquo; &mdash; reverts, on-chain, every time.</p>
+    <p>Demonstrating that revert live is the best thirty seconds of our demo, and it&rsquo;s entirely your primitive doing the work.</p>
+
+    <h3><code>verifyContract</code> and <code>TokenRegenerated</code></h3>
+    <p>Two things that only exist because someone thought past the happy path. <code>verifyContract</code> means a counterparty can confirm a resolver came from the canonical factory without trusting us at all. And bumping the token version on a role change, so revocation invalidates stale approvals, is the kind of detail that comes from asking what happens <em>after</em> a revoke rather than during one.</p>
+
+    <h3>One sharp edge, since you&rsquo;ll want to know we actually used it</h3>
+    <p><code>grantRoles</code> reverts on the resolver; the <code>authorize*Roles</code> wrappers are the way in. Cost us an afternoon before we read the source. Worth documenting louder &mdash; it&rsquo;s the first thing anyone reaching for EAC will try.</p>
+  </section>
+
+  <section>
     <h2>Discoverability is a dial, not a switch</h2>
-    <p>Reachable and findable are different things. Five rungs, held in one record:</p>
+    <p>Because every handle resolves through a CCIP-Read gateway, real code runs on each lookup and can answer differently per record and per caller. Five rungs, held in one text record:</p>
     <div class="spec-wrap">
       <table class="spec">
-        <tr><th>Ghost</th><td>Not findable. Only someone you handed your handle to can reach you.</td></tr>
+        <tr><th>Ghost</th><td>Not findable. Only someone handed the handle directly can reach them.</td></tr>
         <tr><th>Unlisted</th><td>Resolvable if known. Not searchable, not reverse-linkable.</td></tr>
-        <tr><th>Known</th><td>Findable only by someone who already has an identifier for you.</td></tr>
-        <tr><th>Searchable</th><td>Appears in people-search, because you opted in.</td></tr>
+        <tr><th>Known</th><td>Findable only by someone who already holds an identifier for them.</td></tr>
+        <tr><th>Searchable</th><td>Appears in people-search, opt-in.</td></tr>
         <tr><th>Public</th><td>Fully linkable, deliberately.</td></tr>
       </table>
     </div>
-    <p>Every lookup runs through our gateway, so records can answer differently per caller. <strong>The gate is the creative part, not the index behind it.</strong></p>
-    <p>Second axis: publish a question, never the answer. A stranger has to answer it correctly before you&rsquo;re even notified they exist.</p>
+    <p><strong>The gate is the creative part, not the index behind it.</strong> Roles govern writes; this ladder is a read-time policy at the gateway &mdash; a separate mechanism, deliberately.</p>
   </section>
 
   <section>
@@ -72,14 +84,13 @@
     <div class="spec-wrap">
       <table class="spec">
         <tr><th>Handle</th><td><code>&lt;name&gt;.lortnoc.eth</code></td></tr>
-        <tr><th>Registry</th><td><code>LortnocRegistry</code>, under <code>lortnoc.eth</code></td></tr>
-        <tr><th>Resolver</th><td>Per-account proxy of <code>PermissionedResolverImpl</code></td></tr>
+        <tr><th>Registry</th><td><code>LortnocRegistry</code>, implements <code>IRegistry</code>, under <code>lortnoc.eth</code></td></tr>
+        <tr><th>Resolver</th><td>Per-account <code>VerifiableFactory</code> proxy of <code>PermissionedResolverImpl</code></td></tr>
         <tr><th>Permissions</th><td>Enhanced Access Control &mdash; per-record roles</td></tr>
         <tr><th>Delegation</th><td><code>authorizeTextRoles(name, key, account, grant)</code></td></tr>
         <tr><th>Network</th><td>Sepolia, deployment pinned to 2026-06-29</td></tr>
       </table>
     </div>
-
   </section>
 
   <nav class="docnav">

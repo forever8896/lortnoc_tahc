@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Compute — 0G Confidential Compute | Lortnoc Tahc</title>
-<meta name="description" content="Every message written several ways, judged inside sealed compute for the one that reads most human — and why the reversible encoder stays local.">
+<meta name="description" content="How Lortnoc Tahc uses 0G confidential compute as a judge for best-of-N cover text, why the reversible encoder stays local, and what that split taught us.">
 <meta name="theme-color" content="#08080A">
 <link rel="preload" href="fonts/jost/jost-300.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
@@ -28,36 +28,40 @@
   </div>
 
   <section>
-    <h2>Why it matters</h2>
+    <h2>Why we built on it</h2>
     <p class="pull">A disguise that reads like a disguise gets you caught.</p>
-    <p>Hiding a message in ordinary language is the easy half. What flags you is <strong>fluency</strong> &mdash; a sentence nobody would actually send. Scanners are very good at spotting text that doesn&rsquo;t sit right, and being flagged is worse than sending in the clear.</p>
-    <p>So something has to judge how natural it reads. And that judge sees text derived from your message. Run it on a normal endpoint and you&rsquo;ve created the exact record we exist to prevent.</p>
-    <p><strong>Sealed compute makes the judgement possible without the evidence.</strong></p>
-
-    <h3>Why the encoder stays local</h3>
-    <p>Reversible steganography needs both ends walking byte-identical distributions, or the message never comes back at all.</p>
-    <p>Hosted GPU inference can&rsquo;t promise that &mdash; shared fleets, no seed. Even at temperature zero, two runs diverge.</p>
-    <p>So we split the work. The reversible coding runs on a pinned local model. The naturalness call &mdash; a preference, not something anyone has to reproduce &mdash; runs on 0G. <strong>Determinism where reversibility needs it, sealed compute where privacy does.</strong></p>
+    <p>Hiding a message in ordinary language is the easy half. What flags you is <strong>fluency</strong> &mdash; a sentence nobody would actually send. Scanners are good at spotting text that doesn&rsquo;t sit right, and being flagged is worse than sending in the clear.</p>
+    <p>So something has to judge how natural the output reads. That judge necessarily sees text derived from the user&rsquo;s message. Run it on an ordinary inference endpoint and you&rsquo;ve manufactured the exact record the product exists to prevent.</p>
+    <p><strong>Confidential compute makes the judgement possible without the evidence.</strong></p>
   </section>
 
   <section>
-    <h2>How it works</h2>
+    <h2>How it works here</h2>
     <ol class="steps">
-      <li><b>Encrypt.</b> AES-SIV, on your device. Everything downstream sees ciphertext only.</li>
+      <li><b>Encrypt.</b> AES-SIV, client-side. Everything downstream sees ciphertext only.</li>
       <li><b>Write it several ways.</b> A pinned local GPT-2 encodes that ciphertext into multiple different cover texts.</li>
-      <li><b>Judge in sealed compute.</b> 0G scores which one reads most like a person wrote it.</li>
+      <li><b>Judge in sealed compute.</b> 0G scores which candidate reads most like a person wrote it.</li>
       <li><b>Send the winner.</b> That sentence about coffee is all the platform ever keeps.</li>
       <li><b>Decode.</b> The other end reverses it exactly. A valid auth tag means it was ours &mdash; an invalid one means it really was small talk.</li>
     </ol>
-
-    <h3>What 0G actually sees</h3>
-    <p>Candidate cover texts. Ciphertext, never plaintext, and useless without a key that never leaves your device. Compromise the sidecar tomorrow and you hold sentences about coffee.</p>
+    <p><b>What 0G sees:</b> candidate cover texts. Ciphertext, never plaintext, and useless without a key that never leaves the device.</p>
   </section>
 
   <section>
-    <h2>The other half: anonymous membership</h2>
-    <p>0G Chain also holds the membership contract. Paying inserts a commitment. Claiming a handle proves you know the secret behind <em>some</em> commitment and burns a one-time nullifier.</p>
-    <p><code>wallet &rarr; commitment</code> is public. <code>commitment &rarr; handle</code> is not. The link is severed by construction, not by our discretion.</p>
+    <h2>For the 0G team</h2>
+    <p>We asked whether we could deploy our own model into your TEE, and you told us straight that it isn&rsquo;t supported yet. That answer shaped the architecture, and it shaped it for the better.</p>
+
+    <h3>It forced a split we should have found on our own</h3>
+    <p>Being told no made us work out which half of a steganographic codec actually needs determinism. The reversible arithmetic coding does &mdash; byte-identical distributions or the message is simply gone. The naturalness judgement doesn&rsquo;t; it&rsquo;s a preference between finished candidates that nobody ever has to reproduce.</p>
+    <p>Once that was clear, sealed inference was obviously the right home for the judge and obviously the wrong home for the coder. <strong>Determinism where reversibility needs it, sealed compute where privacy does.</strong> We wouldn&rsquo;t have drawn that line as cleanly if the easy path had been open.</p>
+
+    <h3>We&rsquo;re using it as a judge, not a chatbot</h3>
+    <p>Most confidential-inference demos are a private assistant. We&rsquo;re using it as something narrower and stranger: a component that sees derived material, forms an opinion, returns a ranking, and keeps nothing.</p>
+    <p>We&rsquo;d guess that wasn&rsquo;t the headline use case you designed for. It worked anyway, which says more about how general the primitive is than any benchmark would.</p>
+
+    <h3>The broker model is the part people will underrate</h3>
+    <p>Being able to point at an attested response and say <em>this ran where we said it ran</em> is the difference between a privacy claim and a privacy proof. For a product whose entire pitch is &ldquo;don&rsquo;t trust us,&rdquo; verifiability isn&rsquo;t a feature of the compute &mdash; it&rsquo;s the reason we can use hosted compute at all.</p>
+    <p>0G Chain carries the other half: the Semaphore membership contract, where paying inserts a commitment and claiming burns a single-use nullifier. <code>wallet &rarr; commitment</code> is public; <code>commitment &rarr; handle</code> is not.</p>
   </section>
 
   <section>
@@ -71,7 +75,6 @@
         <tr><th>Membership</th><td>Semaphore commitment + single-use nullifier</td></tr>
       </table>
     </div>
-
   </section>
 
   <nav class="docnav">

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Storage — Sui, Walrus &amp; Seal | Lortnoc Tahc</title>
-<meta name="description" content="Every message encrypted, anonymized, and stored immutably — on Walrus, under Seal, with the access rule enforced on-chain instead of in our database.">
+<meta name="description" content="How Lortnoc Tahc uses Quilt, Seal threshold encryption and Walrus — and which design decisions by the Mysten team made the architecture possible.">
 <meta name="theme-color" content="#08080A">
 <link rel="preload" href="fonts/jost/jost-300.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
@@ -28,33 +28,38 @@
   </div>
 
   <section>
-    <h2>Why it matters</h2>
+    <h2>Why we built on it</h2>
     <p class="pull">If we hold your messages, we can be made to hand them over.</p>
-    <p>Chat Control is one law. The next order lands on whoever runs the service. A privacy app that keeps a readable copy hasn&rsquo;t stopped the surveillance &mdash; it has moved it somewhere easier to compel.</p>
-    <p><strong>So we hold nothing.</strong> No plaintext. No key. Nothing worth seizing.</p>
-
-    <h3>Why Seal, and not our own encryption</h3>
-    <p>We could encrypt it ourselves and tell you the rules. Seal makes the rule a public program instead &mdash; <code>seal_approve</code>, running on Sui, that anyone can read.</p>
-    <p>That&rsquo;s the difference between <em>trust us</em> and <em>check for yourself.</em></p>
+    <p>The threat model isn&rsquo;t only Chat Control &mdash; it&rsquo;s the next order served on whoever runs the service. So the constraint was absolute: never hold plaintext, never hold a key. That rules out our own infrastructure, and it rules out cloud storage with encryption we administer, because &ldquo;we promise not to look&rdquo; is a policy and policies change under subpoena.</p>
+    <p>What&rsquo;s left needs two things that almost nothing offers together: <strong>storage that can&rsquo;t read what it stores</strong>, and <strong>an access rule nobody can quietly edit.</strong> Walrus and Seal are the only pair we found where both are structural rather than promised.</p>
   </section>
 
   <section>
-    <h2>How it works</h2>
+    <h2>How it works here</h2>
     <ol class="steps">
       <li><b>Batch.</b> Messages group into one blob with Quilt &mdash; up to 420&times; cheaper than storing them one by one.</li>
       <li><b>Encrypt.</b> Seal threshold-encrypts the batch. No single party holds the key.</li>
       <li><b>Scatter.</b> Walrus erasure-codes it across the network. Every node holds a fragment it can&rsquo;t read.</li>
-      <li><b>Point.</b> A Sui object tracks the current blob. Blobs never change; only the pointer moves.</li>
-      <li><b>Find.</b> Your ENS record points at the index, so any device with your secret rebuilds your inbox.</li>
-      <li><b>Open.</b> Decrypted in your browser, with a key derived on your device. Reading your own history is always free.</li>
+      <li><b>Point.</b> A <code>ConversationHead</code> Sui object tracks the current blob. Blobs never change; only the pointer moves.</li>
+      <li><b>Find.</b> An ENS text record points at the manifest, so any device with the user&rsquo;s secret rebuilds their inbox.</li>
+      <li><b>Open.</b> Decrypted client-side with <code>id_seal</code>, derived on-device. Reading your own history is always free.</li>
     </ol>
   </section>
 
   <section>
-    <h2>Why not 0G Storage</h2>
-    <p>We looked at it seriously &mdash; it would have put storage on the same chain as everything else, which is tidy.</p>
-    <p>But it has no Seal. No threshold encryption with an on-chain policy, which is the entire point above. Walrus also has the stronger durability record, and the small-object batching that chat-sized writes live or die on.</p>
-    <p><a href="0g.html">0G earns its place elsewhere &rarr;</a></p>
+    <h2>For the Walrus and Seal team</h2>
+    <p>Three decisions you made are the reason this project has the shape it does.</p>
+
+    <h3>Quilt</h3>
+    <p>Most blob stores treat small objects as somebody else&rsquo;s problem. Chat is <em>nothing but</em> small objects &mdash; a message is a few hundred bytes, and per-blob overhead would have made per-message storage economically absurd. Quilt is the difference between a demo and something we could actually afford to run.</p>
+
+    <h3><code>seal_approve</code> as arbitrary Move</h3>
+    <p>The obvious way to build access control for threshold encryption is a fixed vocabulary: allowlist, time-lock, token-gate. You made the policy a Move function evaluated by dry-run instead, so it can be anything expressible on Sui.</p>
+    <p>That&rsquo;s what makes a nullifier-gated policy conceivable at all. We&rsquo;re on the session-key path today, but we designed toward the harder version precisely because you left the ceiling that high.</p>
+
+    <h3>Immutable blobs, mutable pointer</h3>
+    <p>Splitting a durable append-only log from a Sui object that moves is a separation we&rsquo;d otherwise have had to invent badly. Our <code>ConversationHead</code> is your primitive with two extra fields.</p>
+    <p>And RedStuff&rsquo;s self-healing is what lets us tell users their data outlives us without hedging the sentence.</p>
   </section>
 
   <section>
@@ -66,10 +71,10 @@
         <tr><th>Access rule</th><td><code>seal_approve</code>, a Move function on Sui</td></tr>
         <tr><th>Batching</th><td>Quilt</td></tr>
         <tr><th>Pointer</th><td><code>ConversationHead</code> Sui object</td></tr>
-        <tr><th>Your key</th><td><code>id_seal</code>, derived on-device, never transmitted</td></tr>
+        <tr><th>User key</th><td><code>id_seal</code>, derived on-device, never transmitted</td></tr>
       </table>
     </div>
-
+    <p><a href="0g.html">We evaluated 0G Storage and kept Walrus &mdash; the reasoning is on the compute page &rarr;</a></p>
   </section>
 
   <nav class="docnav">
