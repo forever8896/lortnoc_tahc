@@ -2,17 +2,7 @@ import type { ReactNode } from 'react'
 import { HANDLE_SUFFIX } from '../lib/backend'
 
 export function Wordmark({ small }: { small?: boolean }) {
-  return (
-    <span
-      style={{
-        fontFamily: 'Questrial, sans-serif',
-        fontSize: small ? 18 : 26,
-        letterSpacing: '0.02em',
-      }}
-    >
-      lortnoc<span style={{ color: 'var(--signal)' }}>·</span>dm
-    </span>
-  )
+  return <img src="/logo.png" alt="lortnoctahc" style={{ height: small ? 26 : 44, width: 'auto', display: 'block' }} />
 }
 
 export function Eyebrow({ children, signal }: { children: ReactNode; signal?: boolean }) {
