@@ -390,3 +390,10 @@ body{
   color:var(--signal); border:1px solid rgba(var(--signal-rgb),0.45);
   border-radius:999px; padding:7px 16px 6px;
 }
+
+/* Second half of the hero line: same sentence, clearly subordinate. */
+.h1__sub{
+  display:block; margin-top:0.3em;
+  font-size:0.36em; line-height:1.14; letter-spacing:-0.02em;
+  color:rgba(237,234,228,0.72);
+}
