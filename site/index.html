@@ -374,6 +374,9 @@
 
   // Strike-through: two diagonals drawn by scroll, one after the other, then
   // held and released as the letters start to move.
+  // Read the accent from CSS so there's exactly one place to change it.
+  var SIGNAL = getComputedStyle(document.documentElement)
+                 .getPropertyValue('--signal').trim() || '#12C4BE';
   var wordWrap = document.querySelector('.word-wrap');
   var strikeEl = document.getElementById('strike');
   var strikeLines = [].slice.call(strikeEl.querySelectorAll('line')).map(function (ln) {
@@ -452,7 +455,7 @@
         s.style.filter = 'blur(' + (9 * f).toFixed(2) + 'px)';
         s.style.opacity = (1 - 0.6 * f).toFixed(3);
         s.style.transform = 'translate3d(0,' + (-5 * f).toFixed(2) + 'px,0) scale(' + (1 + 0.045 * f).toFixed(4) + ')';
-        s.style.color = f > 0.3 ? '#4ADE80' : '';
+        s.style.color = f > 0.3 ? SIGNAL : '';
       } else if (s.style.filter) {
         s.style.filter = ''; s.style.opacity = ''; s.style.transform = ''; s.style.color = '';
       }
