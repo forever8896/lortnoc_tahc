@@ -30,7 +30,7 @@ async function reflectState(): Promise<void> {
   const got = await chrome.storage.local.get(LOCAL.enabled)
   const on = got[LOCAL.enabled] === true
   await chrome.action.setIcon({ path: iconSet(on) }).catch(() => {})
-  await chrome.action.setTitle({ title: on ? 'lortnoc tahc — Stego ON' : 'lortnoc tahc — Stego off' }).catch(() => {})
+  await chrome.action.setTitle({ title: on ? 'lortnoc tahc — PrivacyMaxxing ON' : 'lortnoc tahc — PrivacyMaxxing off' }).catch(() => {})
 }
 chrome.runtime.onInstalled.addListener(() => void reflectState())
 chrome.runtime.onStartup.addListener(() => void reflectState())

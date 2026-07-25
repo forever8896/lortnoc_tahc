@@ -46,7 +46,7 @@ body {
 }
 .master:hover { border-color: rgba(237,234,228,0.24); }
 .master[data-on="true"] { border-color: rgba(74,222,128,0.45); background: linear-gradient(180deg, rgba(74,222,128,0.06), transparent); }
-.master__label { font-size: 20px; font-weight: 400; letter-spacing: -0.01em; }
+.master__label { font-size: 18px; font-weight: 400; letter-spacing: -0.015em; }
 .master__sub { font-family: var(--mono); font-size: 10px; color: var(--faint); margin-top: 3px; letter-spacing: 0.02em; }
 .master[data-on="true"] .master__sub { color: var(--signal); }
 .switch { width: 52px; height: 30px; border-radius: 999px; background: #1b1b20; border: 1px solid var(--rule); position: relative; flex: 0 0 auto; transition: background .2s; }
@@ -76,3 +76,19 @@ body {
 .field input:focus { outline: 2px solid var(--signal); outline-offset: -1px; }
 .actions { display: flex; gap: 8px; margin-top: 6px; }
 .actions .btn { width: auto; flex: 1; }
+
+/* conversion CTA — the vampire-attack nudge to the real product */
+.cta {
+  display: block; margin-top: 16px; padding: 15px 16px 13px; text-decoration: none; color: var(--ink);
+  border: 1px solid rgba(74,222,128,0.3);
+  background: linear-gradient(180deg, rgba(74,222,128,0.08), rgba(74,222,128,0.02));
+  transition: border-color .2s, background .2s, transform .1s;
+}
+.cta:hover { border-color: var(--signal); background: linear-gradient(180deg, rgba(74,222,128,0.14), rgba(74,222,128,0.04)); }
+.cta:active { transform: translateY(1px); }
+.cta__lead { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.cta__lead strong { color: var(--ink); font-weight: 400; }
+.cta__go { margin: 9px 0 0; font-size: 14px; font-weight: 400; color: var(--signal); letter-spacing: -0.01em; display: flex; align-items: center; justify-content: space-between; }
+.cta__arrow { transition: transform .2s; }
+.cta:hover .cta__arrow { transform: translateX(4px); }
+.cta__host { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--rule); font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--faint); text-align: right; }
