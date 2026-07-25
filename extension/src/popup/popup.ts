@@ -50,7 +50,16 @@ async function refreshHsStatus(): Promise<void> {
   const id = await activeTabId()
   if (id === undefined) return
   try {
-    const r = (await chrome.tabs.sendMessage(id, { type: 'HS_STATUS' })) as { status: string; hasKey: boolean }
+    const r = (await chrome.tabs.sendMessage(id, { type: 'HS_STATUS' })) as {
+      status: string
+      hasKey: boolean
+      client: string
+    }
+    if (r?.client && r.client !== 'k') {
+      hsStatus.textContent = 'use web.telegram.org/k/'
+      hsStatus.className = 'pill pill-off'
+      return
+    }
     const map: Record<string, string> = {
       none: 'not connected',
       offered: 'invite sent…',
@@ -59,7 +68,7 @@ async function refreshHsStatus(): Promise<void> {
     hsStatus.textContent = map[r?.status] ?? 'not connected'
     hsStatus.className = 'pill ' + (r?.status === 'established' ? 'pill-on' : 'pill-off')
   } catch {
-    hsStatus.textContent = 'open a Telegram tab'
+    hsStatus.textContent = 'open/reload a Telegram tab'
     hsStatus.className = 'pill pill-off'
   }
 }

@@ -50,9 +50,32 @@ async function handleFrame(type: number, pubkey: Uint8Array): Promise<void> {
   }
 }
 
+// Register the popup ↔ content-script listener IMMEDIATELY (before any awaits or the
+// client check) so the popup can always reach us — otherwise a slow init or an
+// unsupported client would make the popup report "open a telegram tab" wrongly.
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type === 'START_HANDSHAKE') {
+    void sendOffer().then(() => sendResponse({ ok: true }))
+    return true
+  }
+  if (msg?.type === 'HS_STATUS') {
+    sendResponse({ status: session.status(), hasKey: haveKey(), client: detectClient() })
+    return true
+  }
+  if (msg?.type === 'HS_RESET') {
+    void session.reset().then(() => sendResponse({ ok: true }))
+    return true
+  }
+  return false
+})
+
 async function main(): Promise<void> {
   injectStyles()
-  await session.loadSession()
+  try {
+    await session.loadSession()
+  } catch (e) {
+    console.warn('[lortnoc] loadSession failed (continuing):', e)
+  }
   await initState()
 
   const client = detectClient()
@@ -69,23 +92,6 @@ async function main(): Promise<void> {
     session.status(),
     haveKey(),
   )
-
-  // Popup → content-script commands (start handshake, query status, reset).
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg?.type === 'START_HANDSHAKE') {
-      void sendOffer().then(() => sendResponse({ ok: true }))
-      return true
-    }
-    if (msg?.type === 'HS_STATUS') {
-      sendResponse({ status: session.status(), hasKey: haveKey() })
-      return true
-    }
-    if (msg?.type === 'HS_RESET') {
-      void session.reset().then(() => sendResponse({ ok: true }))
-      return true
-    }
-    return false
-  })
 
   // Outbound: real text → AES-SIV(activeKey) → /encode → cover text (or null = fail-closed).
   installSendInterceptor(client, haveKey, async (real) => {
