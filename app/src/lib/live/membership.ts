@@ -72,6 +72,10 @@ export async function join(commitment: bigint): Promise<Hex> {
   const [account] = await client.requestAddresses()
   await switchTo0G(client)
 
+  // Never charge twice. If a previous attempt landed but the UI lost the receipt (0G propagates
+  // them slowly), the commitment is already in the set and paying again would be pure loss.
+  if (await isMember(commitment)) return '0x' as Hex
+
   const value = await price()
   const balance = await balanceOn0G(account)
   if (balance < value) {
@@ -86,9 +90,52 @@ export async function join(commitment: bigint): Promise<Hex> {
     account, chain: zeroGChain, address: MEMBERSHIP, abi: membershipAbi,
     functionName: 'join', args: [commitment], value, gas: 900_000n, gasPrice,
   })
-  const receipt = await zeroG.waitForTransactionReceipt({ hash, timeout: 180_000, pollingInterval: 3_000 })
-  if (receipt.status !== 'success') throw new Error(`payment reverted (tx ${hash})`)
+
+  await confirmJoin(hash, commitment)
   return hash
+}
+
+/**
+ * Wait for a payment to be real — by asking the CONTRACT, not by waiting on a receipt.
+ *
+ * 0G's receipt propagation lags badly: `waitForTransactionReceipt` routinely throws
+ * "Transaction receipt could not be found" for a transaction that has already been mined
+ * successfully. Treating that as a failed payment tells someone their money vanished when it did
+ * not, which is the worst possible thing to be wrong about.
+ *
+ * So the source of truth is `joined(commitment)` — the state the payment exists to produce. It is
+ * immune to receipt lag, and it stays correct if the user reloads mid-flight.
+ */
+async function confirmJoin(hash: Hex, commitment: bigint, timeoutMs = 5 * 60_000): Promise<void> {
+  const started = Date.now()
+  let reverted = false
+
+  while (Date.now() - started < timeoutMs) {
+    // 1. The authoritative check: are we in the set?
+    if (await isMember(commitment).catch(() => false)) return
+
+    // 2. Best-effort receipt read, only to fail FAST on a genuine revert. A missing receipt is
+    //    expected here and must never be treated as an error.
+    try {
+      const receipt = await zeroG.getTransactionReceipt({ hash })
+      if (receipt.status === 'reverted') reverted = true
+    } catch {
+      /* not propagated yet — keep waiting */
+    }
+    if (reverted) {
+      // The tx failed, but re-check state once: a concurrent attempt may have succeeded.
+      if (await isMember(commitment).catch(() => false)) return
+      throw new Error(`payment reverted (tx ${hash})`)
+    }
+
+    await new Promise((r) => setTimeout(r, 3000))
+  }
+
+  throw new Error(
+    `Your payment was sent (tx ${hash}) but 0G has not confirmed it within 5 minutes. ` +
+      `Nothing is lost — reopen the app in a moment and it will pick up your membership. ` +
+      `Check ${zeroGChain.blockExplorers.default.url}/tx/${hash}`,
+  )
 }
 
 /** id_sem → Semaphore identity commitment (§5.1). The secret stays on this device forever. */

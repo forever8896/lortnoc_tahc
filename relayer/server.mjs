@@ -251,8 +251,11 @@ app.post('/claim', async (req, res) => {
         account, address: MEMBERSHIP, abi: membershipAbi, functionName: 'spendTicket',
         args: [proof], gas: 3_000_000n, gasPrice,
       })
-      const r = await zg.waitForTransactionReceipt({ hash: spendTx, timeout: 180_000, pollingInterval: 3_000 })
-      if (r.status !== 'success') throw new Error('spendTicket reverted')
+      // Confirm by STATE, not by receipt. 0G propagates receipts slowly enough that
+      // waitForTransactionReceipt throws for transactions that already succeeded — and here that
+      // would mean reporting failure on a ticket we just burned, which is the one error that
+      // costs the user something irreversible.
+      await confirmSpent(proof.nullifier, spendTx)
       log(`burned ticket ${proof.nullifier} (${spendTx})`)
     }
 
@@ -314,6 +317,26 @@ async function payGasStipend(recipient) {
   await eth.waitForTransactionReceipt({ hash })
   log(`gas stipend ${formatEther(ETH_STIPEND)} ETH → ${recipient} (${hash})`)
   return hash
+}
+
+/** Poll `spent(nullifier)` until the burn is visible. The nullifier is the receipt. */
+async function confirmSpent(nullifier, hash, timeoutMs = 5 * 60_000) {
+  const started = Date.now()
+  while (Date.now() - started < timeoutMs) {
+    const spent = await zg
+      .readContract({ address: MEMBERSHIP, abi: membershipAbi, functionName: 'spent', args: [nullifier] })
+      .catch(() => false)
+    if (spent) return
+    try {
+      const r = await zg.getTransactionReceipt({ hash })
+      if (r.status === 'reverted') throw new Error(`spendTicket reverted (${hash})`)
+    } catch (e) {
+      if (String(e.message ?? '').includes('reverted')) throw e
+      // receipt not propagated yet — that is normal on 0G, keep waiting
+    }
+    await new Promise((r) => setTimeout(r, 3000))
+  }
+  throw new Error(`spendTicket ${hash} not confirmed within 5 minutes — retry to resume`)
 }
 
 async function payStipend(recipient) {

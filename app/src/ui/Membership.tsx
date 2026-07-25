@@ -37,6 +37,7 @@ export function Membership({ ms, onPaid }: { ms: Uint8Array | null; onPaid: () =
 
   const dollars = (wei: bigint) => (usd ? `$${((Number(wei) / 1e18) * usd).toFixed(2)}` : null)
 
+  // `ms` is in the dependency list because membership is keyed to the identity, not the wallet.
   const refresh = useCallback(async () => {
     setErr('')
     try {
@@ -53,11 +54,22 @@ export function Membership({ ms, onPaid }: { ms: Uint8Array | null; onPaid: () =
       setCost(p)
       setUsd(rate)
       setMembers(n)
+
+      // Already paid? Never show a paywall to someone who has. This is the recovery path when a
+      // payment landed but the tab lost the receipt — 0G confirms slowly and people reload.
+      if (ms) {
+        const { commitmentFrom, isMember } = await import('../lib/live/membership')
+        if (await isMember(await commitmentFrom(ms)).catch(() => false)) {
+          setStep('done')
+          onPaid()
+          return
+        }
+      }
       setStep(bal >= p ? 'pay' : 'bridge')
     } catch (e) {
       setErr(String(e instanceof Error ? e.message : e))
     }
-  }, [])
+  }, [ms, onPaid])
 
   useEffect(() => {
     if (membershipReady()) void refresh()
