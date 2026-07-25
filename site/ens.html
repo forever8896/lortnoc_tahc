@@ -29,9 +29,9 @@
 
   <section>
     <h2>Why we built on it</h2>
-    <p class="pull">An account a company can delete was never yours.</p>
-    <p>Two things had to be true at once. A user&rsquo;s identity has to <strong>survive us</strong> &mdash; if we disappear or are ordered to close an account, the name and the keys people reach them by keep working. And the infrastructure operating that account has to hold the <strong>narrowest possible power</strong>, in a form the user can inspect and withdraw.</p>
-    <p>A row in our database is a claim about our future behaviour. We needed a permission that is a public, checkable fact. It&rsquo;s also the business model: handles are what we sell, and that only works if a handle is genuinely the buyer&rsquo;s.</p>
+    <p>The endgame is Lortnoc DM &mdash; our own protocol, where accounts aren&rsquo;t ours to revoke. Selling those accounts is the business model.</p>
+    <p>That only works if two things hold. A handle has to be <strong>genuinely the buyer&rsquo;s</strong>, surviving us if we disappear or are ordered to close it. And the infrastructure helping run it has to hold <strong>the least power we can give it</strong> &mdash; in a form the user can check and withdraw themselves, because a row in our database is only ever a claim about our future behaviour.</p>
+    <p>ENS v2 gives both. A sub-name they hold, resolving through a resolver they own, where our gateway is granted write access to exactly one text record and reverted on every other &mdash; revocable by them, in a single transaction, without asking us for anything.</p>
   </section>
 
   <section>

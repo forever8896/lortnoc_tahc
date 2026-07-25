@@ -29,9 +29,10 @@
 
   <section>
     <h2>Why we built on it</h2>
-    <p class="pull">If we hold your messages, we can be made to hand them over.</p>
-    <p>The threat model isn&rsquo;t only Chat Control &mdash; it&rsquo;s the next order served on whoever runs the service. So the constraint was absolute: never hold plaintext, never hold a key. That rules out our own infrastructure, and it rules out cloud storage with encryption we administer, because &ldquo;we promise not to look&rdquo; is a policy and policies change under subpoena.</p>
-    <p>What&rsquo;s left needs two things that almost nothing offers together: <strong>storage that can&rsquo;t read what it stores</strong>, and <strong>an access rule nobody can quietly edit.</strong> Walrus and Seal are the only pair we found where both are structural rather than promised.</p>
+    <p>Lortnoc Tahc hides real messages inside platforms that scan everything. Those conversations still have to live somewhere &mdash; and if that somewhere is ours, we&rsquo;ve just made ourselves the easiest thing in the system to subpoena.</p>
+    <p>So we needed two properties, together: <strong>storage that can&rsquo;t read what it holds</strong>, and <strong>an access rule we can&rsquo;t quietly change.</strong></p>
+    <p>Walrus gives the first &mdash; erasure-coded fragments spread across nodes, none of which ever holds a whole blob. Seal gives the second &mdash; decryption gated by <code>seal_approve</code>, a Move function running on Sui, rather than a conditional inside our backend.</p>
+    <p>Neither alone would have been enough. We needed the pair.</p>
   </section>
 
   <section>
