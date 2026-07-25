@@ -1,0 +1,26 @@
+# fly.io config for the 0G testnet inference sidecar.
+# Deploy: cd codec/zerog-sidecar && fly deploy
+# Secret:  fly secrets set ZG_PRIVATE_KEY=0x<funded-testnet-wallet-key>   (NEVER commit it)
+app = "lortnoc-zerog"
+primary_region = "cdg"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8090
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1   # stays warm; broker init + ledger setup on boot
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "30s"
+    timeout = "10s"
+    grace_period = "90s"     # broker init + on-chain funding takes a moment
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
