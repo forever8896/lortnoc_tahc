@@ -5,7 +5,7 @@
 // mocked (localStorage instead of Walrus/Sui) — the encryption is real.
 import type { Backend } from './backend'
 import { fullHandle } from './backend'
-import type { Conversation, Health, Identity, Message } from './types'
+import type { Conversation, EnsStatus, Health, Identity, Message, RecordPerm } from './types'
 import {
   deriveConvKey,
   deriveMasterSecret,
@@ -149,10 +149,38 @@ export class MockBackend implements Backend {
     return Promise.all([...peers].map((p) => this.getConversation(p)))
   }
 
-  async delegateInbox(): Promise<string> {
-    return 'demo: authorizeTextRoles(eth.lortnoc.inbox → gateway) — the gateway may rotate the inbox pointer only; a pubkey write would revert. Revoke in one tx. (Live on ENS v2 Sepolia.)'
+  // ---- ENS v2 surface, narrated -----------------------------------------------------------
+  // Demo mode has no chain, so these mirror the shape of the live results and say so plainly.
+  // The permission table below is exactly what the live resolver reports (see LiveBackend);
+  // here it is asserted, not measured — never present it as an on-chain reading.
+
+  async ensStatus(): Promise<EnsStatus> {
+    const rec = (key: string, value: string | null, gatewayCanWrite: boolean): RecordPerm => ({
+      key, value, ownerCanWrite: true, gatewayCanWrite,
+    })
+    return {
+      live: false,
+      handle: this.id?.handle ?? null,
+      resolver: null,
+      factoryVerified: false,
+      impl: '',
+      gateway: '0x000000000000000000000000000000000000dEaD',
+      inboxDelegated: this.delegated,
+      perms: [
+        rec('eth.lortnoc.pubkey', this.id?.pubkeyHex ?? null, false),
+        rec('eth.lortnoc.inbox', this.delegated ? 'relay://demo' : null, this.delegated),
+        rec('eth.lortnoc.walrus', null, false),
+      ],
+      explorer: null,
+    }
   }
-  async verifyResolver(): Promise<{ ok: boolean; detail: string }> {
-    return { ok: true, detail: 'demo: verifyContract(proxy) → PermissionedResolverImpl (trustless handle proof). Live on ENS v2 Sepolia.' }
+
+  private delegated = false
+
+  async delegateInbox(grant: boolean): Promise<string> {
+    this.delegated = grant
+    return grant
+      ? 'demo: authorizeTextRoles(eth.lortnoc.inbox → gateway) — the gateway may rotate the inbox pointer only; a pubkey write reverts.'
+      : 'demo: role revoked in one tx — the gateway can no longer write anything.'
   }
 }

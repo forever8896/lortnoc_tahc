@@ -9,7 +9,7 @@
   --panel: #0e0e11;
   --raise: #141418;
   --ink: #edeae4;
-  --signal: #4ade80;
+  --signal: #12c4be;
   --muted: rgba(237, 234, 228, 0.5);
   --faint: rgba(237, 234, 228, 0.32);
   --rule: rgba(237, 234, 228, 0.12);
@@ -62,7 +62,7 @@ button { font-family: inherit; }
   font-size: 11px; letter-spacing: 0.06em; padding: 4px 9px; border: 1px solid var(--rule);
   color: var(--muted);
 }
-.chip--ok { color: var(--signal); border-color: rgba(74, 222, 128, 0.35); }
+.chip--ok { color: var(--signal); border-color: rgba(18, 196, 190, 0.35); }
 
 .card { background: var(--panel); border: 1px solid var(--rule); }
 .rule { height: 1px; background: var(--rule); border: 0; margin: 0; }

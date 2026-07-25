@@ -8,7 +8,7 @@
   --bg: #08080a;
   --panel: #0e0e12;
   --ink: #edeae4;
-  --signal: #4ade80;
+  --signal: #12c4be;
   --muted: rgba(237,234,228,0.52);
   --faint: rgba(237,234,228,0.32);
   --rule: rgba(237,234,228,0.12);
@@ -35,7 +35,7 @@ body {
 /* chips */
 .chip { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; padding: 4px 9px; border: 1px solid var(--rule); color: var(--muted); }
 .chip .led { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .8; }
-.chip-on { color: var(--signal); border-color: rgba(74,222,128,0.35); }
+.chip-on { color: var(--signal); border-color: rgba(18, 196, 190,0.35); }
 .chip-off { color: var(--muted); }
 
 /* master switch */
@@ -45,7 +45,7 @@ body {
   padding: 16px 18px; cursor: pointer; text-align: left; transition: border-color .2s, background .2s;
 }
 .master:hover { border-color: rgba(237,234,228,0.24); }
-.master[data-on="true"] { border-color: rgba(74,222,128,0.45); background: linear-gradient(180deg, rgba(74,222,128,0.06), transparent); }
+.master[data-on="true"] { border-color: rgba(18, 196, 190,0.45); background: linear-gradient(180deg, rgba(18, 196, 190,0.06), transparent); }
 .master__label { font-size: 18px; font-weight: 400; letter-spacing: -0.015em; }
 .master__sub { font-family: var(--mono); font-size: 10px; color: var(--faint); margin-top: 3px; letter-spacing: 0.02em; }
 .master[data-on="true"] .master__sub { color: var(--signal); }
@@ -80,11 +80,11 @@ body {
 /* conversion CTA — the vampire-attack nudge to the real product */
 .cta {
   display: block; margin-top: 16px; padding: 15px 16px 13px; text-decoration: none; color: var(--ink);
-  border: 1px solid rgba(74,222,128,0.3);
-  background: linear-gradient(180deg, rgba(74,222,128,0.08), rgba(74,222,128,0.02));
+  border: 1px solid rgba(18, 196, 190,0.3);
+  background: linear-gradient(180deg, rgba(18, 196, 190,0.08), rgba(18, 196, 190,0.02));
   transition: border-color .2s, background .2s, transform .1s;
 }
-.cta:hover { border-color: var(--signal); background: linear-gradient(180deg, rgba(74,222,128,0.14), rgba(74,222,128,0.04)); }
+.cta:hover { border-color: var(--signal); background: linear-gradient(180deg, rgba(18, 196, 190,0.14), rgba(18, 196, 190,0.04)); }
 .cta:active { transform: translateY(1px); }
 .cta__lead { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .cta__lead strong { color: var(--ink); font-weight: 400; }

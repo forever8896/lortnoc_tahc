@@ -64,7 +64,7 @@ export function Claim() {
               autoFocus
             />
             <span className="mono" style={{ display: 'grid', placeItems: 'center', padding: '0 16px', color: 'var(--muted)', borderLeft: '1px solid var(--rule)' }}>
-              .lortnoc.eth
+              .lortnoctahc.eth
             </span>
           </div>
           <div className="mono" style={{ fontSize: 12, marginTop: 8, minHeight: 16 }}>
@@ -73,7 +73,7 @@ export function Claim() {
             ) : avail === null ? (
               <span style={{ color: 'var(--faint) ' }}>checking…</span>
             ) : avail ? (
-              <span className="signal">✓ {clean}.lortnoc.eth is available</span>
+              <span className="signal">✓ {clean}.lortnoctahc.eth is available</span>
             ) : (
               <span style={{ color: '#f0806a' }}>✕ taken</span>
             )}
@@ -88,7 +88,7 @@ export function Claim() {
               <Spinner /> claiming on-chain…
             </>
           ) : (
-            <>Claim {clean || 'your'}.lortnoc.eth</>
+            <>Claim {clean || 'your'}.lortnoctahc.eth</>
           )}
         </button>
         <p className="mono" style={{ color: 'var(--faint)', fontSize: 12, margin: 0, lineHeight: 1.6 }}>

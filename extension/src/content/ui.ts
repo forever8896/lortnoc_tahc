@@ -3,7 +3,7 @@
 // (Jost), no emoji.
 
 const STYLE_ID = 'lortnoc-style'
-const SIGNAL = '#4ade80'
+const SIGNAL = '#12c4be'
 
 // Brand font, loaded from the extension's bundled woff2 (web_accessible_resources).
 const jostUrl = (w: string): string => chrome.runtime.getURL(`fonts/jost/jost-${w}.woff2`)
@@ -17,8 +17,8 @@ export function injectStyles(): void {
     @font-face { font-family:"LortnocJost"; font-weight:400; font-display:swap; src:url("${jostUrl('400')}") format("woff2"); }
     /* decoded text reads as an intentional, clearly-"ours" pill — Signal-green */
     .lortnoc-decoded {
-      background: rgba(74,222,128,.11);
-      box-shadow: inset 0 -1px 0 rgba(74,222,128,.5);
+      background: rgba(18, 196, 190,.11);
+      box-shadow: inset 0 -1px 0 rgba(18, 196, 190,.5);
       border-radius: 3px;
       padding: 0 3px;
       cursor: help;
@@ -31,7 +31,7 @@ export function injectStyles(): void {
       max-width: 340px;
       background: #0b0b0e;
       color: #edeae4;
-      border: 1px solid rgba(74,222,128,.4);
+      border: 1px solid rgba(18, 196, 190,.4);
       border-radius: 4px;
       padding: 10px 12px;
       font: 300 12px/1.55 "LortnocJost", system-ui, sans-serif;

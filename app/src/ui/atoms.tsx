@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { HANDLE_SUFFIX } from '../lib/backend'
 
 export function Wordmark({ small }: { small?: boolean }) {
   return (
@@ -47,5 +48,5 @@ export function Avatar({ handle, size = 38 }: { handle: string; size?: number })
 }
 
 export function shortHandle(h: string): string {
-  return h.replace('.lortnoc.eth', '')
+  return h.replace(HANDLE_SUFFIX, '')
 }

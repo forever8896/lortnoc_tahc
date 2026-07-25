@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useBackend } from '../lib/ctx'
 import type { Conversation } from '../lib/types'
 import { Avatar, Wordmark, shortHandle } from './atoms'
+import { shortName } from '../lib/backend'
 import { Thread } from './Thread'
 import { IdentityPanel } from './IdentityPanel'
 
@@ -33,7 +34,7 @@ export function Messenger() {
     const h = newTo.trim().toLowerCase()
     if (!h) return
     setNewTo('')
-    openPeer(h.replace('.lortnoc.eth', ''))
+    openPeer(shortName(h))
     void refresh()
   }
 
@@ -82,7 +83,7 @@ export function Messenger() {
             )
           })}
         </div>
-        <footer className="mgr__foot mono">🔒 encrypted to your key · stored on your vault</footer>
+        <footer className="mgr__foot mono">encrypted to your key · stored on your vault</footer>
       </aside>
 
       <main className="mgr__main" data-shown={mobileThread}>

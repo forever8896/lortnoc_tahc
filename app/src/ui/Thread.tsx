@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBackend } from '../lib/ctx'
 import type { Conversation } from '../lib/types'
+import { fullHandle } from '../lib/backend'
 import { Avatar, shortHandle } from './atoms'
 
 export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => void; onSent: () => void }) {
@@ -45,7 +46,7 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
     }
   }
 
-  const peerH = peer.includes('.') ? peer : `${peer}.lortnoc.eth`
+  const peerH = peer.includes('.') ? peer : fullHandle(peer)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', minWidth: 0 }}>
@@ -64,7 +65,7 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
         <Avatar handle={peerH} size={34} />
         <div style={{ minWidth: 0 }}>
           <div className="mono" style={{ fontSize: 14 }}>{shortHandle(peerH)}</div>
-          <div className="mono signal" style={{ fontSize: 11 }}>🔒 end-to-end encrypted</div>
+          <div className="mono signal" style={{ fontSize: 11 }}>end-to-end encrypted</div>
         </div>
       </header>
 
@@ -85,8 +86,8 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
                   maxWidth: 'min(78%, 560px)',
                   textAlign: 'left',
                   padding: '10px 14px',
-                  background: mine ? 'rgba(74,222,128,0.12)' : 'var(--panel)',
-                  border: `1px solid ${mine ? 'rgba(74,222,128,0.3)' : 'var(--rule)'}`,
+                  background: mine ? 'rgba(18, 196, 190,0.12)' : 'var(--panel)',
+                  border: `1px solid ${mine ? 'rgba(18, 196, 190,0.3)' : 'var(--rule)'}`,
                   color: 'var(--ink)',
                   cursor: 'pointer',
                   font: 'inherit',
@@ -98,7 +99,7 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
                 {m.body}
                 {reveal === i && (
                   <div className="mono" style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--rule)', fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
-                    🔒 stored Seal-encrypted on Walrus · only your key decrypts it ·{' '}
+                    stored Seal-encrypted on Walrus · only your key decrypts it ·{' '}
                     {new Date(m.ts).toLocaleTimeString()}
                   </div>
                 )}
