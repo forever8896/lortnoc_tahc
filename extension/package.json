@@ -1,14 +1,17 @@
 {
   "name": "lortnoc-tahc-extension",
   "private": true,
-  "version": "0.8.2",
+  "version": "0.8.5",
   "type": "module",
   "description": "Telegram Web stego overlay \u2014 type real, send cover text, decode inline.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "pair": "node scripts/pair.mjs"
+    "pair": "node scripts/pair.mjs",
+    "pair:debug": "node scripts/pair.mjs --debug",
+    "inspect": "node scripts/inspect.mjs",
+    "drive": "node scripts/drive.mjs"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.7.0",
