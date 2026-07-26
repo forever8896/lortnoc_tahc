@@ -262,7 +262,14 @@ async function main(): Promise<void> {
       return null
     }
     const key = activeKey()
-    if (!key) return null
+    if (!key) {
+      // Fail-closed is right — never send plaintext because a handshake did not finish. But
+      // this returned null in silence, and compose reports a null cover as "Encoding failed",
+      // so an unkeyed chat looked like a codec/0G outage. It is neither: there is no session.
+      progress.fail('No private session yet — click Connect first')
+      toast('Not sent. This chat has no private session yet — open the popup and click Connect.')
+      return null
+    }
     try {
       progress.set(0, 'AES-SIV · never leaves this page')
       const ct = encrypt(key, real)
