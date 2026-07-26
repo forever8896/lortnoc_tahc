@@ -1,135 +1,152 @@
-# X threads — Lortnoctahc launch
+# X threads — lortnoctahc launch
 
-Spelling locked to **Lortnoctahc** (matches the logo and lortnoctahc.com).
-Verify @handles before posting — see note at the end.
+all lowercase. verify @handles before posting (see bottom).
 
 ---
 
-## 1. Introduction thread (video on post 1)
+## 1. introduction thread (video on post 1)
 
 **1/**
-Last Thursday the EU passed Chat Control.
+last thursday the eu passed chat control
 
-Every message. Every platform. Scanned before it's ever encrypted.
+enabling tech cos and governments to scan your messages and violating your privacy
 
-So encryption doesn't matter — they read it first.
+that's why we built lortnoctahc - that's "chat control" spelled backwards.
 
-We spent 36 hours at @ETHGlobal Lisbon building the opposite of that law. 🧵
+encrypted messaging on unencrypted platforms
+
+live with users in <36 hours at @ETHGlobal lisbon
 
 **2/**
-It's called Lortnoctahc.
+install the browser plugin. text your friends on telegram like normal.
 
-That's Chat Control spelled backwards.
+natural language encryption rewrites your message as friendly small talk before it sends.
 
-Encrypted messaging on unencrypted platforms.
+your friend sees what you actually wrote.
+
+telegram only ever stores the small talk.
 
 **3/**
-Install the browser plugin. Text your friends on Telegram exactly like you already do.
+tired of telegram?
 
-Natural Language Encryption rewrites your message as friendly small talk before it sends.
+onboard to lortnoctahc dm for fully private messaging
 
-Your friend sees what you actually wrote.
-Telegram only ever stores the small talk.
+using @ens v2 for identity and access control
+
+@sui walrus + seal for decentralized storage
+
+@0G compute for cover text, 0G network for payments
 
 **4/**
-You type:
-"Hey, I'm gonna send you some crypto for our business deal"
+real problem. real solution. real business model,
 
-Telegram stores:
-"Hey let's grab coffee today. The sun is out."
+with paying users this weekend.
 
-Your friend reads:
-"Hey, I'm gonna send you some crypto for our business deal"
+thanks @ETHGlobal
 
-**5/**
-Real problem. Real solution. Real business model — we took paying users this weekend.
-
-Want to try it?
-
-DM me and I'll send you the link.
+lortnoctahc, to you all.
 
 ---
 
-## 2. ENS thread (quote-tweets post 1)
+## 2. ens thread (quote-tweets post 1)
 
 **1/ (QT)**
-We built Lortnoctahc at @ETHGlobal Lisbon — encrypted messaging hidden inside Telegram.
+we built lortnoctahc at @ETHGlobal lisbon
 
-Your account is an @ensdomains v2 sub-name. You own it, and you hand out permissions one record at a time.
+encrypted messaging hidden inside telegram
 
-Why that mattered 🧵
+your account is an @ens v2 sub-name
+
+you own it. we can't take it back.
 
 **2/**
-We sell accounts. That only works if the account is genuinely yours.
+we sell accounts.
 
-One a company can delete isn't an asset, it's a rental.
+that only works if the account is actually yours.
 
-And the infrastructure helping run it should hold the least power possible — in a form you can check and take back yourself.
+one a company can delete isn't an asset. it's a rental.
+
+and whatever helps run it should hold the least power possible
 
 **3/**
-ENS v2 made the registry pluggable.
+ens v2 let us run our own registry
 
-Every user gets their own resolver. Our gateway can rotate one text record and is reverted on every other — on-chain, every time.
+every user gets their own resolver
 
-Revoke us in one tx. No support ticket.
+our gateway can rotate one record and gets reverted on everything else. on-chain. every time.
 
-The names are the product and the revenue.
+revoke us in one tx. no support ticket.
+
+the names are the product and the revenue.
 
 ---
 
 ## 3. 0G thread (quote-tweets post 1)
 
 **1/ (QT)**
-We built Lortnoctahc at @ETHGlobal Lisbon — encrypted messaging hidden inside Telegram.
+we built lortnoctahc at @ETHGlobal lisbon
 
-We use @0G_labs confidential compute to make sure the cover text actually sounds like a human wrote it 🧵
+encrypted messaging hidden inside telegram
+
+@0G confidential compute makes sure the cover text actually sounds like a person wrote it
 
 **2/**
-Steganography fails the moment the disguise reads like a disguise.
+steganography fails the moment the disguise reads like a disguise.
 
-A grammatical sentence nobody would ever actually send is itself a flag.
+a sentence nobody would ever really send is itself a flag.
 
-So something has to judge how natural it sounds — and that judge sees text derived from your private message.
+so something has to judge how natural it sounds
+
+and that judge sees text derived from your private message
 
 **3/**
-We write every message several ways. 0G's sealed compute scores which reads most human, and keeps nothing.
+we write every message several ways
 
-The encoder stays local — hosted inference isn't deterministic, and determinism is what makes a message decodable at all.
+0G sealed compute picks the one that reads most human. keeps nothing.
 
-That server is basically our entire COGS.
+the encoder stays local — hosted inference isn't deterministic, and determinism is what makes a message decodable at all
+
+one server. basically our whole cogs.
 
 ---
 
-## 4. Sui / Walrus / Seal thread (quote-tweets post 1)
+## 4. sui / walrus / seal thread (quote-tweets post 1)
 
 **1/ (QT)**
-We built Lortnoctahc at @ETHGlobal Lisbon — encrypted messaging hidden inside Telegram.
+we built lortnoctahc at @ETHGlobal lisbon
 
-Conversations live on @WalrusProtocol under @SuiNetwork's Seal. We can't read them, and we can't hand them over 🧵
+encrypted messaging hidden inside telegram
+
+your conversations live on @sui walrus, under seal
+
+we can't read them. we can't hand them over.
 
 **2/**
-Chat Control is one law. The next order lands on whoever runs the service.
+chat control is one law.
 
-If we hold your messages, we can be made to give them up.
+the next order lands on whoever runs the service.
 
-So we hold nothing. No plaintext. No key. Nothing worth seizing.
+if we hold your messages, we can be made to give them up.
+
+so we hold nothing. no plaintext. no key.
 
 **3/**
-Messages batch with Quilt, get threshold-encrypted by Seal, and scatter across Walrus as fragments no single node can read.
+messages batch with quilt, get threshold-encrypted by seal, scatter across walrus as fragments no node can read
 
-Who may decrypt is `seal_approve` — a Move function running on-chain, not a check buried in our backend.
+who may decrypt is seal_approve — a move function on-chain, not a check buried in our backend
 
-Not "trust us." Check it yourself.
+not "trust us". check it yourself.
 
 ---
 
-## Handles to verify before posting
+## handles to verify
+
+you used `@ens`, `@sui`, `@0G` — i kept your forms so the threads match, but
+these are short names and may not be the live accounts. worth 30 seconds:
 
 - `@ETHGlobal` — confident
-- `@ensdomains` — confident
-- `@0G_labs` — likely correct, worth a look
-- `@SuiNetwork` — confident
-- `@WalrusProtocol` — **check this one**, could be a different handle
+- `@ens` — ENS may post as `@ensdomains`
+- `@sui` — may be `@SuiNetwork`
+- `@0G` — may be `@0G_labs`
 
-Tagging the sponsor accounts is what gets these reposted, so it's worth
-30 seconds confirming each.
+tagging correctly is what gets these reposted by the sponsor accounts.
