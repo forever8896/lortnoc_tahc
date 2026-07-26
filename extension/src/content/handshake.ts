@@ -47,9 +47,20 @@ export function buildFrame(type: FrameType, pubkey: Uint8Array): Uint8Array {
 }
 
 /** Parse bytes as a handshake frame, or null if not one (MAGIC/CRC/length mismatch). */
+/**
+ * Parse a handshake frame, or return null.
+ *
+ * Every rejection path is logged. A frame that fails to parse is indistinguishable from ordinary
+ * chatter to the caller, so when a handshake silently never completes this is the only place that
+ * can say why — and it used to say nothing at all.
+ */
 export function parseFrame(bytes: Uint8Array): { type: FrameType; pubkey: Uint8Array } | null {
-  if (bytes.length !== FRAME_LEN) return null
-  for (let i = 0; i < 4; i++) if (bytes[i] !== MAGIC[i]) return null
+  const hasMagic = bytes.length >= 4 && MAGIC.every((m, i) => bytes[i] === m)
+  if (bytes.length !== FRAME_LEN) {
+    if (hasMagic) console.warn(`[lortnoc] frame: MAGIC ok but ${bytes.length} bytes, expected ${FRAME_LEN}`)
+    return null
+  }
+  if (!hasMagic) return null // ordinary message, not a handshake frame — silent by design
   const body = bytes.subarray(0, 4 + 1 + PUBKEY_LEN)
   const want =
     ((bytes[FRAME_LEN - 4] << 24) |
@@ -57,8 +68,14 @@ export function parseFrame(bytes: Uint8Array): { type: FrameType; pubkey: Uint8A
       (bytes[FRAME_LEN - 2] << 8) |
       bytes[FRAME_LEN - 1]) >>>
     0
-  if (crc32(body) !== want) return null
+  if (crc32(body) !== want) {
+    console.warn('[lortnoc] frame: MAGIC ok but CRC failed — the cover text was altered in transit')
+    return null
+  }
   const type = bytes[4]
-  if (type !== FRAME.OFFER && type !== FRAME.ACK) return null
+  if (type !== FRAME.OFFER && type !== FRAME.ACK) {
+    console.warn('[lortnoc] frame: unknown type', type)
+    return null
+  }
   return { type: type as FrameType, pubkey: bytes.slice(5, 5 + PUBKEY_LEN) }
 }

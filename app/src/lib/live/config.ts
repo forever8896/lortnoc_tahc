@@ -10,6 +10,13 @@ export const ENS = {
   chainId: deployment.chainId,
   tag: deployment.tag,
   rpc: (import.meta.env.VITE_SEPOLIA_RPC as string) || 'https://ethereum-sepolia-rpc.publicnode.com',
+  /** A SEPARATE endpoint for eth_getLogs. The default RPC above answers calls fine but rejects
+   *  log queries outright ("Archive requests require a personal token"), and log access is what
+   *  lets a fresh browser discover which handle you already own. drpc's free tier serves them,
+   *  capped at 10k-block ranges — hence the chunked scan in ens.handleOf(). */
+  logsRpc: (import.meta.env.VITE_SEPOLIA_LOGS_RPC as string) || 'https://sepolia.drpc.org',
+  /** drpc free-plan ceiling; ranges above this are rejected. */
+  logSpan: 9_500n,
   ...deployment.ens,
 } as const
 
@@ -23,6 +30,9 @@ export const LORTNOC = {
   registry: deployment.lortnoc.registry as `0x${string}` | '',
   /** Holds ROLE_REGISTRAR; the one-tx claim entrypoint. */
   registrar: deployment.lortnoc.registrar as `0x${string}` | '',
+  /** Block the registrar was deployed in — the floor for the HandleClaimed scan that recovers
+   *  "which handle is mine" from chain. Without it the scan would walk all of Sepolia. */
+  registrarDeployBlock: BigInt(deployment.lortnoc.registrarDeployBlock ?? 0),
   deployedAt: deployment.lortnoc.deployedAt,
 } as const
 
@@ -43,6 +53,15 @@ export const SUI = {
   uploadRelay: 'https://upload-relay.testnet.walrus.space',
   /** Max tip in MIST we'll pay the relay per blob (it currently asks 105). */
   uploadRelayMaxTip: 1000,
+  /** Read path. The SDK reads slivers direct from storage nodes — the same direct-node access
+   *  that already fails for writes — so reads go through an aggregator, which serves the whole
+   *  reconstructed blob over HTTP and sets `access-control-allow-origin: *`. More than one,
+   *  because a single aggregator being down would otherwise look like an empty conversation. */
+  aggregators: (import.meta.env.VITE_WALRUS_AGGREGATORS as string)?.split(',').filter(Boolean) || [
+    'https://aggregator.walrus-testnet.walrus.space',
+    'https://wal-aggregator-testnet.staketab.org',
+    'https://walrus-testnet-aggregator.nodes.guru',
+  ],
   // Seal key servers (testnet) — fill from @mysten/seal testnet config.
   sealKeyServers: (import.meta.env.VITE_SEAL_SERVERS as string)?.split(',').filter(Boolean) || [],
 } as const

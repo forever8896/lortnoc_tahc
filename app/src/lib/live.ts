@@ -25,6 +25,17 @@ import { WAL_COIN_TYPE } from './live/config'
 
 const ME = 'lortnoc.live.me.v1'
 const HEADS = 'lortnoc.live.heads.v1' // peer handle -> Sui ConversationHead id (demo index)
+/** sessionStorage (dies with the tab, never touches disk): MS, so a reload does not mean another
+ *  wallet signature. */
+const SESSION = 'lortnoc.live.session.v1'
+/** sessionStorage: the knock key DERIVED from the answer — never the answer itself. Bound to the
+ *  published salt, so re-publishing a question invalidates it automatically. Without this the
+ *  inbox could not show a knock until you went and retyped the answer. */
+const KNOCK_KEY = 'lortnoc.live.knockkey.v1'
+/** Peers whose knock we opened. A conversation with no messages yet has no Sui head, so without
+ *  this an accepted knock would leave no trace anywhere and "open conversation" would look like
+ *  it did nothing. */
+const ACCEPTED = 'lortnoc.live.accepted.v1'
 
 export class LiveBackend implements Backend {
   private id: Identity | null = null
@@ -39,22 +50,55 @@ export class LiveBackend implements Backend {
 
   async connect(): Promise<Identity> {
     const seed = await ens.signIdentity() // wallet sign (RFC 6979 deterministic)
-    this.ms = deriveMasterSecret(seed)
-    this.kp = deriveMessagingKey(this.ms)
     const { account } = await ens.walletClient()
+    const id = this.hydrate(deriveMasterSecret(seed), account)
+    await this.recoverHandle()
+    // Survive a reload without re-signing. sessionStorage, NOT localStorage: this is MS, and it
+    // dies with the tab rather than sitting on disk. Re-signing produces the same MS anyway
+    // (RFC 6979), so this is a convenience cache, never the system of record.
+    sessionStorage.setItem(SESSION, JSON.stringify({ ms: toHex(this.ms!), address: account }))
+    return id
+  }
+
+  /** Resume without a signature. Nothing here can prompt the wallet — it must be safe to run
+   *  unattended on every page load. */
+  async restore(): Promise<Identity | null> {
+    let saved: { ms?: string; address?: string } | null = null
+    try {
+      saved = JSON.parse(sessionStorage.getItem(SESSION) || 'null')
+    } catch {
+      /* corrupt entry — fall through to a normal sign-in */
+    }
+    if (!saved?.ms || !saved.address) return null
+    try {
+      const id = this.hydrate(fromHex(saved.ms), saved.address as `0x${string}`)
+      await this.recoverHandle()
+      return this.id ?? id
+    } catch (e) {
+      console.warn('[lortnoc] could not resume the session; sign in again:', e)
+      sessionStorage.removeItem(SESSION)
+      return null
+    }
+  }
+
+  /** Everything derived from MS, in one place, so connect and restore cannot drift apart. */
+  private hydrate(ms: Uint8Array, account: `0x${string}`): Identity {
+    this.ms = ms
+    this.kp = deriveMessagingKey(ms)
 
     // The wallet that connected pays; a key derived from MS owns the handle. Keeping them apart
     // is what makes the payment and the handle unlinkable on-chain (§4, §8).
-    this.owner = privateKeyToAccount(deriveOwnerKey(this.ms).privHex)
+    this.owner = privateKeyToAccount(deriveOwnerKey(ms).privHex)
 
     // Handles are remembered against the OWNER address, since that is what holds them.
     const saved = JSON.parse(localStorage.getItem(ME) || '{}') as Record<string, string>
-    this.id = {
+    const id: Identity = {
       handle: saved[this.owner.address] ?? null,
       address: account,
       ownerAddress: this.owner.address,
       pubkeyHex: toHex(this.kp.pub),
     }
+    this.id = id
 
     // Self-heal: publishing the Sui address used to be attempted only during a claim, so if that
     // one write failed the handle was left permanently unable to receive messages — peers resolve
@@ -63,11 +107,39 @@ export class LiveBackend implements Backend {
     void this.publishSuiAddress(true).catch((e) =>
       console.warn('[lortnoc] could not publish the Sui address (will retry next sign-in):', e),
     )
-    return this.id
+    return id
   }
 
   currentIdentity(): Identity | null {
     return this.id
+  }
+
+  /**
+   * If the local note doesn't say which handle is ours, ask the chain.
+   *
+   * The note is a localStorage entry written at claim time, so it is per-origin and per-browser:
+   * a new domain, a second device or a cleared cache all made a claimed handle disappear and the
+   * app cheerfully offered to issue another one. Ownership lives on-chain — read it from there.
+   *
+   * Checks BOTH addresses because the two claim paths differ: the paid claim hands the handle to
+   * the MS-derived owner, the free claim leaves it with the connected wallet.
+   */
+  private async recoverHandle(): Promise<void> {
+    if (!this.id || this.id.handle) return
+    const candidates = [this.owner?.address, this.id.address].filter(Boolean) as `0x${string}`[]
+    for (const addr of candidates) {
+      try {
+        const handle = await ens.handleOf(addr)
+        if (!handle) continue
+        this.id = { ...this.id, handle }
+        const saved = JSON.parse(localStorage.getItem(ME) || '{}') as Record<string, string>
+        saved[addr] = handle
+        localStorage.setItem(ME, JSON.stringify(saved))
+        return
+      } catch (e) {
+        console.warn('[lortnoc] handle recovery failed for', addr, e)
+      }
+    }
   }
 
   masterSecret(): Uint8Array | null {
@@ -95,8 +167,18 @@ export class LiveBackend implements Backend {
     return this.id
   }
 
+  /** Cache successful resolutions. Every poll resolved every peer's pubkey through
+   *  UniversalResolver (a multi-hop, CCIP-capable read) — the single heaviest repeated cost in
+   *  the loop. Misses are NOT cached: a peer who has not claimed yet may claim at any moment. */
+  private pubkeys = new Map<string, string>()
+
   async resolvePubkey(handle: string): Promise<string | null> {
-    return ens.resolvePubkey(fullHandle(handle))
+    const h = fullHandle(handle)
+    const hit = this.pubkeys.get(h)
+    if (hit) return hit
+    const got = await ens.resolvePubkey(h)
+    if (got) this.pubkeys.set(h, got)
+    return got
   }
 
   private convKeyFor(peerPub: string): Uint8Array {
@@ -184,19 +266,38 @@ export class LiveBackend implements Backend {
 
   /** Local head index first, then on-chain discovery: a peer who was written TO has no local
    *  state, so without this the recipient's inbox would look empty. */
+  /** Last time we scanned Sui events for heads we participate in. */
+  private lastDiscovery = 0
+
   async listConversations(): Promise<Conversation[]> {
+    // Discovery costs an event query plus a getObject per head found — far too heavy to repeat on
+    // every poll, and it only matters when a NEW conversation appears. Throttled; the messages in
+    // known conversations still refresh at full speed.
     try {
-      const mine = await findHeads(await this.suiAddress())
-      const known = new Set(Object.values(this.heads()))
-      for (const headId of mine) {
-        if (known.has(headId)) continue
-        const peerH = await this.peerOfHead(headId)
-        if (peerH) this.setHead(peerH, headId)
+      if (Date.now() - this.lastDiscovery > 30_000) {
+        this.lastDiscovery = Date.now()
+        await this.discoverHeads()
       }
     } catch {
       /* discovery is best-effort — never block the inbox on it */
     }
-    return Promise.all(Object.keys(this.heads()).map((p) => this.getConversation(p)))
+    const peers = new Set([...Object.keys(this.heads()), ...this.accepted()])
+    // Per-peer failures must not take the inbox down with them: one handle that stops resolving
+    // would otherwise reject the whole Promise.all and blank every conversation.
+    const results = await Promise.allSettled([...peers].map((p) => this.getConversation(p)))
+    return results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
+  }
+
+  /** Find heads we participate in that this device has no local note for — how a second device,
+   *  or the person who was written TO, discovers a thread at all. */
+  private async discoverHeads(): Promise<void> {
+    const mine = await findHeads(await this.suiAddress())
+    const known = new Set(Object.values(this.heads()))
+    for (const headId of mine) {
+      if (known.has(headId)) continue
+      const peerH = await this.peerOfHead(headId)
+      if (peerH) this.setHead(peerH, headId)
+    }
   }
 
   /** Which participant of a head is NOT us. */
@@ -394,14 +495,35 @@ export class LiveBackend implements Backend {
     if (!this.id?.handle) throw new Error('claim a handle first')
     if (!answer.trim()) throw new Error('an answer is required — it never leaves this device')
     const config = createKnockConfig(prompt)
-    await deriveKnockKey(answer, config) // fail early if the answer is unusable
+    const key = await deriveKnockKey(answer, config) // fail early if the answer is unusable
     const tx = await ens.setText(this.id.handle, REC.knock, JSON.stringify(config), this.owner ?? undefined)
+    // Cache the derived key so the inbox can open knocks by itself. The answer is still dropped
+    // on the floor here — the key it produced is what we keep, and only for this tab.
+    this.cacheKnockKey(config.salt, key)
+    this.myKnock = { at: Date.now(), config } // new salt takes effect at once, not in 60s
     return `knock published — "${config.prompt}" (tx ${tx.slice(0, 12)}…)`
   }
 
   async peerKnockPrompt(handle: string): Promise<string | null> {
+    // Someone whose knock we opened is already through: they proved the answer and handed us
+    // their key. Asking us to knock back before we can reply would gate our own doorway.
+    if (this.accepted().includes(fullHandle(handle))) return null
     const config = parseKnockConfig(await ens.readText(fullHandle(handle), REC.knock))
     return config?.prompt ?? null
+  }
+
+  private accepted(): string[] {
+    try {
+      return JSON.parse(localStorage.getItem(ACCEPTED) || '[]') as string[]
+    } catch {
+      return []
+    }
+  }
+
+  async acceptKnock(handle: string): Promise<void> {
+    const h = fullHandle(handle)
+    const list = this.accepted()
+    if (!list.includes(h)) localStorage.setItem(ACCEPTED, JSON.stringify([...list, h]))
   }
 
   /** Knock on someone's door. Their published question tells us the salt and KDF; our answer
@@ -409,6 +531,9 @@ export class LiveBackend implements Backend {
    *  told it arrived. */
   async sendKnock(toHandle: string, answer: string, intro: string): Promise<'sent' | 'no-knock'> {
     if (!this.id) throw new Error('connect first')
+    // An introduction is the whole point: the recipient decides whether to open the door based on
+    // it, and an empty one gives them nothing to decide with.
+    if (!intro.trim()) throw new Error('say who you are — an empty introduction tells them nothing')
     const handle = fullHandle(toHandle)
     const config = parseKnockConfig(await ens.readText(handle, REC.knock))
     if (!config) return 'no-knock'
@@ -433,7 +558,45 @@ export class LiveBackend implements Backend {
     if (!config) throw new Error('you have not published a knock question yet')
 
     const key = await deriveKnockKey(answer, config)
-    const { knocks } = await fetchKnocks(this.id.handle)
+    this.cacheKnockKey(config.salt, key) // the inbox can poll from here on, no retyping
+    return this.openWith(key, this.id.handle)
+  }
+
+  /** The same read, but with the cached key and no answer prompt. Silent by design: if nothing is
+   *  cached, or the salt moved on, it simply reports nothing rather than nagging. */
+  async pendingKnocks(): Promise<OpenedKnock[]> {
+    if (!this.id?.handle) return []
+    const config = await this.myKnockConfig()
+    if (!config) return []
+    const key = this.cachedKnockKey(config.salt)
+    if (!key) return []
+    try {
+      return await this.openWith(key, this.id.handle)
+    } catch {
+      return [] // the inbox must never break because the relay hiccuped
+    }
+  }
+
+  /** Our own knock config, cached: it is read twice per poll (state + pending) and changes only
+   *  when we publish, which goes through setKnock and can invalidate it directly. */
+  private myKnock: { at: number; config: ReturnType<typeof parseKnockConfig> } | null = null
+
+  private async myKnockConfig(): Promise<ReturnType<typeof parseKnockConfig>> {
+    if (!this.id?.handle) return null
+    if (this.myKnock && Date.now() - this.myKnock.at < 60_000) return this.myKnock.config
+    const config = parseKnockConfig(await ens.readText(this.id.handle, REC.knock))
+    this.myKnock = { at: Date.now(), config }
+    return config
+  }
+
+  async knockState(): Promise<'none' | 'armed' | 'locked'> {
+    const config = await this.myKnockConfig()
+    if (!config) return 'none'
+    return this.cachedKnockKey(config.salt) ? 'armed' : 'locked'
+  }
+
+  private async openWith(key: Uint8Array, handle: string): Promise<OpenedKnock[]> {
+    const { knocks } = await fetchKnocks(handle)
     const opened: OpenedKnock[] = []
     for (const k of knocks) {
       const payload = openKnock(key, k.sealed)
@@ -442,6 +605,24 @@ export class LiveBackend implements Backend {
       if (payload) opened.push({ id: k.id, pubkey: payload.pubkey, from: payload.from, intro: payload.intro, ts: payload.ts })
     }
     return opened.sort((a, b) => b.ts - a.ts)
+  }
+
+  private cacheKnockKey(salt: string, key: Uint8Array): void {
+    sessionStorage.setItem(KNOCK_KEY, JSON.stringify({ salt, key: toHex(key) }))
+  }
+
+  private cachedKnockKey(salt: string): Uint8Array | null {
+    try {
+      const got = JSON.parse(sessionStorage.getItem(KNOCK_KEY) || 'null') as
+        | { salt?: string; key?: string }
+        | null
+      // Salt mismatch = the question was re-published, so this key opens nothing. Drop it rather
+      // than silently returning an empty inbox forever.
+      if (!got?.key || got.salt !== salt) return null
+      return fromHex(got.key)
+    } catch {
+      return null
+    }
   }
 
   /** authorizeTextRoles on ONE key. Grant → the gateway can rotate the inbox pointer and

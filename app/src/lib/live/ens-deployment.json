@@ -20,6 +20,7 @@
     "registry": "0x2D95c86bd9a850d95897c604c8EB00131a9C62a5",
     "registrar": "0x794ec3b1fb8ad0d23f3f654c20993ba4ff762c19",
     "deployedAt": "2026-07-25T16:46:40.145Z",
-    "deployer": "0x61eE2fBcf2841d9094e2D42406Dd4f83a7981Bb8"
+    "deployer": "0x61eE2fBcf2841d9094e2D42406Dd4f83a7981Bb8",
+    "registrarDeployBlock": 11348914
   }
 }

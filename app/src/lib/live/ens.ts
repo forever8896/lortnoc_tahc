@@ -30,6 +30,20 @@ import { sepolia } from 'viem/chains'
 import type { Account } from 'viem'
 import { ENS, LORTNOC, REC, ROLE_SET_TEXT, assertEnsSetup } from './config'
 
+/** LortnocRegistrar.claim emits this. `claimant` is indexed, so "which handle does this address
+ *  own?" is a single filtered log query — see handleOf(). */
+const handleClaimedEvent = {
+  type: 'event',
+  name: 'HandleClaimed',
+  inputs: [
+    { name: 'label', type: 'string', indexed: false },
+    { name: 'claimant', type: 'address', indexed: true },
+    { name: 'resolver', type: 'address', indexed: true },
+    { name: 'tokenId', type: 'uint256', indexed: false },
+    { name: 'node', type: 'bytes32', indexed: false },
+  ],
+} as const
+
 // ---- ABIs (only what we call) -----------------------------------------------------------------
 
 const resolverAbi = [
@@ -222,6 +236,51 @@ export async function hasTextRole(handle: string, who: Address, key: string): Pr
   } catch {
     return false
   }
+}
+
+/**
+ * Which handle does this address own? Answered from chain, by scanning the registrar's
+ * `HandleClaimed(label, claimant indexed, …)` log.
+ *
+ * This exists because the app used to know your handle ONLY from a localStorage note written at
+ * claim time. That is per-origin and per-browser, so moving to a new domain, a second device, or
+ * a cleared cache made a claimed handle vanish and the app offered to sell you another one.
+ * Ownership is on-chain; the app should read it there.
+ *
+ * Two constraints shape the implementation: the default RPC refuses log queries entirely, and the
+ * log-capable one caps ranges at 10k blocks — so this uses a separate endpoint and walks in
+ * chunks from the registrar's deployment block. Returns the most recent claim.
+ */
+export async function handleOf(owner: Address): Promise<string | null> {
+  if (!LORTNOC.registrar) return null
+  const client = createPublicClient({ chain: sepolia, transport: http(ENS.logsRpc) })
+  const latest = await client.getBlockNumber()
+  const step = ENS.logSpan
+  let newest: { label: string; block: bigint } | null = null
+
+  for (let from = LORTNOC.registrarDeployBlock; from <= latest; from += step + 1n) {
+    const to = from + step > latest ? latest : from + step
+    let logs
+    try {
+      logs = await client.getLogs({
+        address: LORTNOC.registrar as Address,
+        event: handleClaimedEvent,
+        args: { claimant: owner },
+        fromBlock: from,
+        toBlock: to,
+      })
+    } catch (e) {
+      // A log endpoint that rate-limits or dies must not break sign-in — we simply fall back to
+      // whatever the local note says.
+      console.warn('[lortnoc] handle lookup failed for one range (continuing):', e)
+      continue
+    }
+    for (const l of logs) {
+      const label = l.args.label
+      if (label && (!newest || l.blockNumber > newest.block)) newest = { label, block: l.blockNumber }
+    }
+  }
+  return newest ? `${newest.label}.${LORTNOC.parentName}` : null
 }
 
 /** Trustless handle proof: the resolver came from the canonical VerifiableFactory. */

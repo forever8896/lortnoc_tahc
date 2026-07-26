@@ -10,6 +10,9 @@ export interface Backend {
   /** Connect / restore an identity (wallet-sign in live, seed in mock). */
   connect(): Promise<Identity>
   currentIdentity(): Identity | null
+  /** Resume a previous sign-in WITHOUT another wallet signature. Null when there is nothing to
+   *  resume. Called once on load, before showing the connect screen. */
+  restore(): Promise<Identity | null>
   /** Claim <name>.lortnoctahc.eth and publish the messaging pubkey. */
   claimHandle(name: string): Promise<Identity>
   isHandleAvailable(name: string): Promise<boolean>
@@ -40,6 +43,23 @@ export interface Backend {
   sendKnock(toHandle: string, answer: string, intro: string): Promise<'sent' | 'no-knock'>
   /** Open your pending knocks with your own answer. Wrong-answer knocks stay invisible. */
   readKnocks(answer: string): Promise<OpenedKnock[]>
+  /** Knocks openable with the key cached from the last publish/check — so the inbox can surface
+   *  them on its own instead of waiting for you to retype the answer somewhere you'd have to
+   *  know to look. Empty when no key is cached (nothing is ever derived from a stored answer:
+   *  we cache the derived key, never the answer). */
+  pendingKnocks(): Promise<OpenedKnock[]>
+  /** Can the inbox open knocks right now?
+   *   'none'   — no question published, so nobody can knock
+   *   'armed'  — a key is cached; pendingKnocks() will surface arrivals on its own
+   *   'locked' — a question is published but this tab has no key, so knocks cannot be read yet
+   *  Deliberately says nothing about how many sealed knocks are waiting: revealing that would
+   *  tell you wrong answers had arrived, which §6.8 promises it never will. */
+  knockState(): Promise<'none' | 'armed' | 'locked'>
+  /** Accept a knock: remember that this peer is through the door. They knocked and answered, so
+   *  the conversation exists from now on even before a first message — it appears in the list,
+   *  and their own gate no longer applies to us (a knock we opened is mutual consent; making the
+   *  recipient counter-knock to reply would be absurd). */
+  acceptKnock(handle: string): Promise<void>
 
   /** The master secret, for deriving the Semaphore membership identity (§5.1). Null in mock
    *  mode and before sign-in. Never leaves the device. */

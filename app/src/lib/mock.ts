@@ -30,6 +30,7 @@ type Net = {
   blobs: Record<string, { from: string; to: string; ct: string; ts: number }[]> // convId -> encrypted msgs
   records?: Record<string, string> // "<handle>|<key>" -> value (stands in for ENS text records)
   knocks?: Record<string, { id: string; sealed: string; ts: number }[]> // handle -> sealed knocks
+  accepted?: string[] // peers whose knock was opened — through the door, gate no longer applies
 }
 const loadNet = (): Net => JSON.parse(localStorage.getItem(NET) || '{"directory":{},"blobs":{}}')
 const saveNet = (n: Net): void => localStorage.setItem(NET, JSON.stringify(n))
@@ -46,7 +47,8 @@ export class MockBackend implements Backend {
     return { mode: 'demo', ens: true, store: true }
   }
 
-  private restore(): void {
+  /** Rehydrate from sessionStorage. Sync and private — see the public restore() below. */
+  private rehydrate(): void {
     if (this.id) return
     const raw = sessionStorage.getItem(ME)
     if (!raw) return
@@ -61,7 +63,7 @@ export class MockBackend implements Backend {
   }
 
   async connect(): Promise<Identity> {
-    this.restore()
+    this.rehydrate()
     if (this.id) return this.id
     // demo seed: random per tab (like a fresh wallet). Real path signs with a wallet.
     const seed = crypto.getRandomValues(new Uint8Array(32))
@@ -74,8 +76,32 @@ export class MockBackend implements Backend {
   }
 
   currentIdentity(): Identity | null {
-    this.restore()
+    this.rehydrate()
     return this.id
+  }
+
+  /** Demo mode has no wallet to re-prompt, so resuming is just reading the tab's own state. */
+  async restore(): Promise<Identity | null> {
+    this.rehydrate()
+    return this.id
+  }
+
+  /** Demo mode keeps no derived-key cache: the "network" is this tab, so readKnocks is already
+   *  instant and there is nothing to poll in the background. */
+  async pendingKnocks(): Promise<OpenedKnock[]> {
+    return []
+  }
+
+  /** Demo mode has no cached-key concept — readKnocks is instant against this tab's own store. */
+  async knockState(): Promise<'none' | 'armed' | 'locked'> {
+    return 'none'
+  }
+
+  async acceptKnock(handle: string): Promise<void> {
+    const net = loadNet()
+    const h = fullHandle(handle)
+    ;(net.accepted ||= []).includes(h) || net.accepted.push(h)
+    saveNet(net)
   }
 
   /** Demo mode has no chain and therefore no paid tier. */
@@ -117,7 +143,7 @@ export class MockBackend implements Backend {
   }
 
   async send(peer: string, body: string): Promise<Message> {
-    this.restore()
+    this.rehydrate()
     if (!this.id?.handle || !this.kp) throw new Error('claim a handle first')
     const peerH = fullHandle(peer)
     const peerPub = await this.resolvePubkey(peerH)
@@ -133,7 +159,7 @@ export class MockBackend implements Backend {
   }
 
   async getConversation(peer: string): Promise<Conversation> {
-    this.restore()
+    this.rehydrate()
     const peerH = fullHandle(peer)
     const me = this.id?.handle
     const peerPub = await this.resolvePubkey(peerH)
@@ -157,7 +183,7 @@ export class MockBackend implements Backend {
   }
 
   async listConversations(): Promise<Conversation[]> {
-    this.restore()
+    this.rehydrate()
     const me = this.id?.handle
     if (!me) return []
     const net = loadNet()

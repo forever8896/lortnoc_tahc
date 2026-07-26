@@ -21,7 +21,17 @@ export function BackendProvider({ children }: { children: ReactNode }) {
   const [identity, setIdentity] = useState<Identity | null>(null)
 
   useEffect(() => {
-    setIdentity(backend.currentIdentity())
+    // Resume a previous sign-in before falling back to the connect screen. This is what stops
+    // every reload from costing another wallet signature; it never prompts, so a fresh visitor
+    // just lands on Connect as before.
+    let live = true
+    void backend
+      .restore()
+      .then((id) => live && setIdentity(id ?? backend.currentIdentity()))
+      .catch(() => live && setIdentity(backend.currentIdentity()))
+    return () => {
+      live = false
+    }
   }, [backend])
 
   return <BackendCtx.Provider value={{ backend, identity, setIdentity }}>{children}</BackendCtx.Provider>

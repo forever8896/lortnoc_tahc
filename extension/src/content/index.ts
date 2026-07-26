@@ -55,8 +55,28 @@ async function sendOffer(): Promise<void> {
   }
   const frame = await session.startOffer()
   const cover = await bytesToCover(frame, true) // fast: handshake frame, skip best-of-N
-  if (cover && (await sendCoverText(cover))) toast('Invite sent. Waiting for the other side to accept…')
-  else toast('Could not send the invite — is Stego on and the codec reachable?')
+  if (cover && (await sendCoverText(cover))) {
+    toast('Invite sent. Waiting for the other side to accept…')
+    watchForAnswer()
+  } else {
+    toast('Could not send the invite — is Stego on and the codec reachable?')
+  }
+}
+
+/**
+ * An offer can go unanswered for boring reasons: the other side had the extension reloaded and
+ * their content script was orphaned, or their tab was not on the chat when it landed. Silence for
+ * 25s used to look identical to a broken handshake, so say something and offer a way forward.
+ */
+let answerWatch: ReturnType<typeof setTimeout> | null = null
+
+function watchForAnswer(): void {
+  if (answerWatch) clearTimeout(answerWatch)
+  answerWatch = setTimeout(() => {
+    if (session.status() === 'established') return
+    console.warn('[lortnoc] no answer 25s after the invite — the other side may not have it')
+    toast('Still waiting. Make sure the other side has PrivacyMaxxing on and this chat open, then click Connect there too.')
+  }, 25_000)
 }
 
 let inbound: { reset: () => void } | null = null
@@ -99,6 +119,7 @@ async function establishFromOffer(pubkey: Uint8Array): Promise<void> {
   const cover = await bytesToCover(ack, true) // fast: handshake frame, skip best-of-N
   if (cover) await sendCoverText(cover)
   console.info('[lortnoc] session established; re-scanning inbound')
+  if (answerWatch) clearTimeout(answerWatch)
   tagFailures = 0
   mismatchWarned = false
   inbound?.reset() // decode any messages that arrived before the key
@@ -137,6 +158,7 @@ async function handleFrame(type: number, pubkey: Uint8Array): Promise<void> {
   } else if (type === FRAME.ACK) {
     await session.onAck(pubkey)
     console.info('[lortnoc] session established (ack); re-scanning inbound')
+    if (answerWatch) clearTimeout(answerWatch)
     tagFailures = 0
     mismatchWarned = false
     inbound?.reset()
@@ -286,11 +308,18 @@ async function main(): Promise<void> {
     const bytes = fromB64(res.data.ciphertext)
     const frame = parseFrame(bytes)
     if (frame) {
+      console.info('[lortnoc] inbound frame:', frame.type === FRAME.OFFER ? 'OFFER' : 'ACK',
+        'from', toHex(frame.pubkey.slice(0, 6)), '· our status:', session.status())
       await handleFrame(frame.type, frame.pubkey)
       return null // handled as handshake — not a message
     }
     const key = activeKey()
-    if (!key) return RETRY // no key yet — don't poison the cache; decode after handshake
+    if (!key) {
+      // Decoded as stego but we hold no key and it was not a frame. Before, this returned RETRY
+      // in silence — so a handshake that never completed looked identical to nothing happening.
+      console.info('[lortnoc] inbound: decoded', bytes.length, 'bytes but no session yet — waiting for the handshake')
+      return RETRY
+    }
     const pt = tryDecrypt(key, bytes)
     if (pt === null) noteTagFailure()
     else tagFailures = 0

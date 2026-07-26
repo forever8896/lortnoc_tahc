@@ -9,10 +9,17 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
   const [conv, setConv] = useState<Conversation | null>(null)
   const [body, setBody] = useState('')
   const [err, setErr] = useState('')
+  const [sending, setSending] = useState(false)
   const [reveal, setReveal] = useState<number | null>(null)
   // If this peer gates contact, we must knock before we can message (§6.8).
   const [knockPrompt, setKnockPrompt] = useState<string | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
+
+  // Load errors and SEND errors are kept apart on purpose. They shared one slot, so the poll
+  // clearing `err` on its next success also erased the report that a send had failed — the error
+  // flashed for a couple of seconds and then the message was simply gone with no explanation.
+  // A failed send stays on screen until you send again.
+  const [sendErr, setSendErr] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -23,9 +30,22 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
     }
   }, [backend, peer])
 
+  // Overlapping polls were stacking up: each pass re-read every blob, and a slow one had another
+  // already in flight behind it. Blob reads are cached now, and this guard means a slow pass
+  // delays the next one rather than racing it.
+  const busy = useRef(false)
   useEffect(() => {
-    void load()
-    const t = setInterval(() => void load(), 2500)
+    const tick = async () => {
+      if (busy.current) return
+      busy.current = true
+      try {
+        await load()
+      } finally {
+        busy.current = false
+      }
+    }
+    void tick()
+    const t = setInterval(() => void tick(), 3000)
     return () => clearInterval(t)
   }, [load])
 
@@ -44,13 +64,19 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
     const text = body.trim()
     if (!text) return
     setBody('')
-    setErr('')
+    setSendErr('')
+    setSending(true)
     try {
       await backend.send(peer, text)
       await load()
       onSent()
     } catch (e) {
-      setErr(String(e instanceof Error ? e.message : e))
+      // Put the text back in the box. Losing what you typed on top of a failed send is the
+      // cruellest possible outcome, and storage failures here are retryable.
+      setBody(text)
+      setSendErr(String(e instanceof Error ? e.message : e))
+    } finally {
+      setSending(false)
     }
   }
 
@@ -120,9 +146,9 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
         <div ref={endRef} />
       </div>
 
-      {err && (
-        <div className="mono" style={{ color: '#f0806a', fontSize: 12, padding: '8px var(--shell)' }}>
-          {err}
+      {(err || sendErr) && (
+        <div className="mono" style={{ color: '#f0806a', fontSize: 12, padding: '8px var(--shell)', lineHeight: 1.6 }}>
+          {sendErr ? `Not sent — ${sendErr}` : err}
         </div>
       )}
 
@@ -136,8 +162,8 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
           value={body}
           onChange={(e) => setBody(e.target.value)}
         />
-        <button className="btn" disabled={!body.trim()}>
-          Send
+        <button className="btn" disabled={!body.trim() || sending}>
+          {sending ? 'sending…' : 'Send'}
         </button>
       </form>
       )}
@@ -180,8 +206,8 @@ function KnockComposer({ peer, prompt, onSent }: { peer: string; prompt: string;
   if (done) {
     return (
       <div className="mono" style={{ padding: 'var(--shell)', borderTop: '1px solid var(--rule)', fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
-        <span className="signal">Knock sent.</span> If your answer was right it is waiting in their
-        inbox, with your key attached — accepting it opens the conversation.
+        <span className="signal">Knock sent.</span> If your answer was right it appears in their
+        inbox, with your key attached — opening it starts the conversation.
         <br />
         <span style={{ color: 'var(--faint)' }}>
           If it was wrong, nothing happened and they will never know you tried. We cannot tell you which.
@@ -211,7 +237,9 @@ function KnockComposer({ peer, prompt, onSent }: { peer: string; prompt: string;
           value={intro}
           onChange={(e) => setIntro(e.target.value)}
         />
-        <button className="btn btn--sm" disabled={busy || !answer.trim()}>
+        {/* The intro is required: it is the only thing they see when deciding whether to let you
+            in, and an empty knock is indistinguishable from noise. */}
+        <button className="btn btn--sm" disabled={busy || !answer.trim() || !intro.trim()}>
           {busy ? 'deriving…' : 'knock'}
         </button>
       </div>

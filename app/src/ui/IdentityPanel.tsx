@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useBackend } from '../lib/ctx'
-import type { EnsStatus, OpenedKnock } from '../lib/types'
+import type { EnsStatus, OpenedKnock, RecordPerm } from '../lib/types'
 import { RECORD_SPECS } from '../lib/live/config'
 import { Eyebrow, Spinner, shortHandle } from './atoms'
 
@@ -131,6 +131,34 @@ export function IdentityPanel({ onClose }: { onClose: () => void }) {
 
 type RunFn = (label: string, fn: () => Promise<string>) => Promise<void>
 
+/**
+ * Who may write this record, as a sentence.
+ *
+ * This replaces two cryptic cells ("you write" / "gateway —") that sat inline with the edit and
+ * delegate buttons. They were live `eth_call` readouts, but next to real controls they read as
+ * commands, so the most important claim on the screen — that permissions are per-record and
+ * enforced by the chain — was the least legible thing on it.
+ */
+function PermissionLine({ perm, gateway }: { perm?: RecordPerm; gateway: string }) {
+  const you = perm?.ownerCanWrite ?? false
+  const gw = perm?.gatewayCanWrite ?? false
+  const who = gateway ? `${gateway.slice(0, 6)}…${gateway.slice(-4)}` : 'the gateway'
+
+  const [mark, text, color] = you && gw
+    ? ['⚠', `You — and ${who} — can write this`, '#ffb26b']
+    : you
+      ? ['✓', 'Only you can write this', 'var(--signal)']
+      : gw
+        ? ['✕', `You cannot write this — only ${who} can`, '#f0806a']
+        : ['·', 'Nobody can write this', 'var(--faint)']
+
+  return (
+    <div className="mono" style={{ fontSize: 11, color, marginTop: 5 }}>
+      {mark} {text}
+    </div>
+  )
+}
+
 /** The admin table. One row per record, with what it holds, who may write it, and the controls
  *  to change either. */
 function Records({
@@ -153,7 +181,7 @@ function Records({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <Eyebrow>Records — ENS v2 per-record permissions</Eyebrow>
+        <Eyebrow>Records — who is allowed to write each one</Eyebrow>
         <span className="chip mono" style={{ fontSize: 10 }}>{live ? 'Sepolia · on-chain' : 'demo mode'}</span>
       </div>
 
@@ -173,15 +201,10 @@ function Records({
                 >
                   {perm?.value ?? 'unset'}
                 </span>
-                <span className="mono" style={{ fontSize: 10, color: perm?.ownerCanWrite ? 'var(--signal)' : 'var(--faint)' }}>
-                  you {perm?.ownerCanWrite ? 'write' : '—'}
-                </span>
-                <span className="mono" style={{ fontSize: 10, color: delegated ? 'var(--signal)' : 'var(--faint)' }}>
-                  gateway {delegated ? 'write' : '—'}
-                </span>
               </div>
 
               <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 4 }}>{spec.hint}</div>
+              <PermissionLine perm={perm} gateway={gateway} />
 
               <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                 {spec.owned && (
@@ -204,7 +227,7 @@ function Records({
                   }
                 >
                   {busy === spec.key ? <Spinner /> : null}
-                  {delegated ? 'revoke' : 'delegate → gateway'}
+                  {delegated ? 'revoke gateway access' : 'let the gateway write this'}
                 </button>
               </div>
 
