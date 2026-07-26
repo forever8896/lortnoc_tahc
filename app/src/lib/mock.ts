@@ -5,7 +5,9 @@
 // mocked (localStorage instead of Walrus/Sui) — the encryption is real.
 import type { Backend } from './backend'
 import { fullHandle } from './backend'
-import type { Conversation, EnsStatus, Health, Identity, Message, OpenedKnock, RecordPerm } from './types'
+import type {
+  Conversation, EnsStatus, Health, Identity, Message, OpenedKnock, RecordPerm, SendStage,
+} from './types'
 import { createKnockConfig, deriveKnockKey, openKnock, parseKnockConfig, sealKnock } from './live/knock'
 import { RECORD_SPECS } from './live/config'
 
@@ -146,7 +148,8 @@ export class MockBackend implements Backend {
     return deriveConvKey(this.kp.priv, fromHex(peerPub), this.kp.pub)
   }
 
-  async send(peer: string, body: string): Promise<Message> {
+  async send(peer: string, body: string, onStage?: (s: SendStage) => void): Promise<Message> {
+    onStage?.('encrypting')
     this.rehydrate()
     if (!this.id?.handle || !this.kp) throw new Error('claim a handle first')
     const peerH = fullHandle(peer)

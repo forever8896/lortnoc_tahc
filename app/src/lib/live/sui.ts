@@ -10,7 +10,7 @@ import { Transaction } from '@mysten/sui/transactions'
 import type { Signer } from '@mysten/sui/cryptography'
 import { SUI, assertSuiSetup } from './config'
 import { encrypt, tryDecrypt } from '../crypto'
-import type { Message } from '../types'
+import type { Message, SendStage } from '../types'
 
 export const sui = new SuiClient({ url: SUI.rpc })
 
@@ -108,9 +108,12 @@ export async function sendMessage(
   msg: Message,
   signer: Signer,
   peerAddress: string,
+  onStage?: (s: SendStage) => void,
 ): Promise<{ headId: string; blobId: string }> {
   assertSuiSetup()
+  onStage?.('storing')
   const blobId = await walrusWrite(encrypt(convKey, JSON.stringify(msg)), signer)
+  onStage?.('anchoring')
 
   // Rebuilt per attempt: a Transaction caches its built bytes (including the gas coin it picked),
   // so retrying the same instance would retry the same stale reference.

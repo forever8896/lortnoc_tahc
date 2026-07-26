@@ -55,9 +55,18 @@ check('wrong passphrase fails the auth tag (returns null)', tryDecrypt(wrongKey,
 const normal = await codecDecode('hey are you free tonight')
 check('a normal message is not codec cover text (422)', normal.status === 422)
 
-// 4. determinism: same input twice → identical cover text
+// 4. Reversibility, not byte-equality. The same input encodes DIFFERENTLY every time — random
+// nonce openings plus 0G best-of-N cover selection — and that is intended. What must hold is that
+// each distinct cover text decodes back to the identical ciphertext. Asserting equal cover text
+// was a leftover from before those features existed, and it made a healthy codec report a failure.
 const c2 = await codecEncode(toB64(encrypt(key, real)))
-check('deterministic: identical real text → identical cover text', c2 === cover)
+check('same input encodes differently each time (random nonce + best-of-N)', c2 !== cover)
+const back1 = await codecDecode(cover)
+const back2 = await codecDecode(c2)
+check(
+  'both cover texts decode to the SAME ciphertext (reversibility holds)',
+  back1.status === 200 && back2.status === 200 && back1.ciphertext === back2.ciphertext,
+)
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`)
 process.exit(failures === 0 ? 0 : 1)

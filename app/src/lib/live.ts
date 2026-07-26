@@ -5,7 +5,7 @@
 import type { Backend } from './backend'
 import { fullHandle, shortName } from './backend'
 import type {
-  ClaimStage, Conversation, EnsStatus, Health, Identity, Message, OpenedKnock, RecordPerm,
+  ClaimStage, Conversation, EnsStatus, Health, Identity, Message, OpenedKnock, RecordPerm, SendStage,
 } from './types'
 import {
   deriveConvKey, deriveMasterSecret, deriveMessagingKey, deriveOwnerKey, fromHex, toHex, type KeyPair,
@@ -234,7 +234,7 @@ export class LiveBackend implements Backend {
     localStorage.setItem(HEADS, JSON.stringify(h))
   }
 
-  async send(peer: string, body: string): Promise<Message> {
+  async send(peer: string, body: string, onStage?: (s: SendStage) => void): Promise<Message> {
     if (!this.id?.handle) throw new Error('claim a handle first')
     const peerH = fullHandle(peer)
     const peerPub = await this.resolvePubkey(peerH)
@@ -247,10 +247,11 @@ export class LiveBackend implements Backend {
         `${peerH} has not published a Sui address (${REC.sui}) yet — they need to open the app once.`,
       )
     }
+    onStage?.('encrypting')
     const key = this.convKeyFor(peerPub)
     const msg: Message = { v: 1, from: this.id.handle, to: peerH, ts: Date.now(), body }
     const signer = await this.suiSigner()
-    const { headId } = await sendMessage(this.heads()[peerH] ?? null, key, msg, signer, peerSui)
+    const { headId } = await sendMessage(this.heads()[peerH] ?? null, key, msg, signer, peerSui, onStage)
     if (headId) this.setHead(peerH, headId)
     return msg
   }

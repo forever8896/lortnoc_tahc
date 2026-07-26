@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBackend } from '../lib/ctx'
-import type { Conversation } from '../lib/types'
+import type { Conversation, SendStage } from '../lib/types'
+import { SEND_STAGE_LABEL } from '../lib/types'
 import { fullHandle } from '../lib/backend'
 import { Avatar, shortHandle } from './atoms'
 
@@ -20,6 +21,8 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
   // flashed for a couple of seconds and then the message was simply gone with no explanation.
   // A failed send stays on screen until you send again.
   const [sendErr, setSendErr] = useState('')
+  /** The message being stored right now, shown before the chain has it. */
+  const [pending, setPending] = useState<{ body: string; ts: number; stage: SendStage } | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -57,7 +60,7 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [conv?.messages.length])
+  }, [conv?.messages.length, pending?.stage])
 
   async function send(e: React.FormEvent) {
     e.preventDefault()
@@ -66,8 +69,12 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
     setBody('')
     setSendErr('')
     setSending(true)
+    // Show it immediately. Storing a message really does take seconds — Walrus, then Sui — and
+    // the wait is honest work, but a composer that empties into nothing reads as a dropped
+    // message. The bubble appears at once and narrates where it actually is.
+    setPending({ body: text, ts: Date.now(), stage: 'encrypting' })
     try {
-      await backend.send(peer, text)
+      await backend.send(peer, text, (s) => setPending((p) => (p ? { ...p, stage: s } : p)))
       await load()
       onSent()
     } catch (e) {
@@ -76,6 +83,9 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
       setBody(text)
       setSendErr(String(e instanceof Error ? e.message : e))
     } finally {
+      // Either the real message is now in `conv` or the send failed and the text is back in the
+      // box — either way the placeholder has served its purpose.
+      setPending(null)
       setSending(false)
     }
   }
@@ -106,7 +116,7 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
       </header>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--shell)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {conv?.messages.length === 0 && (
+        {conv?.messages.length === 0 && !pending && (
           <div className="mono" style={{ color: 'var(--faint)', fontSize: 12, margin: 'auto', textAlign: 'center', maxWidth: 340, lineHeight: 1.6 }}>
             Nothing here yet. Your first message derives a shared key with{' '}
             <span className="signal">{shortHandle(peerH)}</span> via ECDH — no secret is ever sent.
@@ -143,6 +153,17 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
             </div>
           )
         })}
+        {pending && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div className="msg-pending" style={{ maxWidth: 'min(78%, 560px)' }}>
+              <div style={{ fontSize: 15, lineHeight: 1.5 }}>{pending.body}</div>
+              <div className="mono" style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span className="msg-pending__dot" />
+                {SEND_STAGE_LABEL[pending.stage]}
+              </div>
+            </div>
+          </div>
+        )}
         <div ref={endRef} />
       </div>
 
@@ -167,7 +188,25 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
         </button>
       </form>
       )}
-      <style>{`@media (min-width:721px){ .hide-desktop{ display:none; } }`}</style>
+      <style>{`
+        @media (min-width:721px){ .hide-desktop{ display:none; } }
+        .msg-pending {
+          padding:10px 14px; text-align:left;
+          background:rgba(18,196,190,0.06);
+          border:1px solid rgba(18,196,190,0.22);
+          animation:msg-breathe 1.6s ease-in-out infinite;
+        }
+        .msg-pending__dot {
+          width:6px; height:6px; border-radius:50%; background:var(--signal);
+          animation:msg-pulse 1.1s ease-in-out infinite; flex:none;
+        }
+        @keyframes msg-breathe { 0%,100%{opacity:.72} 50%{opacity:1} }
+        @keyframes msg-pulse { 0%,100%{opacity:.35; transform:scale(.8)} 50%{opacity:1; transform:scale(1)} }
+        @media (prefers-reduced-motion: reduce) {
+          .msg-pending, .msg-pending__dot { animation:none; }
+          .msg-pending { opacity:.8; }
+        }
+      `}</style>
     </div>
   )
 }

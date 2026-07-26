@@ -10,6 +10,16 @@ export type Message = {
   body: string
 }
 
+/** Where a send has got to. Storing a message is a multi-second, multi-step journey (encrypt →
+ *  Walrus blob → Sui head), and a composer that just freezes for that long reads as broken. */
+export type SendStage = 'encrypting' | 'storing' | 'anchoring'
+
+export const SEND_STAGE_LABEL: Record<SendStage, string> = {
+  encrypting: 'encrypting on this device',
+  storing: 'storing on Walrus',
+  anchoring: 'anchoring on Sui',
+}
+
 export type Conversation = {
   convId: string
   peer: Handle

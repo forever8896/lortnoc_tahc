@@ -3,7 +3,9 @@
 //     functional and demoable with no chain access (two browser tabs share localStorage = two
 //     users chatting).
 //   - LiveBackend: real ENS v2 on Sepolia (viem, deployed contracts) + Sui/Walrus/Seal.
-import type { ClaimStage, Conversation, EnsStatus, Health, Identity, Message, OpenedKnock } from './types'
+import type {
+  ClaimStage, Conversation, EnsStatus, Health, Identity, Message, OpenedKnock, SendStage,
+} from './types'
 
 export interface Backend {
   health(): Health
@@ -20,7 +22,9 @@ export interface Backend {
   resolvePubkey(handle: string): Promise<string | null>
   listConversations(): Promise<Conversation[]>
   getConversation(peer: string): Promise<Conversation>
-  send(peer: string, body: string): Promise<Message>
+  /** `onStage` reports progress through the storage pipeline so the UI can show a message
+   *  optimistically and narrate what is happening to it, rather than freezing for seconds. */
+  send(peer: string, body: string, onStage?: (s: SendStage) => void): Promise<Message>
 
   // ---- ENS v2 self-sovereignty surface (§6.5) --------------------------------------------------
   /** Live on-chain view of the handle: resolver, factory proof, per-record write permissions. */
