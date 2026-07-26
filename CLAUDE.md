@@ -329,8 +329,15 @@ Each spec: **Purpose · Interface · Data · Flow · Scope/failure.** IN = requi
     | blob-per-message @ advertised peg | $71.98 | $359.92 | $1,439.66 |
 
     ~650×. Assumes WAL $0.033 / SUI $0.76 / 300 B message — both tokens volatile (WAL ATL $0.02842 on 2026-07-20).
-  - **⚠️ Spec-vs-code gap.** The "Data" bullet above specifies `Quilt.batch`; `app/src/lib/live/sui.ts` does **one
-    `writeBlob` per message**. That is the unbatched row. Fixing it is the single highest-leverage cost change.
+  - **⚠️ Spec-vs-code gap — MEASURED 2026-07-26, and deliberately NOT closed.** The "Data" bullet above specifies
+    `Quilt.batch`; `app/src/lib/live/sui.ts` does **one `writeBlob` per message**. Before switching, we probed it
+    (`app/scripts/quilt-probe.mjs`): a **three-message quilt came back at 445,556 B**, because Quilt pads to its
+    sliver structure — so a small quilt carries a large floor of its own and can cost MORE than the individual
+    blobs it replaces. The 650× row assumes a **saturated** 660-item quilt; a 1:1 chat emits messages one at a
+    time and never fills one. Capturing the win would mean buffering outbound messages — i.e. delaying delivery
+    to the recipient to save storage we are not yet spending. **Decision: stay unbatched until message volume
+    justifies it.** The blocker that would have made it impossible is cleared, though: aggregators DO serve
+    individual patches at `/v1/blobs/by-quilt-patch-id/<patchId>` (verified), so the read path survives the switch.
   - **Sui gas is not a rounding error at this granularity.** Per unbatched message: $0.000225 computation +
     **$0.0038 refundable** Sui storage deposit, vs only $0.000712 of WAL. The deposit returns 99% **only if blob
     objects are burned**; otherwise it is working capital locked (~$3,800 per million messages). Quilt collapses
@@ -350,6 +357,20 @@ Each spec: **Purpose · Interface · Data · Flow · Scope/failure.** IN = requi
   - **⚠️ `ConversationHead.blobs` is an unbounded `vector<String>`** — at Sui's 256,000 B object cap and ~45 B per
     blobId, `append` starts reverting at **~5,700 messages/conversation**, and every read pulls every blob. Quilt
     plus a rolling/segmented head fixes both.
+- **⚠️ Seal — WIRED FOR REAL 2026-07-26.** `@mysten/seal` was a dependency that was never imported: the Move
+  policy existed and was dry-run proven, but the client encrypted with our own AES-SIV, so nothing was ever
+  Seal-encrypted. Messages are now encrypted to an identity of `headAddress || nonce` (the prefix is what
+  `seal_approve` asserts) and key shares are released only after the key servers dry-run the policy against live
+  chain state. Proven end-to-end by `app/scripts/seal-live.mjs`: member recovers the plaintext, **stranger gets
+  `NoAccessError` from the key servers**. Reads still accept pre-Seal AES-SIV blobs.
+  **Gotchas:** (1) a new conversation's head must be created EMPTY first, because a Seal identity has to be
+  namespaced under an object that does not exist until it is created — one extra tx per conversation, and the
+  reader skips the empty entry. (2) Testnet key servers advertise a protocol version on-chain; `0xb012…` is v2
+  and needs `@mysten/seal` 1.x → `@mysten/sui` 2.x, which `@mysten/walrus` cannot take yet, so we use the v1
+  server `0x73d0…` at **threshold 1** — say "Seal with an on-chain policy", not "threshold encryption across a
+  committee". (3) Seal and Walrus each bundled their own `@mysten/sui`; duplicate `Transaction`/`Signer` classes
+  are not interchangeable — pinned to 1.38.0 with an override + `npm dedupe`. (4) A `SealClient` caches derived
+  keys, so testing "a stranger is refused" with the SAME client silently passes from cache — use a fresh client.
 - **Scope/failure.** **Seal-vs-anonymity bridge — VERIFIED SUPPORTED.** `seal_approve` runs arbitrary Move via
   `dry_run` (owner/time-lock/allowlist/token-gate patterns exist), so a non-address / nullifier policy is real, not a
   fantasy. **For the weekend, LEAD WITH THE FALLBACK** — gateway issues a short-lived Seal session key on a valid

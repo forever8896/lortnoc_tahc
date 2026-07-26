@@ -38,8 +38,7 @@
   <section>
     <h2>How it works here</h2>
     <ol class="steps">
-      <li><b>Batch.</b> Messages group into one blob with Quilt &mdash; up to 420&times; cheaper than storing them one by one.</li>
-      <li><b>Encrypt.</b> Seal threshold-encrypts the batch. No single party holds the key.</li>
+      <li><b>Encrypt.</b> Seal encrypts each message to an identity namespaced under its conversation object. No single party holds the key.</li>
       <li><b>Scatter.</b> Walrus erasure-codes it across the network. Every node holds a fragment it can&rsquo;t read.</li>
       <li><b>Point.</b> A <code>ConversationHead</code> Sui object tracks the current blob. Blobs never change; only the pointer moves.</li>
       <li><b>Find.</b> An ENS text record points at the manifest, so any device with the user&rsquo;s secret rebuilds their inbox.</li>
@@ -52,7 +51,8 @@
     <p>Three decisions you made are the reason this project has the shape it does.</p>
 
     <h3>Quilt</h3>
-    <p>Most blob stores treat small objects as somebody else&rsquo;s problem. Chat is <em>nothing but</em> small objects &mdash; a message is a few hundred bytes, and per-blob overhead would have made per-message storage economically absurd. Quilt is the difference between a demo and something we could actually afford to run.</p>
+    <p>Most blob stores treat small objects as somebody else&rsquo;s problem. Chat is <em>nothing but</em> small objects &mdash; a message is a few hundred bytes, and Walrus bills an encoded floor per blob regardless of size, so one-blob-per-message is a pricing catastrophe at scale. Quilt is the answer to that, and at 660 items per blob the saving is roughly 650&times;.</p>
+    <p class="note">We are not using it yet, and the measurement is why. We wrote a three-message quilt to testnet: it came back <b>445,556 bytes</b>. Quilt pads to its sliver structure, so a small quilt has a sizeable floor of its own &mdash; and a 1:1 conversation produces messages one at a time, never filling one. Batching would mean holding a message back from its recipient to save storage we are not yet spending. So we ship one blob per message today, with the switch costed and the read path already proven against per-patch aggregator reads.</p>
 
     <h3><code>seal_approve</code> as arbitrary Move</h3>
     <p>The obvious way to build access control for threshold encryption is a fixed vocabulary: allowlist, time-lock, token-gate. You made the policy a Move function evaluated by dry-run instead, so it can be anything expressible on Sui.</p>
@@ -68,9 +68,9 @@
     <div class="spec-wrap">
       <table class="spec">
         <tr><th>Storage</th><td>Walrus &mdash; erasure-coded, self-healing, immutable</td></tr>
-        <tr><th>Encryption</th><td>Seal threshold encryption</td></tr>
+        <tr><th>Encryption</th><td>Seal, identity namespaced per conversation object</td></tr>
         <tr><th>Access rule</th><td><code>seal_approve</code>, a Move function on Sui</td></tr>
-        <tr><th>Batching</th><td>Quilt</td></tr>
+        <tr><th>Batching</th><td>One blob per message today &mdash; Quilt measured, not yet economic at our message rate</td></tr>
         <tr><th>Pointer</th><td><code>ConversationHead</code> Sui object</td></tr>
         <tr><th>User key</th><td><code>id_seal</code>, derived on-device, never transmitted</td></tr>
       </table>

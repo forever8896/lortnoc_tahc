@@ -36,7 +36,10 @@ Strict priority, so if time runs out you stop at a natural cut line and still ha
 - [x] **Sui — DONE.** Move package published on testnet
       (`0xb214da015f1f8f59fb9804f42185782f6f2ce34e398175b060fee266c8074faf`): `ConversationHead` shared object
       + a **real `seal_approve` policy** gating key shares on conversation membership AND object-namespaced
-      identity — proven by dry-run: member approved, stranger refused, cross-conversation identity refused.
+      identity. **Seal is now in the message path for real** (2026-07-26): messages are Seal-encrypted to a
+      head-namespaced identity and opened only after the key servers dry-run the policy — `scripts/seal-live.mjs`
+      shows a member recovering plaintext and a stranger getting `NoAccessError` from the servers themselves.
+      Quilt measured and deliberately skipped (a 3-message quilt is 445 KB; see CLAUDE.md §6.4).
       Walrus write/read live via Mysten's upload relay (direct-to-node writes fail; relay tips 105 MIST).
       Round-trip asserted 9/9: encrypt → blob → head → read → decrypt, wrong key fails closed, append bumps
       seq, heads discoverable from `ConversationCreated` events.
