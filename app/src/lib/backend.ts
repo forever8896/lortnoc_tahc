@@ -3,7 +3,7 @@
 //     functional and demoable with no chain access (two browser tabs share localStorage = two
 //     users chatting).
 //   - LiveBackend: real ENS v2 on Sepolia (viem, deployed contracts) + Sui/Walrus/Seal.
-import type { Conversation, EnsStatus, Health, Identity, Message } from './types'
+import type { ClaimStage, Conversation, EnsStatus, Health, Identity, Message, OpenedKnock } from './types'
 
 export interface Backend {
   health(): Health
@@ -22,8 +22,36 @@ export interface Backend {
   // ---- ENS v2 self-sovereignty surface (§6.5) --------------------------------------------------
   /** Live on-chain view of the handle: resolver, factory proof, per-record write permissions. */
   ensStatus(): Promise<EnsStatus>
-  /** Grant (or revoke) write access to eth.lortnoc.inbox — and nothing else — for the gateway. */
-  delegateInbox(grant: boolean): Promise<string>
+  /** Grant (or revoke) write access to ONE text record for an address. The ENS v2 flagship:
+   *  least-privilege, per-record, revocable in a single transaction. */
+  delegateRecord(key: string, to: string, grant: boolean): Promise<string>
+
+  /** Write one of your own text records. */
+  setRecord(key: string, value: string): Promise<string>
+
+  // ---- knock: challenge-gated contact (§6.8) ---------------------------------------------------
+  /** Publish a question. The answer is used to derive a key and then forgotten — it is never
+   *  stored, never sent, and never published. */
+  setKnock(prompt: string, answer: string): Promise<string>
+  /** The question a handle asks of strangers, if any. Null when they accept open contact. */
+  peerKnockPrompt(handle: string): Promise<string | null>
+
+  /** Knock on someone's door: derive their key from your answer and send a sealed introduction. */
+  sendKnock(toHandle: string, answer: string, intro: string): Promise<'sent' | 'no-knock'>
+  /** Open your pending knocks with your own answer. Wrong-answer knocks stay invisible. */
+  readKnocks(answer: string): Promise<OpenedKnock[]>
+
+  /** The master secret, for deriving the Semaphore membership identity (§5.1). Null in mock
+   *  mode and before sign-in. Never leaves the device. */
+  masterSecret(): Uint8Array | null
+
+  /** Is the paid, unlinkable claim path usable right now? (live mode + membership deployed +
+   *  relayer answering). False ⇒ fall back to the free path. */
+  paidClaimAvailable(): Promise<boolean>
+
+  /** Claim via the paid path: prove membership, hand the ticket to a relayer, and let IT issue
+   *  the handle — so the wallet that receives it never signs anything on Sepolia. */
+  claimHandlePaid(name: string, onStage?: (s: ClaimStage) => void): Promise<Identity>
 }
 
 export const HANDLE_SUFFIX = '.lortnoctahc.eth'

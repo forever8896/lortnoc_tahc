@@ -61,8 +61,14 @@ async function handle(msg: CodecRequest): Promise<CodecResponse> {
       return r.ok ? { ok: true, data: await r.json() } : { ok: false, error: `health ${r.status}` }
     }
     if (msg.type === 'ENCODE') {
-      const r = await postJson(`${base}/encode`, { ciphertext: msg.ciphertextB64, fast: msg.fast === true })
-      return r.ok ? { ok: true, data: await r.json() } : { ok: false, error: `encode ${r.status}` }
+      const r = await postJson(`${base}/encode`, {
+        ciphertext: msg.ciphertextB64,
+        fast: msg.fast === true,
+        handle: msg.handle, // metering bucket (§9); server ignores it for fast frames
+        membership: msg.membership, // x402 bearer token → unlimited when present + valid
+      })
+      // 402 = free limit reached (x402 payment required) → distinct status for the paywall.
+      return r.ok ? { ok: true, data: await r.json() } : { ok: false, error: `encode ${r.status}`, status: r.status }
     }
     if (msg.type === 'DECODE') {
       const r = await postJson(`${base}/decode`, { coverText: msg.coverText })

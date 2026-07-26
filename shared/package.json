@@ -1,0 +1,8 @@
+{
+  "name": "@lortnoc/shared",
+  "private": true,
+  "type": "module",
+  "description": "Security-critical primitives shared by the app, the CLI and the relayer. One implementation on purpose.",
+  "main": "ticket.mjs",
+  "dependencies": { "viem": "^2.21.0" }
+}

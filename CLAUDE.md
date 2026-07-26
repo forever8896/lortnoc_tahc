@@ -51,7 +51,7 @@ When you scaffold, record the toolchain in §11.
 │  Seal-encrypted, Quilt-batched blobs · Sui object = conversation head  │
 └──────────────────────────────────────────────────────────────────────┘
 ┌──────────────────────────────────────────────────────────────────────┐
-│  IDENTITY / ACCESS — ENS v2  <name>.lortnoc.eth  ← handles + stealth    │
+│  IDENTITY / ACCESS — ENS v2  <name>.lortnoctahc.eth ← handles + stealth │
 │  custom subname registry gated on a zk nullifier · per-record roles    │
 │  text records: pubkey + Walrus/inbox ptrs · stealth meta-addr (5564)   │
 └──────────────────────────────────────────────────────────────────────┘
@@ -102,6 +102,8 @@ the device.
 | Derived key | HKDF `info` label | Type | Used by |
 |---|---|---|---|
 | `K_msg` | `lortnoc/msg/x25519/v1` | X25519 keypair | messaging pubkey (→ ENS text record); native DM; conv-key ECDH |
+| `K_own` | `lortnoc/evm/secp256k1/v1` | secp256k1 keypair | **owns the handle.** Derived, so it is never the wallet that paid (§4) — the payment on 0G and the handle on Sepolia have no on-chain link, because the only connection lives inside `MS` |
+| `K_sui` | `lortnoc/sui/ed25519/v1` | Ed25519 keypair | Sui storage account (pays WAL for Walrus blobs) |
 | `K_conv(c)` | `lortnoc/conv/aes-siv/v1` + conv-id | AES-SIV (RFC 5297) key | Telegram stego payload encrypt/decrypt |
 | `id_sem` | `lortnoc/semaphore/v1` | Semaphore identity secret | anonymous "I paid" proof + nullifier |
 | `id_seal` | `lortnoc/seal/v1` | Seal decryption identity | Walrus-blob decryption |
@@ -116,14 +118,20 @@ revealed.
 all passkeys/WebAuthn do NOT produce a stable, reproducible signature** — fall back to a passphrase run through a
 memory-hard KDF (Argon2id) before HKDF. Fallback, not the normie default.
 
-**Invariant — identity wallet ≠ payment wallet (§4).** The wallet you *sign identity with* must not be the wallet
+**Invariant — identity wallet ≠ payment wallet (§4). IMPLEMENTED, not just stated.** The connected wallet pays;
+`K_own` (derived from `MS`) owns the handle. One signature, two addresses, no on-chain link — and no second wallet
+for the user to manage, because the same signature reproduces `K_own` on any device. The relayer sends it a small
+Sepolia gas stipend on claim so it can manage its own records without ever being funded from the payer.
+The wallet you *sign identity with* must not be the wallet
 you *pay membership with*, or you hand observers the §8 fee-payer re-linking leak. The identity signature stays local
 and reveals nothing; the payment tx is public. Keep them separate in the UX. Losing the identity wallet = losing the
 identity → this is exactly where custody-free social recovery (§6.5) earns its place.
 
 ### 5.2 Identity & handles
 
-- Handle = `<name>.lortnoc.eth`, issued by our custom ENS v2 registry (§6.5).
+- Handle = `<name>.lortnoctahc.eth`, issued by our `LortnocRegistry` under `lortnoctahc.eth` (§6.5).
+  `lortnoc.eth` is registered to the same owner and deliberately left unused: it is what makes the
+  `eth.lortnoc.*` record namespace below a name we control rather than a borrowed prefix.
 - **Discoverability is a dial, not a switch** — a five-rung ladder (Ghost → Unlisted → Findable-if-you-know-me →
   Searchable → Public), enforced at resolve-time per-record and per-caller. Full model in §6.5 "Discoverability
   model." The reverse-resolution axis (set = linkable / unset = stealth) is just the top vs. middle of that ladder.
@@ -144,7 +152,7 @@ question is *where the public key lives and how the peer discovers it.* Three ti
   `K_conv`. To Telegram and non-users it's plain chatter. No server, no wallet, no gas. **TOFU** — no active-MITM
   protection on that first exchange; acceptable for the free tier, closed by Tier 2.
 - **Tier 2 — Persistent (paid, has a handle): the ENS v2 text record *is* the key directory.** Once Bob claims
-  `bob.lortnoc.eth`, his `eth.lortnoc.pubkey` record (resolved gaslessly offchain, §6.5) gives Alice an
+  `bob.lortnoctahc.eth`, his `eth.lortnoc.pubkey` record (resolved gaslessly offchain, §6.5) gives Alice an
   **authenticated** key tied to a name he provably controls → ECDH. Durable, cross-device, offline-friendly, and
   **MITM-closed**. This is the same discovery path native mode uses (§6.6) — one mechanism for both surfaces.
 - **Tier 3 — temporary on-chain key drop: considered and rejected for the core loop.** Dropping an ephemeral pubkey
@@ -304,6 +312,44 @@ Each spec: **Purpose · Interface · Data · Flow · Scope/failure.** IN = requi
   log, not a per-message bus.** *(Realtime "hot path (relay/libp2p)" is unbuilt roadmap — poll for the demo, §6.6.)*
   **SDKs:** `@mysten/walrus` (`writeBlob`/`readBlob`; Mysten runs public testnet upload relays — no need to host),
   `@mysten/seal`. Get WAL by swapping testnet SUI→WAL at `stake.walrus.site`.
+- **⚠️ Mainnet cost model — VALIDATED 2026-07-25 (Quilt is not an optimization, it is the design).** Numbers below
+  are from live mainnet state, not docs prose: prices read off the Walrus system object
+  `0x2134d52768ea07e8c43570ef975eb3e4c27a39fa6396bef985b5abc58d03ddd2` (storage `71042` FROST/MiB/epoch, write
+  `129165` FROST/MiB), encoded size computed with a port of `redstuff::encoded_blob_length`, Sui gas measured from
+  real mainnet `register_blob`/`certify_blob` txs. **Do not hardcode these — they are node-voted and dynamic.**
+  - **The floor.** Walrus bills the *encoded* size: `n_shards × (slivers + metadata)`, metadata = `1000×32×2+32` =
+    64,032 B **per shard, independent of blob size**. So **every blob ≤ ~217 KB bills identically at 63 storage
+    units** (66,034,000 B encoded). A 300 B message expands **220,113×**. A 1 MB blob is only 67 units.
+  - **Therefore one-blob-per-message is a pricing catastrophe**, and Quilt (≤660 items/blob) is load-bearing:
+
+    | 1-year retention | 10 msg/day | 50 msg/day | 200 msg/day |
+    |---|---|---|---|
+    | blob-per-message | $15.82 | $79.09 | $316.35 |
+    | Quilt (660/blob) | **$0.03** | **$0.12** | **$0.48** |
+    | blob-per-message @ advertised peg | $71.98 | $359.92 | $1,439.66 |
+
+    ~650×. Assumes WAL $0.033 / SUI $0.76 / 300 B message — both tokens volatile (WAL ATL $0.02842 on 2026-07-20).
+  - **⚠️ Spec-vs-code gap.** The "Data" bullet above specifies `Quilt.batch`; `app/src/lib/live/sui.ts` does **one
+    `writeBlob` per message**. That is the unbatched row. Fixing it is the single highest-leverage cost change.
+  - **Sui gas is not a rounding error at this granularity.** Per unbatched message: $0.000225 computation +
+    **$0.0038 refundable** Sui storage deposit, vs only $0.000712 of WAL. The deposit returns 99% **only if blob
+    objects are burned**; otherwise it is working capital locked (~$3,800 per million messages). Quilt collapses
+    the tx count too, so it fixes gas and WAL together.
+  - **⚠️ `epochs: 3` means SIX WEEKS on mainnet, then the data is gone.** Mainnet epoch = 2 weeks; testnet = 1 day,
+    so the current setting reads as 3 days in testing and the expiry is invisible. Max purchasable = 53 epochs
+    (~2 years). "The vault you can walk away with" requires **renewal**, so storage cost is **recurring**, not
+    one-time — price it per-year (§12 Q9).
+  - **⚠️ Storage is USD-pegged by node vote, and the vote currently sits 4.7× BELOW the advertised $0.023/GB/month**
+    (implied WAL ≈ $0.156 vs market ≈ $0.033). **Budget the peg, not today's chain price** — that is the third row.
+  - **⚠️ Seal has no free tier on mainnet — an unpriced dependency.** Every mainnet key server is commercial
+    ("contact the provider": Ruby Nodes, NodeInfra, Overclock, Studio Mirai, H2O, Triton, Natsai), and the
+    decentralized 5-of-8 committee (`0x686098f1…a7595`) **requires an Enoki API key** (`X-API-Key`). No operator
+    publishes prices. Open-mode servers are **testnet-only** and carry no availability or key-persistence guarantee.
+    Billing is **per key request**, so it scales with the same per-message count Quilt exists to collapse — get a
+    real quote before promising a price.
+  - **⚠️ `ConversationHead.blobs` is an unbounded `vector<String>`** — at Sui's 256,000 B object cap and ~45 B per
+    blobId, `append` starts reverting at **~5,700 messages/conversation**, and every read pulls every blob. Quilt
+    plus a rolling/segmented head fixes both.
 - **Scope/failure.** **Seal-vs-anonymity bridge — VERIFIED SUPPORTED.** `seal_approve` runs arbitrary Move via
   `dry_run` (owner/time-lock/allowlist/token-gate patterns exist), so a non-address / nullifier policy is real, not a
   fantasy. **For the weekend, LEAD WITH THE FALLBACK** — gateway issues a short-lived Seal session key on a valid
@@ -330,14 +376,64 @@ now reversed).
 > `ETHRegistrar` `0xa4449a0dd2b83007553d9b1d28b583a46a805a30` · `UniversalResolverV2`
 > `0x85edf8b6b7d4211e2b07aa687506b746357b92cf` · `UserRegistryImpl` `0x840fa461059862ea466a711e8c98c8de732061c0`.
 >
-> **Two gotchas:** (1) on the resolver, `grantRoles`/`revokeRoles` **revert** — use the `authorize*Roles` wrappers.
-> (2) `.eth` registration is priced in an **ERC-20 (MockUSDC/DAI), not ETH**, behind a **commit→wait→reveal** delay —
-> applies to registering `lortnoc.eth` itself (day-0, once), not to our own subname issuance.
+> **Two gotchas:** (1) on the resolver, `grantRoles`/`revokeRoles` **revert** (`grantRoles` is literally `pure`) —
+> use the `authorize*Roles` wrappers. (2) `.eth` registration is priced in an **ERC-20 (MockUSDC/DAI), not ETH**,
+> behind a **commit→wait→reveal** delay (60s min / 24h max) — applies to registering our own names (day-0, once),
+> not to our subname issuance. MockUSDC (`0xd3322b29a7bdee707d1684676f149bf41aa3422f`) has an **open `mint()`**, so
+> there is no faucet to chase; a 1-year name costs ~8.000021 USDC.
 >
-> **Day-0 prerequisite:** register `lortnoc.eth` in the v2 `ETHRegistry` (commit-reveal + MockUSDC), then slot our
-> custom registry under it. Source of truth = `github.com/ensdomains/contracts-v2` (`.../resolver/`,
+> Source of truth = `github.com/ensdomains/contracts-v2` (`.../resolver/`,
 > `.../access-control/EnhancedAccessControl.sol`, `.../registry/`, `contracts/deployments/sepolia/`) +
 > `github.com/ensdomains/verifiable-factory`.
+
+> **WHAT WE DEPLOYED — LIVE ON SEPOLIA (2026-07-25).** Addresses live in
+> `app/src/lib/live/ens-deployment.json`, the single source of truth shared by the app and the CLI
+> (`scripts/ens/`); nothing is hardcoded twice. Runbook: `app/docs/LIVE-SETUP.md`.
+>
+> | Ours | Sepolia address |
+> |---|---|
+> | `LortnocRegistry` (UserRegistry proxy) | `0x2D95c86bd9a850d95897c604c8EB00131a9C62a5` |
+> | `LortnocRegistrar` | `0x794ec3b1fb8ad0d23f3f654c20993ba4ff762c19` |
+> | owner / deployer | `0x61eE2fBcf2841d9094e2D42406Dd4f83a7981Bb8` |
+>
+> First handle: **`lortnoc.lortnoctahc.eth`**, resolver `0x764FeD7390354FBf2Ec27a7471ef20f9c1a9CF83`
+> (factory-verified). Both names expire 2027-07-25. The whole setup cost 0.0029 Sepolia ETH.
+>
+> - **`lortnoctahc.eth`** — our name in the v2 `ETHRegistry`; handles are `<label>.lortnoctahc.eth`.
+> - **`lortnoc.eth`** — registered to the same owner, deliberately unused: it makes the `eth.lortnoc.*` record
+>   namespace (§5.4) a name we control rather than a borrowed prefix.
+> - **`LortnocRegistry`** — a `UserRegistry` proxy from the canonical `VerifiableFactory`, slotted under
+>   `lortnoctahc.eth` via `setSubregistry`. Full ENS resolution traverses it: RootRegistry → `eth` → `lortnoctahc`
+>   → LortnocRegistry → handle → that handle's own resolver.
+> - **`LortnocRegistrar`** (`contracts/src/LortnocRegistrar.sol`) — holds `ROLE_REGISTRAR` and nothing else, so
+>   **any wallet can claim permissionlessly**. `claim()` is ONE transaction that: deploys the caller's own
+>   `PermissionedResolver` proxy via the factory → writes `eth.lortnoc.pubkey` → grants the caller every root role
+>   on it → **revokes its own** → registers the subname pointing at it. The registrar is admin for exactly one
+>   transaction and holds no authority over the handle afterwards. `claimFor` keeps the relayed-claim path
+>   (payer ≠ claimer, §8 Layer 1); an optional `gate` swaps the free tier for nullifier-gated issuance (§7).
+
+> **0G MEMBERSHIP — LIVE ON MAINNET (16661), 2026-07-25.** `LortnocMembership`
+> `0xe9031484b6fd4f55bf94dc5b768f7031b04be3d6` · `Semaphore` `0xd21f911570aad19d39e750fe0aa4e2ad161cbdd5` ·
+> `SemaphoreVerifier` `0x87997f3ca40693fb1e0c3c6f39f0f3fe287b8c67` · `PoseidonT3`
+> `0x114e261b9d901aaea199544539c9873dc93565ef`. Price 5.666942 0G = **$1.00**, repeggable via `setPrice`.
+> Onboarding = **bridge (LI.FI `gasZipBridge`, ~20s, $0.13 gas) → pay**, both measured on mainnet.
+> Fees forward to the treasury on every `join()`; the contract never holds a balance.
+> **Treasury is still the hot deploy key — move it before collecting at scale.**
+>
+> **0G MEMBERSHIP — ALSO ON GALILEO (16602) for testing.** Addresses in
+> `app/src/lib/live/zerog-deployment.json`. bn254 precompiles (0x06/0x07/0x08) verified present before building.
+>
+> | Contract | Galileo address |
+> |---|---|
+> | `PoseidonT3` (library Semaphore links against) | `0xb4022aa3f39504985d3bfe07b625e0d230afa1e3` |
+> | `SemaphoreVerifier` (canonical, verbatim) | `0xafaca9c12b67909ba87e4f073601361f30a9d628` |
+> | `Semaphore` (canonical, Poseidon-linked) | `0x794ec3b1fb8ad0d23f3f654c20993ba4ff762c19` |
+> | `LortnocMembership` (ours) | `0x219f68fdbfeda4576939de3f75c4e362ed00e11e` (group 0) |
+>
+> **Gotchas that cost time:** Semaphore's bytecode ships an *unlinked* `__$…$__` PoseidonT3 placeholder —
+> deploy the library and link before deploying. 0G's `eth_estimateGas` rejects viem's 1559 fields + nonce, so
+> price legacy and pass explicit gas. Poseidon needs ~9.6M gas (16.5 KB of code deposit). Receipt propagation
+> lags — wait patiently or you will think a landed tx failed.
 
 **v2 primitives we rely on** *(real, deployed on Sepolia — role constants below are concrete in source, not guesses)*
 - **Hierarchical registries** — `IRegistry`: `getSubregistry(label)` / `getResolver(label)` / `getParent()`. A
@@ -370,8 +466,8 @@ now reversed).
    (ghost→public ladder) and *reachability* (open / knows-identifier / **answers-your-trivia/password** / mutual).
    The knock (§6.8) is the coolest: nobody can even notify you without clearing a gate you set. `knock`/`discoverable`
    are text records ⇒ governed by the Permissioned Resolver; verification is client-side/offchain (a read concern).
-3. **`lortnoc.eth` gated on a zk nullifier — "subname = bearer capability."** On-chain custom `LortnocRegistry`
-   (`implements IRegistry`, cloned from `UserRegistryImpl`) under `lortnoc.eth`; issuance checks *"valid, unspent
+3. **`lortnoctahc.eth` gated on a zk nullifier — "subname = bearer capability."** On-chain `LortnocRegistry`
+   (a `UserRegistryImpl` proxy) under `lortnoctahc.eth`; issuance checks *"valid, unspent
    Semaphore nullifier?"* not *"did this wallet pay?"*. Claim tx **relayed** (payer ≠ claimer) ⇒ payment↔handle stays
    ZK-unlinkable. Trades §8 Layer 0 (zero footprint) for real on-chain v2; unlinkability retained (§8 Layers 1/2/4).
 4. **`verifyContract(proxy)` = trustless handle proof.** A counterparty proves a resolver proxy came from the
@@ -410,8 +506,8 @@ not the index, is the creative use.
    pay/message you); the searchable-profile record resolves **only to callers who prove something** — a mutual, a
    friend token, a paid member. "Discoverable to some, invisible to others," enforced at resolve-time.
 2. **Public face vs private core, independently revocable.** `setAlias` points a searchable name
-   (`alice.find.lortnoc.eth`) at your real records **without republishing keys**, while your identity stays a random
-   `<x>.lortnoc.eth`. Drop the alias ⇒ vanish from search instantly; existing conversations (on the private core)
+   (`alice.find.lortnoctahc.eth`) at your real records **without republishing keys**, while your identity stays a
+   random `<x>.lortnoctahc.eth`. Drop the alias ⇒ vanish from search instantly; existing conversations (on the private core)
    keep working. (Impossible in v1.)
 3. **Findable-if-you-know-me without a public directory.** Salted `eth.lortnoc.findhash` — a friend who already
    knows your Telegram/phone hashes it and finds you; strangers cannot enumerate backwards.
@@ -422,19 +518,20 @@ not the index, is the creative use.
 **Bonus (demo-friendly): event mode** — a time-boxed `known`/`searchable` rung ("anyone at Lisbon can find me
 today") the gateway auto-expires. Temporary discoverability nobody has to remember to switch off.
 
-**Build order** *(on-chain v2 identity layer; pin the `2026-06-29` Sepolia deployment)*
-0. **Preflight:** `eth_getCode` on `PermissionedResolverImpl`/`VerifiableFactory`/`ETHRegistrar`; hardcode addresses
-   + tag; acquire MockUSDC + Sepolia ETH.
-1. **Own `lortnoc.eth`** in the v2 `ETHRegistry` (commit→wait→reveal, pay MockUSDC). One-time day-0 task.
-2. **Per-user resolver happy path (the core demo — land this first):** `VerifiableFactory.deployProxy` a
-   `PermissionedResolver` for one handle → `setResolver` → user sets `pubkey` → `authorizeTextRoles` delegates
-   `eth.lortnoc.inbox` to the gateway → gateway rotates inbox → its `pubkey` write **reverts** → user **revokes**
-   the role. Then `verifyContract(proxy)` in the app UI = trustless handle proof.
+**Build order** *(on-chain v2 identity layer; pinned to the `2026-06-29` Sepolia deployment)*
+0. ✅ **Preflight:** `eth_getCode` on all eight pinned addresses + tag. Automated — `scripts/ens/deploy.mjs`
+   refuses to run if any rotated, and `scripts/ens/status.mjs` re-checks on demand.
+1. ✅ **Own `lortnoctahc.eth`** (and `lortnoc.eth`) in the v2 `ETHRegistry` — commit→wait→reveal, MockUSDC.
+2. ✅ **Per-user resolver happy path (the core demo):** collapsed into `LortnocRegistrar.claim()` — one tx deploys
+   the handle's own `PermissionedResolver` proxy, writes `pubkey`, hands the user every role, drops its own, and
+   registers the subname. `authorizeTextRoles` then delegates `eth.lortnoc.inbox` to the gateway, the gateway's
+   `pubkey` write **reverts**, and the user **revokes** in one tx. `verifyContract(proxy)` = trustless handle proof.
+   Asserted end-to-end by `scripts/ens/demo.mjs`; surfaced in the app as a live permission table read off-chain.
 3. Deploy Semaphore membership + verifier on **0G Galileo (chain 16602)**; wire pay → insert identity commitment
    (confirm bn254 precompiles `0x06/0x07/0x08` on 0G first).
-4. **`LortnocRegistry`** (clone `UserRegistryImpl`, slot under `lortnoc` via `setSubregistry`): nullifier-gated
-   `register()` (verify at registration; cheap set-membership) + **relayed claim** (payer ≠ claimer) → ZK-unlinkable,
-   gasless to the user. Heaviest piece — do it after step 2.
+4. ✅ **`LortnocRegistry`** (a `UserRegistry` proxy, slotted under `lortnoctahc` via `setSubregistry`) + a custom
+   `LortnocRegistrar` holding `ROLE_REGISTRAR`. **Still open:** nullifier-gating (the `gate` hook is in the
+   contract, unset = free tier) and relaying (`claimFor` exists; no relayer service yet).
 5. **Discoverability + knock (§6.8):** gateway serves the §5.4 records and does **conditional read-gating** +
    knock-verification (a read/offchain concern, orthogonal to the on-chain write-roles). `setAlias` conversion flow
    if time remains.
@@ -465,7 +562,7 @@ today") the gateway auto-expires. Temporary discoverability nobody has to rememb
 - **Interface.** Three lanes in one inbox, over **currently-loaded** Telegram chats only (no history backfill):
   🔒 **Native lortnoc** · **Stego threads** (hidden in Telegram) · **Mirrored Telegram** (read-only, from the DOM).
 - **Flow.** *Verified-handle claim:* the extension knows the logged-in Telegram username → attests this browser
-  controls `@kilian` → one-tap gasless claim of `kilian.lortnoc.eth`. *Conversion CTA:* on any normal Telegram
+  controls `@kilian` → one-tap gasless claim of `kilian.lortnoctahc.eth`. *Conversion CTA:* on any normal Telegram
   thread, a quiet banner — *"This chat lives on Telegram's servers. Claim your handle and invite [Contact] → chat
   with nothing stored on Telegram."*
 - **Scope/failure.** **Mirror is local-first, encrypted under the user's key, opt-in per chat** — never host the
@@ -581,14 +678,14 @@ probe** — `router-api.0g.ai/v1` with `logprobs:true`, same request twice, diff
 (c) **local codec round-trip** — `nethical6` `decode(encode(x))==x` deterministic, model kept warm; (d) Sui faucet +
 WAL early (rate-limited), confirm bn254 precompiles on 0G Galileo. **Phase 1 — hero demo:** the §6.1 overlay, local
 deterministic codec, own AES-SIV (CF-5), pre-shared key for the stage pair. **Phase 2 — sponsor coverage
-(parallel):** §6.4 (Walrus+Seal round-trip, session-key fallback) · §6.5 (own `lortnoc.eth` → offchain resolver →
-gskril registrar → discoverability gateway) · §6.3 (Semaphore on Galileo + one sealed-inference call + <3-min video).
+(parallel):** §6.4 (Walrus+Seal round-trip, session-key fallback) · §6.5 (**DONE** — own `lortnoctahc.eth` →
+LortnocRegistry + LortnocRegistrar → per-user resolvers; discoverability gateway still open) · §6.3 (Semaphore on Galileo + one sealed-inference call + <3-min video).
 **Phase 3 — polish:** minimal native-mode DM (reliable fallback demo); pitch, diagram, videos, ENS-booth prep.
 Hero demo + Sui + ENS are the winning submission on their own; 0G adds the top prize.
 **Cut for the weekend:** realtime relay/libp2p (poll instead); PWA as a full app; Tier-1 in-band handshake on the
 demo path; nullifier-inside-`seal_approve`; ERC-5564 payment layer (roadmap).
 
-**Toolchain (proposed — verify at scaffold):** **pnpm** monorepo (workspaces: `extension/`, `codec/`, `gateway/`,
+**Toolchain (ENS/app/contracts confirmed in use; rest proposed):** **pnpm** monorepo (workspaces: `extension/`, `codec/`, `gateway/`,
 `contracts/`, `app/`) · **Vite + CRXJS** for the MV3 extension · **Foundry** for Solidity (Semaphore on 0G Galileo;
 `LortnocRegistry` cloned from ENS v2 `UserRegistryImpl` on Sepolia) · **viem** for ENS v2 contract calls
 (`deployProxy`, `authorizeTextRoles`, `verifyContract`, `UniversalResolverV2.resolve`) pinned to the `2026-06-29`
@@ -605,6 +702,10 @@ our real workload (batched-blob write, cold read-by-id, head update+read, N-blob
 a markdown table + JSON. **Purpose is not to pick a backend (decided: Walrus+Seal) but to *justify* it with data** —
 a rigor artifact that also flips the script (we measured the sponsor's product). Honesty guards: testnet ≠ mainnet;
 0G's `$11/TB` & `30 MB/s` are self-reported; "batch, never per-message" applies to both.
+**The cost half is already done and is stronger than a testnet bench:** §6.4's mainnet cost model prices our real
+workload off live on-chain values and the actual encoding math, so `bench/` only needs to add the *latency/durability*
+columns. It also supplies the bench's headline finding — the 63-storage-unit floor makes "batch, never per-message"
+a 650× effect, not a tuning note.
 
 **Locked decisions (§12):** Q2 → **Semaphore** · Q3 → **wrap `nethical6`** (local, deterministic) · Q4 →
 **membership on 0G + on-chain ENS v2 naming on Sepolia** (full v2 identity layer, pinned `2026-06-29`; §6.5) · Q6 →
@@ -620,7 +721,7 @@ core; 0G Storage evaluated & deferred** (§6.4, kept for Seal's access-control +
 3. **Codec sourcing** — wrap the GPL Go CLI (lean, speed) vs. reimplement minimal stego.
 4. **Membership/registry host** — **RESOLVED (§6.5):** **membership (Semaphore) on 0G Galileo** (doubles as 0G's
    required address); **naming = on-chain ENS v2 on Sepolia** (`LortnocRegistry implements IRegistry` under
-   `lortnoc.eth`, pinned to the `2026-06-29` deployment). Two chains, distinct jobs; relayed claim bridges them.
+   `lortnoctahc.eth`, pinned to the `2026-06-29` deployment). Two chains, distinct jobs; relayed claim bridges them.
 5. **Desktop feel** — Electron wrap or browser extension only.
 6. **Identity model** — ~~passphrase-default vs. wallet-optional~~ **RESOLVED: wallet-signature default, passphrase
    fallback** (§5.1). Fallback exists because some smart-contract/MPC wallets and all passkeys can't derive
@@ -630,10 +731,15 @@ core; 0G Storage evaluated & deferred** (§6.4, kept for Seal's access-control +
    membership contract + a non-codec sealed-inference assist (§6.3). Probe the endpoint in Phase 0 for the record only.
 
 **Product / business** (don't block the build, but decide before launch)
-8. **Cost to run** — dominant line items: 0G sealed-inference per message, Walrus blob storage/rent, relay
-   hosting, gateway. Model per-active-user cost before pricing.
+8. **Cost to run** — **STORAGE LINE ITEM RESOLVED (2026-07-25, validated against Walrus mainnet — full model +
+   caveats in §6.4 "Mainnet cost model").** Quilted Walrus+Seal storage is **$0.03–$0.48/user/year** at 10–200
+   msg/day and comfortably clears any sane subscription. **Unbatched it is $16–$316/user/year (~650× worse), and
+   unbatched is what the code does today** — so the pricing verdict is conditional on shipping Quilt. Storage is
+   **recurring** (blobs expire; mainnet epoch = 2 weeks, max 53). **Still unpriced:** Seal mainnet key servers (all
+   commercial, per-request, quote required) and 0G sealed-inference per message — get both before setting a price.
 9. **Pricing** — freemium meters by Telegram handle (§9); the paid tier covers "Walrus rent + codec inference."
-   Flat sub vs. usage-based? Price must clear the §8 marginal cost.
+   Flat sub vs. usage-based? Price must clear the §8 marginal cost. **Storage is no longer the binding
+   constraint (Q8); codec inference + Seal key requests are.** Price per-year, not one-time — blobs need renewal.
 10. **Homepage messaging** — how much "propaganda"/manifesto vs. product clarity on `lortnoctahc.com`. Keep the
     privacy pitch first; codec/LLM stays invisible plumbing (§1).
 11. **P2P reliability** — Walrus is a durable log, not a realtime bus; realtime feel depends on the relay/libp2p

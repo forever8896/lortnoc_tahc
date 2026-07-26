@@ -27,6 +27,7 @@ import {
   type WalletClient,
 } from 'viem'
 import { sepolia } from 'viem/chains'
+import type { Account } from 'viem'
 import { ENS, LORTNOC, REC, ROLE_SET_TEXT, assertEnsSetup } from './config'
 
 // ---- ABIs (only what we call) -----------------------------------------------------------------
@@ -81,6 +82,17 @@ async function ensureSepolia(client: WalletClient): Promise<void> {
   } catch {
     throw new Error(`Wallet is on chain ${current}. Switch it to Sepolia (${ENS.chainId}) and retry.`)
   }
+}
+
+/**
+ * A signer for the handle OWNER — a key derived from MS, not the connected wallet.
+ *
+ * Records are written by whoever owns the name, and after a paid claim that is deliberately not
+ * MetaMask (§4). This signs locally over plain RPC: no popup, and no need for the browser wallet
+ * to have ever heard of the address.
+ */
+function ownerClient(account: Account) {
+  return createWalletClient({ account, chain: sepolia, transport: http(ENS.rpc) })
 }
 
 /** Sign the fixed domain string → the seed for MS (§5.1). Deterministic per RFC 6979. */
@@ -238,12 +250,17 @@ export async function claimHandle(label: string, pubkeyHex: string): Promise<{ h
   return { hash, resolver: result[0] }
 }
 
-/** Write one of your own text records. */
-export async function setText(handle: string, key: string, value: string): Promise<Hex> {
+/** Write one of your own text records. Signs as `signer` when given (the MS-derived owner),
+ *  otherwise falls back to the connected wallet. */
+export async function setText(
+  handle: string, key: string, value: string, signer?: Account,
+): Promise<Hex> {
   assertEnsSetup()
   const resolver = await resolverFor(handle)
   if (!resolver) throw new Error(`${handle} has no resolver`)
-  const { client, account } = await walletClient()
+  const { client, account } = signer
+    ? { client: ownerClient(signer), account: signer.address as Address }
+    : await walletClient()
   const { request } = await publicClient.simulateContract({
     account, address: resolver, abi: resolverAbi, functionName: 'setText',
     args: [nodeOf(handle), key, value],
@@ -259,11 +276,14 @@ export async function setTextDelegation(
   key: string,
   account_: Address,
   grant: boolean,
+  signer?: Account,
 ): Promise<Hex> {
   assertEnsSetup()
   const resolver = await resolverFor(handle)
   if (!resolver) throw new Error(`${handle} has no resolver`)
-  const { client, account } = await walletClient()
+  const { client, account } = signer
+    ? { client: ownerClient(signer), account: signer.address as Address }
+    : await walletClient()
   const { request } = await publicClient.simulateContract({
     account, address: resolver, abi: resolverAbi, functionName: 'authorizeTextRoles',
     args: [dnsEncode(handle), key, account_, grant],

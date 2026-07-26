@@ -1,6 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useBackend } from '../lib/ctx'
+import type { ClaimStage } from '../lib/types'
 import { Eyebrow, Spinner, Wordmark } from './atoms'
+
+/** What each stage says while it runs. Proving takes real seconds; silence reads as a hang. */
+const STAGE_COPY: Record<ClaimStage, string> = {
+  'checking-membership': 'checking your membership…',
+  'loading-group': 'loading the members set…',
+  proving: 'proving you are a member — in this browser, ~15s. Your secret never leaves the device.',
+  relaying: 'handing the proof to a relayer — it pays the gas, so your wallet stays unlinked',
+  'waiting-for-ens': 'waiting for ENS to confirm…',
+  'verifying-pubkey': 'verifying the published key is yours…',
+  done: 'done',
+}
 
 export function Claim() {
   const { backend, identity, setIdentity } = useBackend()
@@ -8,6 +20,15 @@ export function Claim() {
   const [avail, setAvail] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const [stage, setStage] = useState<ClaimStage | null>(null)
+  const [paid, setPaid] = useState<boolean | null>(null)
+
+  // Which path can we actually use? The paid one needs the relayer to be answering.
+  useEffect(() => {
+    let live = true
+    void backend.paidClaimAvailable().then((v) => live && setPaid(v))
+    return () => { live = false }
+  }, [backend])
 
   const clean = name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '')
 
@@ -26,12 +47,19 @@ export function Claim() {
   async function claim() {
     setBusy(true)
     setErr('')
+    setStage(null)
     try {
-      setIdentity(await backend.claimHandle(clean))
+      // Paid path when the relayer is up: the handle is issued BY the relayer, so the wallet
+      // that owns it never signs on Sepolia and stays unlinked from the payment.
+      const id = paid
+        ? await backend.claimHandlePaid(clean, setStage)
+        : await backend.claimHandle(clean)
+      setIdentity(id)
     } catch (e) {
       setErr(String(e instanceof Error ? e.message : e))
     } finally {
       setBusy(false)
+      setStage(null)
     }
   }
 
@@ -85,18 +113,39 @@ export function Claim() {
         <button className="btn" disabled={!clean || avail === false || busy} onClick={claim}>
           {busy ? (
             <>
-              <Spinner /> claiming on-chain…
+              <Spinner /> {stage ? STAGE_COPY[stage] : 'claiming on-chain…'}
             </>
           ) : (
             <>Claim {clean || 'your'}.lortnoctahc.eth</>
           )}
         </button>
+
+        {busy && paid && <StageList stage={stage} />}
         <p className="mono" style={{ color: 'var(--faint)', fontSize: 12, margin: 0, lineHeight: 1.6 }}>
-          {backend.health().mode === 'demo'
+          {paid
+            ? 'Issued by a relayer against your membership proof — the wallet that receives it never signs on Sepolia, so nothing on-chain connects it to your payment.'
+            : backend.health().mode === 'demo'
             ? 'Demo: published to a local directory + your pubkey attached. Live: a per-user ENS v2 Permissioned Resolver on Sepolia, pubkey written to eth.lortnoc.pubkey.'
             : 'Deploys your Permissioned Resolver proxy and writes eth.lortnoc.pubkey on ENS v2 (Sepolia).'}
         </p>
       </div>
     </main>
+  )
+}
+
+/** The five steps of a paid claim, so a 20-second proof doesn't look like a frozen tab. */
+function StageList({ stage }: { stage: ClaimStage | null }) {
+  const order: ClaimStage[] = [
+    'checking-membership', 'loading-group', 'proving', 'relaying', 'waiting-for-ens', 'verifying-pubkey',
+  ]
+  const at = stage ? order.indexOf(stage) : -1
+  return (
+    <div className="mono" style={{ fontSize: 11, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {order.map((s, i) => (
+        <div key={s} style={{ color: i < at ? 'var(--signal)' : i === at ? 'var(--fg)' : 'var(--faint)' }}>
+          {i < at ? '✓' : i === at ? '◐' : '·'} {STAGE_COPY[s]}
+        </div>
+      ))}
+    </div>
   )
 }

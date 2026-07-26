@@ -1,0 +1,13 @@
+{
+  "name": "lortnoc-ens-scripts",
+  "private": true,
+  "type": "module",
+  "description": "Day-0 ENS v2 Sepolia setup for lortnoc.eth (idempotent).",
+  "dependencies": {
+    "@mysten/sui": "^1.37.6",
+    "@semaphore-protocol/group": "^4.14.3",
+    "@semaphore-protocol/identity": "^4.14.3",
+    "@semaphore-protocol/proof": "^4.14.3",
+    "viem": "^2.21.0"
+  }
+}

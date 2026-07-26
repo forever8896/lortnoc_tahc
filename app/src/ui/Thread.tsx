@@ -10,6 +10,8 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
   const [body, setBody] = useState('')
   const [err, setErr] = useState('')
   const [reveal, setReveal] = useState<number | null>(null)
+  // If this peer gates contact, we must knock before we can message (§6.8).
+  const [knockPrompt, setKnockPrompt] = useState<string | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
@@ -26,6 +28,12 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
     const t = setInterval(() => void load(), 2500)
     return () => clearInterval(t)
   }, [load])
+
+  useEffect(() => {
+    let live = true
+    void backend.peerKnockPrompt(peer).then((p) => live && setKnockPrompt(p))
+    return () => { live = false }
+  }, [backend, peer])
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -47,6 +55,8 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
   }
 
   const peerH = peer.includes('.') ? peer : fullHandle(peer)
+  // Once you have history you are already through the door; the gate is for first contact only.
+  const mustKnock = !!knockPrompt && (conv?.messages.length ?? 0) === 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', minWidth: 0 }}>
@@ -116,6 +126,9 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
         </div>
       )}
 
+      {mustKnock ? (
+        <KnockComposer peer={peer} prompt={knockPrompt!} onSent={() => setKnockPrompt(null)} />
+      ) : (
       <form onSubmit={send} style={{ display: 'flex', gap: 10, padding: 'var(--shell)', borderTop: '1px solid var(--rule)' }}>
         <input
           className="input"
@@ -127,7 +140,86 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
           Send
         </button>
       </form>
+      )}
       <style>{`@media (min-width:721px){ .hide-desktop{ display:none; } }`}</style>
     </div>
+  )
+}
+
+/**
+ * First contact with someone who gates it. You cannot message them until you answer their
+ * question — and a wrong answer looks exactly like a right one from here, because they are the
+ * only person who can tell the difference.
+ */
+function KnockComposer({ peer, prompt, onSent }: { peer: string; prompt: string; onSent: () => void }) {
+  const { backend } = useBackend()
+  const [answer, setAnswer] = useState('')
+  const [intro, setIntro] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(false)
+  const [err, setErr] = useState('')
+
+  async function knock(e: React.FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setErr('')
+    try {
+      const r = await backend.sendKnock(peer, answer, intro)
+      if (r === 'no-knock') {
+        onSent() // they stopped gating contact — fall through to the normal composer
+        return
+      }
+      setDone(true)
+    } catch (e) {
+      setErr(String(e instanceof Error ? e.message : e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (done) {
+    return (
+      <div className="mono" style={{ padding: 'var(--shell)', borderTop: '1px solid var(--rule)', fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
+        <span className="signal">Knock sent.</span> If your answer was right it is waiting in their
+        inbox, with your key attached — accepting it opens the conversation.
+        <br />
+        <span style={{ color: 'var(--faint)' }}>
+          If it was wrong, nothing happened and they will never know you tried. We cannot tell you which.
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={knock} style={{ padding: 'var(--shell)', borderTop: '1px solid var(--rule)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="mono" style={{ fontSize: 11, color: 'var(--faint)' }}>
+        {shortHandle(peer)} only accepts contact from people who can answer:
+      </div>
+      <div style={{ fontSize: 15 }}>“{prompt}”</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <input
+          className="input mono"
+          style={{ flex: '1 1 180px', fontSize: 12 }}
+          placeholder="your answer"
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+        />
+        <input
+          className="input"
+          style={{ flex: '2 1 240px', fontSize: 13 }}
+          placeholder="say hello — who are you?"
+          value={intro}
+          onChange={(e) => setIntro(e.target.value)}
+        />
+        <button className="btn btn--sm" disabled={busy || !answer.trim()}>
+          {busy ? 'deriving…' : 'knock'}
+        </button>
+      </div>
+      {err && <div className="mono" style={{ fontSize: 11, color: '#f0806a' }}>{err}</div>}
+      <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>
+        Your answer never leaves this device — it derives a key here (~1s) and that key seals the
+        introduction.
+      </div>
+    </form>
   )
 }

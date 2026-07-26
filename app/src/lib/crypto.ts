@@ -20,6 +20,31 @@ export function deriveMessagingKey(ms: Uint8Array): KeyPair {
   return { priv, pub: x25519.getPublicKey(priv) }
 }
 
+/**
+ * The EVM key that OWNS your handle (§4: identity wallet ≠ payment wallet).
+ *
+ * Derived from MS, so it costs the user nothing to hold — the same wallet signature reproduces
+ * it on any device — and it is never the wallet that paid. The only place those two addresses
+ * are connected is inside MS, which never leaves the device, so the payment on 0G and the handle
+ * on Sepolia have no on-chain link.
+ *
+ * It never has to send a transaction to receive the handle (the relayer does that), but it can
+ * sign whenever the user wants to manage their own records.
+ */
+export function deriveOwnerKey(ms: Uint8Array): { privHex: `0x${string}`; priv: Uint8Array } {
+  // secp256k1 keys must land in [1, n-1]. HKDF output is uniform, so a miss is astronomically
+  // unlikely — but "astronomically unlikely" is not "impossible", so count up until it is valid.
+  for (let i = 0; i < 256; i++) {
+    const priv = hkdf(sha256, ms, enc.encode(`lortnoc/evm/secp256k1/v1${i ? `/${i}` : ''}`), enc.encode('owner'), 32)
+    const n = BigInt('0x' + Array.from(priv, (b) => b.toString(16).padStart(2, '0')).join(''))
+    const ORDER = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n
+    if (n > 0n && n < ORDER) {
+      return { privHex: `0x${Array.from(priv, (b) => b.toString(16).padStart(2, '0')).join('')}`, priv }
+    }
+  }
+  throw new Error('could not derive a valid owner key')
+}
+
 /** id_seal — Seal decryption identity (Walrus-blob decryption). */
 export function deriveSealKey(ms: Uint8Array): Uint8Array {
   return hkdf(sha256, ms, enc.encode('lortnoc/seal/v1'), enc.encode('seal'), 32)

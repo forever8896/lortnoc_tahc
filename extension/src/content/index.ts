@@ -2,11 +2,24 @@
 // in-band handshake (§5.3) to the codec (via the SW) and the in-page crypto. Plaintext
 // and keys never leave here.
 import { detectClient, selectorsFor, activeCompose } from './selectors'
-import { injectStyles, toast, showAcceptBanner } from './ui'
+import { injectStyles, toast, showAcceptBanner, showPaywall } from './ui'
 import { initState, get } from './state'
 import { installSendInterceptor, sendCoverText } from './compose'
 import { startInbound } from './inbound'
 import { encrypt, tryDecrypt, toB64, fromB64 } from './crypto'
+import {
+  loadMeter,
+  isBlocked,
+  isRunningLow,
+  increment,
+  remaining,
+  sends,
+  syncFromServer,
+  markBlocked,
+  getMembershipToken,
+} from './metering'
+import { getSelfHandle } from './identity'
+import { UPGRADE_URL, LOCAL } from '../shared/config'
 
 const toHex = (u: Uint8Array): string => [...u].map((b) => b.toString(16).padStart(2, '0')).join('')
 import { parseFrame, FRAME } from './handshake'
@@ -31,8 +44,13 @@ async function bytesToCover(bytes: Uint8Array, fast = false): Promise<string | n
 }
 
 async function sendOffer(): Promise<void> {
-  await session.reset() // fresh keypair + clean state (also recovers from a stuck session)
-  handledFrames.clear()
+  // Don't break a working session, and NEVER regenerate the keypair mid-handshake — that
+  // was the decrypt bug: a second Connect click changed our pubkey, so the key each side
+  // derived no longer matched. startOffer() reuses the existing keypair (stable pubkey).
+  if (session.status() === 'established') {
+    toast('Already connected — you can just type.')
+    return
+  }
   const frame = await session.startOffer()
   const cover = await bytesToCover(frame, true) // fast: handshake frame, skip best-of-N
   if (cover && (await sendCoverText(cover))) toast('Invite sent. Waiting for the other side to accept…')
@@ -40,6 +58,7 @@ async function sendOffer(): Promise<void> {
 }
 
 let inbound: { reset: () => void } | null = null
+let selfHandle = '' // metering bucket key (§9), resolved in main()
 
 /** Short fingerprint of the conversation key — BOTH users should see the SAME value once
  *  the handshake is established. If they differ, the ECDH keys crossed (retry the connect). */
@@ -132,6 +151,12 @@ async function main(): Promise<void> {
     console.warn('[lortnoc] loadSession failed (continuing):', e)
   }
   await initState()
+  await loadMeter() // freemium counter + paid flag (§9)
+  selfHandle = await getSelfHandle() // stable metering bucket (§9), resolved once
+  // React instantly when the app delivers a membership token (paid claim) — no reload needed.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && (LOCAL.meter in changes || LOCAL.membership in changes)) void loadMeter()
+  })
 
   const client = detectClient()
   console.info('[lortnoc] loaded on', location.pathname, '→ client:', client)
@@ -151,6 +176,16 @@ async function main(): Promise<void> {
   // Outbound: real text → AES-SIV(activeKey) → /encode → cover text (or null = fail-closed).
   // Reports each real stage to the progress stepper so the ~10s send is legible.
   installSendInterceptor(client, haveKey, async (real, progress) => {
+    // Freemium gate (§9): out of free sends and not a member → fail-closed + funnel to pay.
+    // Reading/decoding stays free; only sending is metered.
+    // A membership token (from a paid claim) skips the local block — let the server confirm it.
+    const token = await getMembershipToken()
+    if (!token && isBlocked()) {
+      // fast local pre-gate to skip a doomed round-trip; the codec is the real authority
+      progress.fail('Free trial used up — unlock to keep sending')
+      showPaywall(UPGRADE_URL, sends())
+      return null
+    }
     const key = activeKey()
     if (!key) return null
     try {
@@ -160,9 +195,34 @@ async function main(): Promise<void> {
       // best-of-N runs at the tail of /encode; surface it once generation is well underway
       const tSelect = window.setTimeout(() => progress.set(2, '0G · judging 3 covers for the most natural'), 6500)
       try {
-        const cover = await bytesToCover(ct)
-        if (!cover) console.warn('[lortnoc] encode failed')
-        return cover
+        const res = await sendToCodec<EncodeData>({
+          type: 'ENCODE',
+          ciphertextB64: toB64(ct),
+          handle: selfHandle, // server meters per handle (§9)
+          membership: token, // membership token → unlimited when valid
+        })
+        if (!res.ok) {
+          if (res.status === 402) {
+            // x402: free limit reached server-side → paywall, funnel to pay
+            await markBlocked()
+            progress.fail('Free trial used up — unlock to keep sending')
+            showPaywall(UPGRADE_URL, sends())
+          } else {
+            console.warn('[lortnoc] encode failed:', res.error)
+          }
+          return null
+        }
+        const { coverText, remaining: left, member } = res.data
+        if (typeof left === 'number' && (left >= 0 || member === true)) {
+          await syncFromServer(left, member === true) // server enforcing → mirror its count
+        } else {
+          await increment() // server not enforcing → local metering (pre-flip behaviour)
+          if (isRunningLow()) {
+            const n = remaining()
+            toast(`${n} free message${n === 1 ? '' : 's'} left — members send unlimited.`, 5000)
+          }
+        }
+        return coverText
       } finally {
         window.clearTimeout(tSelect)
       }

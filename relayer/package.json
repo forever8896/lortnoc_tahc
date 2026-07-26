@@ -1,0 +1,12 @@
+{
+  "name": "lortnoc-relayer",
+  "private": true,
+  "type": "module",
+  "description": "Carries a burned membership ticket from 0G to an ENS handle on Sepolia and a storage stipend on Sui.",
+  "scripts": { "start": "node server.mjs", "dev": "node --watch server.mjs" },
+  "dependencies": {
+    "express": "^4.21.2",
+    "viem": "^2.21.0",
+    "@mysten/sui": "1.37.6"
+  }
+}

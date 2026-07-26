@@ -1,0 +1,29 @@
+app = "lortnoc-relayer"
+primary_region = "cdg"
+
+# Secrets (never commit):
+#   fly secrets set RELAYER_PRIVATE_KEY=0x...   # Sepolia; must be isRelayer on LortnocRegistrar
+#   fly secrets set SUI_TREASURY_KEY=suiprivkey1...   # pays the SUI + WAL stipend
+# Both are hot keys. Fund them thinly — a compromise costs gas, never user funds.
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "10s"
+  method = "GET"
+  path = "/health"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

@@ -345,6 +345,12 @@ body{
 .spec td:first-child{ color:var(--ink); white-space:nowrap; padding-right:28px; }
 .spec-wrap{ overflow-x:auto; }
 
+/* inline code — used in the install steps (chrome://extensions, build commands) */
+code{ font-family:var(--mono); font-size:0.88em; color:var(--signal);
+  background:rgba(var(--signal-rgb),0.09); padding:1px 6px; border-radius:2px; white-space:nowrap; }
+.install .steps{ margin-top:clamp(40px,5vw,64px); }
+.install__note{ margin-top:clamp(32px,4vw,52px); text-align:center; }
+
 
 .docnav{ padding:clamp(56px,7vw,100px) 0 clamp(72px,9vw,128px); }
 .docnav__grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:20px; }

@@ -5,12 +5,20 @@ import { Eyebrow, Spinner, Wordmark } from './atoms'
 export function Auth() {
   const { backend, setIdentity } = useBackend()
   const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
   const mode = backend.health().mode
 
   async function connect() {
     setBusy(true)
+    setErr('')
     try {
       setIdentity(await backend.connect())
+    } catch (e) {
+      // Live mode connects to a real wallet, so this fails for ordinary reasons — no extension
+      // installed, wrong chain, signature rejected. Say which; a silent dead button reads as
+      // a broken site.
+      const m = e instanceof Error ? e.message : String(e)
+      setErr(/User rejected|denied/i.test(m) ? 'Signature rejected — nothing was sent.' : m)
     } finally {
       setBusy(false)
     }
@@ -29,7 +37,7 @@ export function Auth() {
     >
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Wordmark />
-        <span className="chip">{mode === 'demo' ? 'demo mode' : 'sepolia · sui testnet'}</span>
+        <span className="chip">{mode === 'demo' ? 'demo mode' : '0g mainnet · sepolia · sui testnet'}</span>
       </header>
 
       <section style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 28, maxWidth: 640 }}>
@@ -64,6 +72,11 @@ export function Auth() {
             )}
           </button>
         </div>
+        {err && (
+          <p className="mono" style={{ color: 'var(--warn, #ff9d5c)', fontSize: 13, margin: 0, maxWidth: 520 }}>
+            {err}
+          </p>
+        )}
         <p className="mono" style={{ color: 'var(--faint)', fontSize: 12, margin: 0, maxWidth: 520 }}>
           {mode === 'demo'
             ? 'Demo: a fresh keypair is generated locally (no wallet needed). Open a second tab to be a second person and chat for real — end-to-end encrypted.'

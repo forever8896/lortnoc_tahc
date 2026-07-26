@@ -52,6 +52,17 @@ body {
 .knob { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--ink); transition: transform .2s ease; }
 .master[data-on="true"] .knob { transform: translateX(22px); background: #08080a; }
 
+/* freemium meter */
+.trial { margin-top: 10px; }
+.trial__bar { height: 3px; background: rgba(237,234,228,0.1); overflow: hidden; }
+.trial__fill { height: 100%; width: 0; background: var(--signal); transition: width .3s ease; }
+.trial__label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; color: var(--faint); margin-top: 6px; }
+.trial--low .trial__fill { background: #f0a06a; }
+.trial--spent .trial__fill { background: #f0806a; }
+.trial--spent .trial__label { color: #f0806a; }
+.trial--member .trial__fill { width: 100% !important; background: var(--signal); }
+.trial--member .trial__label { color: var(--signal); }
+
 /* cards */
 .card { margin-top: 14px; padding: 14px; border: 1px solid var(--rule); background: var(--panel); }
 .card__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
@@ -60,6 +71,11 @@ body {
 .btn { width: 100%; background: var(--signal); color: #08080a; border: 0; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 400; padding: 12px 16px; min-height: 42px; display: inline-flex; align-items: center; justify-content: center; transition: background .2s, opacity .2s; }
 .btn:hover:not(:disabled) { background: var(--ink); }
 .btn:disabled { opacity: .4; cursor: default; }
+/* "invite sent — waiting" — a live, breathing state so you know it's working and don't re-click */
+.btn.is-busy:disabled { opacity: 1; cursor: default; color: #08080a; animation: btn-wait 1.3s ease-in-out infinite; }
+@keyframes btn-wait { 0%,100% { opacity: .58; } 50% { opacity: .95; } }
+/* connected — solid teal, unmistakably done */
+.btn.is-done:disabled { opacity: 1; cursor: default; background: var(--signal); color: #08080a; }
 .btn--ghost { background: transparent; color: var(--ink); border: 1px solid var(--rule); }
 .btn--ghost:hover:not(:disabled) { background: transparent; border-color: var(--ink); }
 .btn--sm { font-size: 12px; min-height: 34px; padding: 8px 12px; }

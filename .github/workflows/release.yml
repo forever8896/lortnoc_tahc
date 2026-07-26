@@ -1,0 +1,96 @@
+name: release-extension
+
+# Verifiable distribution: on a version tag, GitHub's own CI builds the extension from the
+# tagged commit, packages dist/, records a SHA-256 + build-provenance attestation, and
+# publishes it as a Release. The landing site links here — so the download comes from GitHub
+# (not our server), and anyone can rebuild the tag and diff. Trust nothing, verify everything.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag to release (e.g. v0.7.0)'
+        required: true
+
+permissions:
+  contents: write # create the release
+  id-token: write # build-provenance attestation
+  attestations: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Build the extension
+        working-directory: extension
+        run: |
+          npm ci
+          npm run build
+
+      - name: Resolve tag
+        id: v
+        run: echo "tag=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Package dist/ + checksum
+        id: pkg
+        run: |
+          ZIP="lortnoc-tahc-${{ steps.v.outputs.tag }}.zip"
+          ( cd extension/dist && zip -r "../../$ZIP" . )
+          sha256sum "$ZIP" | tee "$ZIP.sha256"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "sha=$(cut -d' ' -f1 "$ZIP.sha256")" >> "$GITHUB_OUTPUT"
+
+      - name: Attest build provenance
+        continue-on-error: true # a provenance hiccup must not block the release
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: ${{ steps.pkg.outputs.zip }}
+
+      - name: Write release notes
+        run: |
+          cat > RELEASE_NOTES.md <<EOF
+          # lortnoc tahc ${{ steps.v.outputs.tag }}
+
+          A stego overlay for Telegram Web. Built in public CI from this tagged commit — verify, don't trust.
+
+          **SHA-256** \`${{ steps.pkg.outputs.zip }}\`
+          \`\`\`
+          ${{ steps.pkg.outputs.sha }}
+          \`\`\`
+
+          ## Install (verifiable, ~30s)
+          1. Download \`${{ steps.pkg.outputs.zip }}\` below and check its SHA-256 matches the value above.
+          2. Unzip it, open \`chrome://extensions\`, turn on **Developer mode** (top-right).
+          3. Click **Load unpacked** and pick the unzipped folder. Open Telegram Web, toggle **PrivacyMaxxing** on.
+
+          ## Verify it yourself
+          \`\`\`
+          git checkout ${{ steps.v.outputs.tag }}
+          cd extension && npm ci && npm run build
+          \`\`\`
+          Read the source, rebuild from the tag, and compare. This artifact also carries a GitHub
+          build-provenance attestation (\`gh attestation verify ${{ steps.pkg.outputs.zip }} -R \${{ github.repository }}\`).
+          EOF
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.v.outputs.tag }}"
+          ZIP="${{ steps.pkg.outputs.zip }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ZIP" "$ZIP.sha256" --clobber
+          else
+            gh release create "$TAG" "$ZIP" "$ZIP.sha256" \
+              --title "lortnoc tahc $TAG" --notes-file RELEASE_NOTES.md
+          fi
