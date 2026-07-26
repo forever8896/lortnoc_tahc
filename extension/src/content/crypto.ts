@@ -9,16 +9,10 @@ import { x25519 } from '@noble/curves/ed25519.js'
 const enc = new TextEncoder()
 const dec = new TextDecoder()
 
-// Fixed domain string so both parties derive the SAME key from the SAME passphrase.
-const SALT = enc.encode('lortnoc/conv/aes-siv/v1')
-const INFO = enc.encode('demo')
-
-/** K_conv = HKDF-SHA256(passphrase). 64 bytes → AES-256-SIV. (Fallback keying.) */
-export function deriveKey(passphrase: string): Uint8Array {
-  return hkdf(sha256, enc.encode(passphrase), SALT, INFO, 64)
-}
-
-// ---- Tier-1 in-band handshake: passphrase-free keying via X25519 ECDH (§5.3) ----
+// ---- Keying: X25519 ECDH, exchanged in-band as cover text (§5.3 Tier 1) ----
+//
+// There is deliberately no passphrase path. A second way to key a chat meant the two sides
+// could silently choose differently, and each would then read only its own messages.
 
 export type KeyPair = { priv: Uint8Array; pub: Uint8Array }
 

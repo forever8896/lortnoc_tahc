@@ -20,8 +20,6 @@ export const WARN_AT = 8 // soft "running low" warning kicks in here
 // Where the paywall funnels users to pay + upgrade to a wallet-derived identity key.
 export const UPGRADE_URL = 'https://app.lortnoctahc.com/upgrade'
 
-// storage.session (memory only, cleared when the browser closes): the passphrase.
-// Never written to disk (invariant §4: key material stays ephemeral).
-export const SESSION = {
-  passphrase: 'passphrase',
-} as const
+// storage.session (memory only, cleared when the browser closes) holds the handshake session:
+// our ephemeral keypair and the derived conversation key. Never written to disk (invariant §4 —
+// key material stays ephemeral). Written by content/session.ts under the key `hs`.

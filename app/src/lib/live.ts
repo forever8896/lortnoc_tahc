@@ -55,6 +55,14 @@ export class LiveBackend implements Backend {
       ownerAddress: this.owner.address,
       pubkeyHex: toHex(this.kp.pub),
     }
+
+    // Self-heal: publishing the Sui address used to be attempted only during a claim, so if that
+    // one write failed the handle was left permanently unable to receive messages — peers resolve
+    // this record to know where to write. It is idempotent (a matching record costs one eth_call),
+    // and silent-only, so a repair never interrupts sign-in with a wallet popup.
+    void this.publishSuiAddress(true).catch((e) =>
+      console.warn('[lortnoc] could not publish the Sui address (will retry next sign-in):', e),
+    )
     return this.id
   }
 
@@ -118,12 +126,21 @@ export class LiveBackend implements Backend {
 
   /** Publish our Sui address to ENS so peers can address a thread to us. Idempotent: skipped
    *  when the record already matches, so it costs one tx once per handle. */
-  private async publishSuiAddress(): Promise<void> {
+  private async publishSuiAddress(silentOnly = false): Promise<void> {
     if (!this.id?.handle) return
     const addr = await this.suiAddress()
     const current = await ens.readText(this.id.handle, REC.sui)
     if (current === addr) return
-    await ens.setText(this.id.handle, REC.sui, addr, this.owner ?? undefined)
+    // Which key owns the handle depends on how it was claimed: the paid path hands it to the
+    // MS-derived owner, the free path leaves it with the connected wallet. Ask the resolver
+    // instead of assuming — signing with the wrong one reverts for lack of a role.
+    const owner = this.owner
+    const canSignLocally =
+      !!owner && (await ens.canWriteText(this.id.handle, owner.address, REC.sui))
+    // Signing locally is silent; falling back to the wallet pops a confirmation, which is
+    // unwelcome in the middle of signing in. Repair quietly or leave it for an explicit action.
+    if (!canSignLocally && silentOnly) return
+    await ens.setText(this.id.handle, REC.sui, addr, canSignLocally ? owner : undefined)
   }
 
   private heads(): Record<string, string> {

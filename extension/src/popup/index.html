@@ -36,7 +36,7 @@
         <span id="hsStatus" class="chip chip-off">not connected</span>
       </div>
       <button id="connect" class="btn">Connect securely</button>
-      <p class="hint">No passphrase. Turn on PrivacyMaxxing on both sides, then <strong>both click Connect securely</strong> — or one clicks and the other taps Accept. Keys are exchanged invisibly through the chat.</p>
+      <p class="hint">Turn on PrivacyMaxxing on both sides, then <strong>both click Connect</strong> — or one clicks and the other taps Accept. Keys are exchanged invisibly through the chat; nothing is typed and no secret is sent.</p>
     </section>
 
     <details class="adv">
@@ -45,10 +45,7 @@
         <span class="eyebrow">Codec URL</span>
         <input type="text" id="codecUrl" spellcheck="false" placeholder="https://lortnoc-codec.fly.dev" />
       </label>
-      <label class="field">
-        <span class="eyebrow">Shared passphrase <em>(fallback)</em></span>
-        <input type="password" id="passphrase" autocomplete="off" spellcheck="false" placeholder="only if not using Connect" />
-      </label>
+      
       <div class="actions">
         <button id="save" class="btn btn--sm">Save</button>
         <button id="check" class="btn btn--ghost btn--sm">Check codec</button>

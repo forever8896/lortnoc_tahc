@@ -258,8 +258,12 @@ export async function setText(
   assertEnsSetup()
   const resolver = await resolverFor(handle)
   if (!resolver) throw new Error(`${handle} has no resolver`)
+  // Pass the Account OBJECT through, never just its address. viem coerces a bare address into a
+  // json-rpc account, and `writeContract` then dispatches on that type: eth_sendTransaction over
+  // this client's transport. For the owner that transport is a public RPC which holds no keys —
+  // "unknown account". A local account signs in-process and sends eth_sendRawTransaction instead.
   const { client, account } = signer
-    ? { client: ownerClient(signer), account: signer.address as Address }
+    ? { client: ownerClient(signer), account: signer }
     : await walletClient()
   const { request } = await publicClient.simulateContract({
     account, address: resolver, abi: resolverAbi, functionName: 'setText',
@@ -281,8 +285,9 @@ export async function setTextDelegation(
   assertEnsSetup()
   const resolver = await resolverFor(handle)
   if (!resolver) throw new Error(`${handle} has no resolver`)
+  // Account object, not address — see setText above.
   const { client, account } = signer
-    ? { client: ownerClient(signer), account: signer.address as Address }
+    ? { client: ownerClient(signer), account: signer }
     : await walletClient()
   const { request } = await publicClient.simulateContract({
     account, address: resolver, abi: resolverAbi, functionName: 'authorizeTextRoles',
