@@ -32,6 +32,10 @@ const ROOT = resolve(HERE, '..')
 const DIST = join(ROOT, 'dist')
 const PROFILES = join(ROOT, '.dev-profiles')
 const URL = process.env.TG_URL || 'https://web.telegram.org/k/'
+// --debug exposes a DevTools endpoint per window (alice 9222, bob 9223) so the pair can be driven
+// and its console read programmatically — which is how you turn "it felt flaky" into a test.
+const DEBUG = process.argv.includes('--debug')
+const PORTS = { alice: 9222, bob: 9223 }
 
 const CANDIDATES = [
   'google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser',
@@ -88,6 +92,7 @@ for (const name of ['alice', 'bob']) {
       // gets its own extension instance — which is the entire point.
       '--no-first-run',
       '--no-default-browser-check',
+      ...(DEBUG ? [`--remote-debugging-port=${PORTS[name]}`, '--remote-allow-origins=*'] : []),
       `--window-size=1100,900`,
       name === 'bob' ? '--window-position=1120,0' : '--window-position=0,0',
       URL,
