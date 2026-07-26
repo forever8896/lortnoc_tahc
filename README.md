@@ -53,10 +53,69 @@ and tries to decrypt. **The AES-SIV auth tag is the detector** — a valid tag m
 ours and it renders decoded inline; an invalid tag means it's ordinary chatter and is left alone.
 There's no marker to spot, because there is nothing to mark.
 
-**Key exchange happens in-band.** Alice's extension encodes her ephemeral X25519 public key *as
-cover text* and sends it through Telegram; Bob's extension recognises the handshake frame and
-replies with his. Both derive the same conversation key by ECDH. No server, no wallet, no gas — and
-to Telegram it is more small talk. The symmetric key is never transmitted, only derived.
+#### The handshake — how two people get a key without ever sending one
+
+This is the part worth understanding, because it is what makes the whole thing work with **no
+passphrase, no server, no wallet and no gas**.
+
+You click **Connect**. Your extension generates a fresh X25519 keypair, wraps the *public* half in
+a 41-byte frame, runs it through the same codec a message goes through, and sends the result as an
+ordinary Telegram message. Your correspondent's extension recognises it, replies the same way, and
+both sides now hold the same conversation key.
+
+```
+A clicks Connect  →  OFFER frame  →  cover text  →  sent as a normal message
+B taps Accept     →  ACK   frame  →  cover text  →  sent as a normal message
+                                  →  both now hold K_conv
+```
+
+**Two messages.** That is the whole exchange. To Telegram, and to anyone reading over your
+shoulder, it is two more lines of small talk.
+
+**The key is never transmitted — it is derived.** Only public keys cross the chat. Both ends
+compute:
+
+```
+K_conv = HKDF( ECDH(my_private, their_public), info = sorted(both public keys) )
+```
+
+ECDH is symmetric, so `ECDH(a, B) == ECDH(b, A)`: the same key on both sides, and nothing secret
+ever travelled. Sorting the two public keys into the HKDF info means it does not matter who offered
+and who accepted — both arrive at the same value.
+
+**The frame.** `MAGIC("LTNC") · type · x25519_pubkey(32) · crc32` = 41 bytes. It is encoded but
+**not encrypted** — it carries a public key, and there is no shared key yet; that is the
+chicken-and-egg the handshake exists to break. The magic prefix and CRC are how a receiver tells a
+handshake frame apart from an AES-SIV message and from genuine chatter. Frames skip the 0G
+best-of-N pass (`fast: true`), so they take ~2–3s instead of ~10s — cover polish is wasted on a
+sentence nobody reads.
+
+**If you both click Connect at once** (the "glare" case) it still works: each side establishes from
+the other's offer. It costs two extra cover messages, because both also send a now-redundant ACK.
+
+**There is exactly one way a chat is keyed.** An earlier version also supported a shared passphrase,
+and that was removed — not for simplicity, but because two keying paths meant the two ends could
+silently pick *different* ones, and each would then read only its own messages while the peer's
+stayed cover text. No key now means no key: a visible state rather than a silent wrong answer. If
+several messages decode but fail the authentication tag, the extension says *"key mismatch —
+reconnect"* instead of leaving garble on screen.
+
+##### What this does and does not protect against
+
+| | |
+|---|---|
+| Telegram sees | two innocuous sentences |
+| A person reading your screen sees | small talk |
+| Another extension user watching the chat | can tell a handshake happened and read both public keys — harmless, but not hidden |
+| An active man-in-the-middle on the **first** exchange | **is not stopped** |
+
+That last row is the honest limit: the in-band handshake is **TOFU** — trust on first use. Nothing
+authenticates that the public key in that OFFER belongs to who you think it does, so someone
+positioned to substitute messages could interpose on the very first exchange.
+
+That is an accepted trade for a free tier that needs no wallet and no gas. It is closed on the paid
+path, where a peer's key comes from an **ENS text record on a name they provably control**
+(§5.3 Tier 2) instead of from a chat bubble — same ECDH, authenticated key.
 
 ### 2. The app — the messenger you switch to
 
@@ -394,6 +453,12 @@ We'd rather write these down than have you find them.
   walk away with" needs renewal, so price it per year.
 - **The relayer is a liveness dependency.** It can't forge or redirect, but it can stall. If it's
   down the app falls back to the free claim path.
+- **The in-band handshake is TOFU.** No active-MITM protection on the first key exchange in
+  Telegram (see above). Resolved via ENS on the paid path; not resolved on the free one.
+- **No forward secrecy.** Conversation keys are independent of one another, so compromising one
+  reveals one conversation. But the app's messaging key is long-term and derived from `MS`, so
+  compromising *that* exposes every conversation it ever had, including past ones. A Signal-style
+  ratchet is the fix and is not implemented.
 
 ---
 

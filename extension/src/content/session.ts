@@ -56,7 +56,14 @@ export function isMine(pub: Uint8Array): boolean {
   return true
 }
 
-/** The ECDH conversation key once established (takes precedence over the passphrase key). */
+/** Is this the peer we are currently established with? A different pubkey means they restarted. */
+export function isPeer(pub: Uint8Array): boolean {
+  if (!s.peerPub || s.peerPub.length !== pub.length) return false
+  for (let i = 0; i < s.peerPub.length; i++) if (s.peerPub[i] !== pub[i]) return false
+  return true
+}
+
+/** The ECDH conversation key — the only key there is. */
 export function convKey(): Uint8Array | null {
   return s.convKey
 }

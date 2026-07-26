@@ -1,11 +1,10 @@
-import { LOCAL, SESSION, DEFAULT_CODEC_URL, FREE_LIMIT, WARN_AT } from '../shared/config'
+import { LOCAL, DEFAULT_CODEC_URL, FREE_LIMIT, WARN_AT } from '../shared/config'
 import { sendToCodec } from '../shared/messages'
 import type { HealthData } from '../shared/messages'
 
 const byId = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T
 const master = byId<HTMLButtonElement>('masterSwitch')
 const masterSub = byId<HTMLElement>('masterSub')
-const passphrase = byId<HTMLInputElement>('passphrase')
 const codecUrl = byId<HTMLInputElement>('codecUrl')
 const status = byId<HTMLElement>('status')
 
@@ -61,11 +60,9 @@ async function paintTrial(): Promise<void> {
 
 async function load(): Promise<void> {
   const local = await chrome.storage.local.get([LOCAL.enabled, LOCAL.codecUrl])
-  const session = await chrome.storage.session.get(SESSION.passphrase)
   stegoOn = Boolean(local[LOCAL.enabled])
   paintMaster()
   codecUrl.value = (local[LOCAL.codecUrl] as string) || DEFAULT_CODEC_URL
-  passphrase.value = (session[SESSION.passphrase] as string) || ''
   void checkHealth()
   void paintTrial()
 }
@@ -75,7 +72,6 @@ async function persist(): Promise<void> {
     [LOCAL.enabled]: stegoOn,
     [LOCAL.codecUrl]: codecUrl.value.trim() || DEFAULT_CODEC_URL,
   })
-  await chrome.storage.session.set({ [SESSION.passphrase]: passphrase.value })
 }
 
 master.addEventListener('click', async () => {
@@ -84,7 +80,7 @@ master.addEventListener('click', async () => {
   await persist() // SW picks up the change → toolbar icon lights up green
 })
 
-// ---- Tier-1 handshake (no passphrase) ----
+// ---- Tier-1 handshake — the only way a chat is keyed ----
 const hsStatus = byId<HTMLElement>('hsStatus')
 
 async function activeTab(): Promise<chrome.tabs.Tab | undefined> {

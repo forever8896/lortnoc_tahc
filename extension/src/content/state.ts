@@ -1,15 +1,13 @@
 // Reactive-ish session state for the content script: enabled flag, codec URL, and the
 // derived key (kept in memory only). Reads from chrome.storage and stays in sync.
-import { LOCAL, SESSION, DEFAULT_CODEC_URL } from '../shared/config'
-import { deriveKey } from './crypto'
+import { LOCAL, DEFAULT_CODEC_URL } from '../shared/config'
 
 type State = {
   enabled: boolean
   codecUrl: string
-  key: Uint8Array | null // derived from the passphrase; null until set
 }
 
-const state: State = { enabled: false, codecUrl: DEFAULT_CODEC_URL, key: null }
+const state: State = { enabled: false, codecUrl: DEFAULT_CODEC_URL }
 
 export function get(): Readonly<State> {
   return state
@@ -19,9 +17,6 @@ async function refresh(): Promise<void> {
   const local = await chrome.storage.local.get([LOCAL.enabled, LOCAL.codecUrl])
   state.enabled = Boolean(local[LOCAL.enabled])
   state.codecUrl = (local[LOCAL.codecUrl] as string) || DEFAULT_CODEC_URL
-  const session = await chrome.storage.session.get(SESSION.passphrase)
-  const pass = session[SESSION.passphrase] as string | undefined
-  state.key = pass ? deriveKey(pass) : null
 }
 
 /** Load initial state and keep it live as the popup changes settings. */
@@ -33,6 +28,8 @@ export async function initState(onChange?: () => void): Promise<void> {
   })
 }
 
+/** Stego is usable when it is switched on. Whether we hold a conversation key is a separate
+ *  question, answered by the session — see haveKey() in index.ts. */
 export function ready(): boolean {
-  return state.enabled && state.key !== null
+  return state.enabled
 }

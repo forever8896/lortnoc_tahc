@@ -22,7 +22,7 @@ Strict priority, so if time runs out you stop at a natural cut line and still ha
 
 - [x] **Passphrase-free Tier-1 handshake** *(was cut — we built it)* — X25519 ECDH keys smuggled as cover text,
       one-tap Accept, no shared secret. Frames skip best-of-N (fast ~2-3s). `content/handshake.ts` + `session.ts`.
-- [x] **0G best-of-N cover selection — LIVE** — real 0G Compute **testnet** inference judges which of 3 covers reads
+- [x] **0G best-of-N cover selection — LIVE** — real 0G Compute **testnet** inference judges which of 2 covers reads
       most natural, in the live send path. Broker sidecar on fly (`lortnoc-zerog.fly.dev`), funded testnet wallet.
       *(This is genuine 0G Compute usage — see P1.)*
 

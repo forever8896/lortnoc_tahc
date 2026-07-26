@@ -5,7 +5,7 @@ import { detectClient, selectorsFor, activeCompose } from './selectors'
 import { injectStyles, toast, showAcceptBanner, showPaywall } from './ui'
 import { initState, get } from './state'
 import { installSendInterceptor, sendCoverText } from './compose'
-import { startInbound } from './inbound'
+import { startInbound, RETRY } from './inbound'
 import { encrypt, tryDecrypt, toB64, fromB64 } from './crypto'
 import {
   loadMeter,
@@ -27,10 +27,12 @@ import * as session from './session'
 import { sendToCodec } from '../shared/messages'
 import type { EncodeData, DecodeData } from '../shared/messages'
 
-// The active messaging key: the handshake's ECDH key once established, else the
-// passphrase-derived key (fallback). Handshake means no shared passphrase is needed.
+// The ONE messaging key: the handshake's ECDH key. There is no passphrase fallback —
+// having two ways to key a chat meant the two sides could silently pick different ones, and
+// each would then decode only its own messages while the peer's stayed cover text. If there is
+// no session there is no key, and that is now a visible state rather than a silent wrong answer.
 function activeKey(): Uint8Array | null {
-  return session.convKey() ?? get().key
+  return session.convKey()
 }
 function haveKey(): boolean {
   return activeKey() !== null
@@ -67,6 +69,25 @@ function logKeyFingerprint(): void {
   console.info('[lortnoc] convKey fingerprint:', k ? toHex(k.slice(0, 6)) : '(none)', '— must MATCH the other side')
 }
 
+/**
+ * A bubble that decodes as cover text but fails the AES-SIV tag is ambiguous: it is either
+ * someone else's stego, or ours with the wrong key. One is nothing; several in a row is a key
+ * mismatch, and silently leaving garble on screen is how that used to go unnoticed for a whole
+ * conversation. So we count them and say so.
+ */
+let tagFailures = 0
+let mismatchWarned = false
+
+function noteTagFailure(): void {
+  tagFailures += 1
+  console.debug('[lortnoc] inbound: decoded, but the AES-SIV tag failed — not ours, or wrong key')
+  if (tagFailures >= 3 && !mismatchWarned && session.status() === 'established') {
+    mismatchWarned = true
+    console.warn('[lortnoc] repeated tag failures with an established session — keys do not match')
+    toast('Key mismatch — their messages will not open. Both hit Disconnect, then Connect again.')
+  }
+}
+
 // Every handshake frame is acted on AT MOST ONCE (by type+pubkey). Without this, the
 // inbound.reset() re-scan after a session establishes re-decodes the OFFER/ACK bubbles and
 // re-fires the accept banner / onAck → an infinite handshake loop that resends frames.
@@ -78,14 +99,28 @@ async function establishFromOffer(pubkey: Uint8Array): Promise<void> {
   const cover = await bytesToCover(ack, true) // fast: handshake frame, skip best-of-N
   if (cover) await sendCoverText(cover)
   console.info('[lortnoc] session established; re-scanning inbound')
+  tagFailures = 0
+  mismatchWarned = false
   inbound?.reset() // decode any messages that arrived before the key
   logKeyFingerprint()
-  toast('Private session established — no passphrase needed.')
+  toast('Private session established.')
 }
 
 async function handleFrame(type: number, pubkey: Uint8Array): Promise<void> {
   if (session.isMine(pubkey)) return // our own frame echoed back into the chat — ignore
-  if (session.status() === 'established') return // already connected — ignore further frames
+
+  // A peer who resets (or reinstalls) comes back with a NEW pubkey and offers again. Ignoring
+  // that because we think we are "already connected" left the two sides holding different keys
+  // forever — the exact symptom where each side can read only its own messages. So: an offer
+  // from a pubkey that is not our current peer means they restarted, and we re-establish.
+  if (session.status() === 'established') {
+    if (type === FRAME.OFFER && !session.isPeer(pubkey)) {
+      console.info('[lortnoc] peer re-offered with a new key — re-establishing')
+      handledFrames.clear()
+      await establishFromOffer(pubkey)
+    }
+    return
+  }
   const fkey = `${type}:${toHex(pubkey)}`
   if (handledFrames.has(fkey)) return // already processed (e.g. re-scanned after reset)
   handledFrames.add(fkey)
@@ -102,6 +137,8 @@ async function handleFrame(type: number, pubkey: Uint8Array): Promise<void> {
   } else if (type === FRAME.ACK) {
     await session.onAck(pubkey)
     console.info('[lortnoc] session established (ack); re-scanning inbound')
+    tagFailures = 0
+    mismatchWarned = false
     inbound?.reset()
     logKeyFingerprint()
     toast('They accepted — private session established.')
@@ -193,7 +230,7 @@ async function main(): Promise<void> {
       const ct = encrypt(key, real)
       progress.set(1, 'GPT-2 · hiding it as chatter')
       // best-of-N runs at the tail of /encode; surface it once generation is well underway
-      const tSelect = window.setTimeout(() => progress.set(2, '0G · judging 3 covers for the most natural'), 6500)
+      const tSelect = window.setTimeout(() => progress.set(2, '0G · judging 2 covers for the most natural'), 4500)
       try {
         const res = await sendToCodec<EncodeData>({
           type: 'ENCODE',
@@ -233,18 +270,18 @@ async function main(): Promise<void> {
   })
 
   // Inbound: cover → /decode → bytes → handshake frame? handle it : AES-SIV decrypt.
-  // Returns 'retry' on transient failure (no key yet / codec error) so the bubble is
+  // Returns RETRY on transient failure (no key yet / codec error) so the bubble is
   // re-tried later — never permanently cached as "not ours" (the asymmetric-decode bug).
   inbound = startInbound(client, () => get().enabled, async (cover) => {
     let res
     try {
       res = await sendToCodec<DecodeData>({ type: 'DECODE', coverText: cover })
     } catch {
-      return 'retry' // network glitch — try again
+      return RETRY // network glitch — try again
     }
     if (!res.ok) {
       // 422 = genuinely not codec cover text (normal chatter) → cache; else transient
-      return res.error?.includes('422') ? null : 'retry'
+      return res.error?.includes('422') ? null : RETRY
     }
     const bytes = fromB64(res.data.ciphertext)
     const frame = parseFrame(bytes)
@@ -253,9 +290,10 @@ async function main(): Promise<void> {
       return null // handled as handshake — not a message
     }
     const key = activeKey()
-    if (!key) return 'retry' // no key yet — don't poison the cache; decode after handshake
+    if (!key) return RETRY // no key yet — don't poison the cache; decode after handshake
     const pt = tryDecrypt(key, bytes)
-    if (pt === null) console.debug('[lortnoc] inbound: had key but AES-SIV tag failed (not ours or key mismatch)')
+    if (pt === null) noteTagFailure()
+    else tagFailures = 0
     return pt
   })
 

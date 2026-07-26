@@ -33,7 +33,7 @@ ZEROG_SIDECAR=http://localhost:8090 CODEC_VARIANTS=3 python3 ../server.py
 # on fly: run this as a second process/app and set the codec's ZEROG_SIDECAR + CODEC_VARIANTS
 ```
 
-`/health` on the codec then shows `select: 0g-best-of-3`, and each send generates 3 covers →
+`/health` on the codec then shows `select: 0g-best-of-2`, and each send generates 2 covers →
 the sidecar's `/select` returns the most natural → that one is sent.
 
 ## Wallet

@@ -5,10 +5,19 @@ import type { TgClient } from './selectors'
 import { selectorsFor } from './selectors'
 import { attachCoverCard } from './ui'
 
+/** "Undecided — ask again later" (no key yet, codec hiccup, network blip).
+ *
+ *  A SYMBOL on purpose. This used to be the string `'retry'`, and the branch below tests
+ *  `typeof decoded === 'string'` — which `'retry'` satisfies. So every transient failure
+ *  rendered the literal word "retry" into the bubble AND cached it as a final verdict, so the
+ *  real message was never decoded again. When the swallowed bubble was a handshake OFFER, the
+ *  frame was consumed as if it were a message and the connection silently never established.
+ *  A symbol makes that mistake a compile error instead of a mystery. */
+export const RETRY: unique symbol = Symbol('lortnoc.retry')
+
 /** onDecode(coverText) → decoded message string, `null` if DEFINITELY not ours (safe to
- *  cache), or `'retry'` if it couldn't be decided now (no key yet / codec error) and should
- *  be tried again later. */
-export type DecodeFn = (coverText: string) => Promise<string | null | 'retry'>
+ *  cache), or `RETRY` if it couldn't be decided now and should be tried again later. */
+export type DecodeFn = (coverText: string) => Promise<string | null | typeof RETRY>
 
 function readBubbleText(bubble: Element, textSel: string, timeSel: string): string {
   const msg = bubble.querySelector(textSel)
@@ -66,7 +75,11 @@ export function startInbound(
         (c) => c.offsetParent !== null,
       )
       if (!container) return
-      const bubbles = Array.from(container.querySelectorAll(sel!.bubble))
+      // NEWEST FIRST. Decodes are sequential and each is a full model round trip, so in DOM
+      // order a freshly-arrived bubble waits behind the entire backlog — which is why a
+      // handshake took so long to land in a chat with history. The message that just arrived is
+      // also the one being waited on.
+      const bubbles = Array.from(container.querySelectorAll(sel!.bubble)).reverse()
       for (const bubble of bubbles) {
         const el = bubble as HTMLElement
         const msg = bubble.querySelector(sel!.bubbleText) as HTMLElement | null
@@ -95,13 +108,15 @@ export function startInbound(
           const decoded = await onDecode(text)
           window.clearTimeout(cueTimer)
           msg.classList.remove('lortnoc-decoding')
-          if (typeof decoded === 'string') {
+          if (decoded === RETRY) {
+            // Transient (no key yet / codec error): record NOTHING, so the next scan tries
+            // again. Must be tested before the string branch — see RETRY.
+          } else if (typeof decoded === 'string') {
             renderDecoded(bubble, sel!.bubbleText, sel!.timeInMessage, decoded, text)
             if (mid) seen.set(mid, { decoded, cover: text })
-          } else if (decoded === null && mid) {
+          } else if (mid) {
             seen.set(mid, null) // DEFINITELY not ours — safe to never retry
           }
-          // decoded === 'retry' → transient (no key yet / codec error): do NOT cache, retry
         } finally {
           window.clearTimeout(cueTimer)
           msg.classList.remove('lortnoc-decoding')
