@@ -99,6 +99,8 @@ master.addEventListener('click', async () => {
 
 // ---- Tier-1 handshake — the only way a chat is keyed ----
 const hsStatus = byId<HTMLElement>('hsStatus')
+const fpRow = byId<HTMLElement>('fpRow')
+const fp = byId<HTMLElement>('fp')
 
 async function activeTab(): Promise<chrome.tabs.Tab | undefined> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
@@ -139,6 +141,7 @@ async function refreshHsStatus(): Promise<void> {
       status: string
       hasKey: boolean
       client: string
+      fingerprint: string | null
     }
     if (r?.client && r.client !== 'k') {
       setChip(hsStatus, 'use /k/', false)
@@ -152,6 +155,9 @@ async function refreshHsStatus(): Promise<void> {
     const [text, on] = map[r?.status] ?? ['not connected', false]
     setChip(hsStatus, text, on)
     paintConnect(r?.status ?? 'none')
+    // Only meaningful once a key exists; before that there is nothing to compare.
+    fpRow.hidden = !r?.fingerprint
+    if (r?.fingerprint) fp.textContent = r.fingerprint.replace(/(..)(?=.)/g, '$1 ').toUpperCase()
     // keep the master-switch sub-label honest: "on" only hides once there's a key
     if (stegoOn) masterSub.textContent = r?.hasKey ? 'on · hiding your messages' : 'on · connect a session first ↓'
   } catch {

@@ -81,6 +81,15 @@ body {
 .btn--sm { font-size: 12px; min-height: 34px; padding: 8px 12px; }
 .hint { color: var(--muted); font-size: 11px; line-height: 1.55; margin: 10px 0 0; }
 
+/* Safety code — the two sides compare this to tell a key mismatch (each reads only its own
+   messages) apart from a broken codec. They look identical from one side. */
+.fp { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.fp__label { font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--muted); }
+.fp__code { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; color: var(--signal);
+  border: 1px solid rgba(18,196,190,.3); padding: 3px 8px; }
+.fp__note { font-size: 10.5px; color: var(--muted); }
+
 /* advanced */
 .adv { margin-top: 14px; }
 .adv summary { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); cursor: pointer; padding: 6px 0; }

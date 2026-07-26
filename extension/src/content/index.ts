@@ -193,7 +193,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true
   }
   if (msg?.type === 'HS_STATUS') {
-    sendResponse({ status: session.status(), hasKey: haveKey(), client: detectClient() })
+    // The fingerprint goes to the popup, not just the console. A key mismatch is the one
+    // failure that looks exactly like "the codec is broken", and the only way to tell them
+    // apart is for the two people to compare six bytes — so put it where they can read it.
+    const k = session.convKey()
+    sendResponse({
+      status: session.status(),
+      hasKey: haveKey(),
+      client: detectClient(),
+      fingerprint: k ? toHex(k.slice(0, 6)) : null,
+    })
     return true
   }
   if (msg?.type === 'HS_RESET') {
