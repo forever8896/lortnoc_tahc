@@ -8,8 +8,9 @@
 import { SuiClient } from '@mysten/sui/client'
 import { Transaction } from '@mysten/sui/transactions'
 import type { Signer } from '@mysten/sui/cryptography'
-import { SUI, assertSuiSetup } from './config'
+import { SEAL, SUI, assertSuiSetup } from './config'
 import { encrypt, tryDecrypt } from '../crypto'
+import { isSealObject, sealDecrypt, sealEncrypt } from './seal'
 import type { Message, SendStage } from '../types'
 
 export const sui = new SuiClient({ url: SUI.rpc })
@@ -101,6 +102,38 @@ async function executeWithRetry(
   throw last
 }
 
+/** Create the shared head and return its object id. `blob` is normally '' — see sendMessage. */
+async function createHead(
+  blob: string,
+  msg: Message,
+  signer: Signer,
+  peerAddress: string,
+): Promise<string> {
+  const res = await executeWithRetry(() => {
+    const tx = new Transaction()
+    tx.moveCall({
+      target: `${SUI.packageId}::conversation::create`,
+      arguments: [
+        tx.pure.string(msg.from),
+        tx.pure.string(msg.to),
+        tx.pure.address(peerAddress),
+        tx.pure.string(blob),
+        tx.pure.u64(msg.ts),
+      ],
+    })
+    return tx
+  }, signer)
+  if (res.effects?.status.status !== 'success') {
+    throw new Error(`could not create the conversation: ${res.effects?.status.error ?? 'unknown'}`)
+  }
+  const created = res.objectChanges?.find(
+    (c) => c.type === 'created' && 'objectType' in c && c.objectType.includes('conversation::ConversationHead'),
+  )
+  const id = created && 'objectId' in created ? created.objectId : null
+  if (!id) throw new Error('conversation created but no head object was returned')
+  return id
+}
+
 /** Append a message: encrypt → Walrus blob → create or bump the ConversationHead. */
 export async function sendMessage(
   headId: string | null,
@@ -111,8 +144,27 @@ export async function sendMessage(
   onStage?: (s: SendStage) => void,
 ): Promise<{ headId: string; blobId: string }> {
   assertSuiSetup()
+
+  // A Seal identity must be PREFIXED with the head's object address (that is what `seal_approve`
+  // asserts), so for a brand-new conversation the head has to exist before its first message can
+  // be encrypted. Create it empty and append into it — one extra transaction, once per
+  // conversation, in exchange for every message being covered by the on-chain policy including
+  // the first. The empty entry is skipped by the reader.
+  let head = headId
+  if (!head && SEAL.enabled) {
+    onStage?.('anchoring')
+    head = await createHead('', msg, signer, peerAddress)
+  }
+
+  onStage?.('encrypting')
+  const plaintext = new TextEncoder().encode(JSON.stringify(msg))
+  const body = head && SEAL.enabled
+    ? await sealEncrypt(head, plaintext) // key release gated on-chain, per §6.4
+    : encrypt(convKey, JSON.stringify(msg)) // legacy path when Seal is switched off
+  headId = head
+
   onStage?.('storing')
-  const blobId = await walrusWrite(encrypt(convKey, JSON.stringify(msg)), signer)
+  const blobId = await walrusWrite(body, signer)
   onStage?.('anchoring')
 
   // Rebuilt per attempt: a Transaction caches its built bytes (including the gas coin it picked),
@@ -166,7 +218,11 @@ const cacheKey = (blobId: string, convKey: Uint8Array): string =>
 
 /** Read a conversation: head → blob ids → Walrus → decrypt. Undecryptable blobs are skipped
  *  (a wrong key is indistinguishable from a foreign blob, which is the point — §6.1). */
-export async function readMessages(headId: string, convKey: Uint8Array): Promise<Message[]> {
+export async function readMessages(
+  headId: string,
+  convKey: Uint8Array,
+  signer?: Signer,
+): Promise<Message[]> {
   assertSuiSetup()
   const head = await sui.getObject({ id: headId, options: { showContent: true } })
   const content = head.data?.content
@@ -175,6 +231,9 @@ export async function readMessages(headId: string, convKey: Uint8Array): Promise
     : undefined
   const out: Message[] = []
   for (const id of fields?.blobs ?? []) {
+    // The head of a Seal conversation is created empty, because the identity has to be namespaced
+    // to an object that does not exist yet. That placeholder is not a blob.
+    if (!id) continue
     // Two very different failures used to share one silent catch, which is how a stored message
     // could vanish without a trace: a blob we cannot FETCH is transient and self-heals on the
     // next poll, while a blob that will not DECRYPT is simply not ours and never will be.
@@ -191,7 +250,22 @@ export async function readMessages(headId: string, convKey: Uint8Array): Promise
       console.warn('[lortnoc] blob unavailable, will retry next poll:', id, e)
       continue // NOT cached — transient
     }
-    const pt = tryDecrypt(convKey, bytes)
+    // Seal object → ask the key servers (they dry-run seal_approve and refuse if we are not a
+    // participant). Anything else is a pre-Seal blob under our own AES-SIV, and must keep
+    // opening: the conversations written before this existed are still real messages.
+    let pt: string | null = null
+    if (isSealObject(bytes)) {
+      if (!signer) continue // no storage key in hand — undecided, retry when there is one
+      try {
+        pt = new TextDecoder().decode(await sealDecrypt(headId, bytes, signer))
+      } catch (e) {
+        console.debug('[lortnoc] Seal refused or could not open this blob:', id, e)
+        blobCache.set(ck, null)
+        continue
+      }
+    } else {
+      pt = tryDecrypt(convKey, bytes)
+    }
     if (!pt) {
       console.debug('[lortnoc] blob did not decrypt (not ours / wrong key):', id)
       blobCache.set(ck, null) // this key will never open this blob

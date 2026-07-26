@@ -261,7 +261,7 @@ export class LiveBackend implements Backend {
     const headId = this.heads()[peerH]
     const peerPub = await this.resolvePubkey(peerH)
     let messages: Message[] = []
-    if (headId && peerPub) messages = await readMessages(headId, this.convKeyFor(peerPub))
+    if (headId && peerPub) messages = await readMessages(headId, this.convKeyFor(peerPub), await this.suiSigner())
     return { convId: peerH, peer: peerH, seq: messages.length, updatedAt: messages.at(-1)?.ts ?? 0, messages }
   }
 

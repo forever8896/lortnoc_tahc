@@ -1,0 +1,92 @@
+{
+  "manifest_version": 3,
+  "name": "lortnoc tahc",
+  "version": "0.8.2",
+  "description": "Type real, send cover text, decode inline — a stego overlay for Telegram Web.",
+  "icons": {
+    "16": "icons/on-16.png",
+    "32": "icons/on-32.png",
+    "48": "icons/on-48.png",
+    "128": "icons/on-128.png"
+  },
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_title": "lortnoc tahc — stego for Telegram",
+    "default_icon": {
+      "16": "icons/off-16.png",
+      "32": "icons/off-32.png",
+      "48": "icons/off-48.png",
+      "128": "icons/off-128.png"
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "resources": [
+        "icons/*",
+        "fonts/*",
+        "logo.png"
+      ],
+      "use_dynamic_url": false
+    },
+    {
+      "matches": [
+        "https://web.telegram.org/*",
+        "https://web.telegram.org/*"
+      ],
+      "resources": [
+        "assets/config.js",
+        "assets/messages.js",
+        "assets/index2.ts.js"
+      ],
+      "use_dynamic_url": false
+    },
+    {
+      "matches": [
+        "http://localhost/*",
+        "https://app.lortnoctahc.com/*"
+      ],
+      "resources": [
+        "assets/config.js",
+        "assets/appbridge.ts.js"
+      ],
+      "use_dynamic_url": false
+    }
+  ],
+  "background": {
+    "service_worker": "service-worker-loader.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "js": [
+        "assets/index.ts-loader.js"
+      ],
+      "matches": [
+        "https://web.telegram.org/k/*",
+        "https://web.telegram.org/a/*"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "js": [
+        "assets/appbridge.ts-loader.js"
+      ],
+      "matches": [
+        "https://app.lortnoctahc.com/*",
+        "http://localhost/*"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://localhost:8080/*",
+    "https://*/*"
+  ]
+}

@@ -62,3 +62,34 @@ src/
 - Targets **Web K** (`web.telegram.org/k/`). On Web A it warns and no-ops (A support is later).
 - Global Stego toggle for the demo; per-chat gating is a fast-follow.
 - Fail-closed: any codec/decrypt/selector error shows the original cover text, never plaintext.
+
+## Testing it with two people, alone
+
+You do not need a second Telegram account or a second machine.
+
+```bash
+npm run build && npm run pair
+```
+
+That opens **two isolated browser profiles**, each with the extension loaded, both on Telegram Web.
+Each profile is a separate extension install, so each generates its own handshake keypair — and
+that, not the Telegram account, is what makes them two different people. Log the *same* account
+into both, open **Saved Messages**, and handshake with yourself.
+
+It works because the inbound observer watches outgoing bubbles as well as incoming ones, and
+`isMine()` compares against the local keypair. Window B genuinely sees window A's offer as a
+stranger's.
+
+Profiles persist in `.dev-profiles/`, so the QR login is a one-time cost per window.
+
+### The failure modes worth rehearsing
+
+- **Reset one side** (remove the extension, or clear its session storage) and confirm it
+  re-handshakes. Before v0.8.0 this stranded both sides permanently.
+- **Close the browser**, reopen, and confirm old messages stay cover text — the session key is
+  gone by design, and a fresh handshake cannot recover them.
+- **Rebuild while a window is open.** Since v0.8.2 chunk filenames are stable, so a stale loader
+  still resolves. If you ever see `ERR_FILE_NOT_FOUND` for an `assets/*.js` in the page console,
+  the content script is dead and nothing else you observe means anything.
+- **Watch both consoles for `convKey fingerprint`.** Different values is the one failure that
+  looks like "the codec is broken" but is not.

@@ -62,8 +62,34 @@ export const SUI = {
     'https://wal-aggregator-testnet.staketab.org',
     'https://walrus-testnet-aggregator.nodes.guru',
   ],
-  // Seal key servers (testnet) — fill from @mysten/seal testnet config.
-  sealKeyServers: (import.meta.env.VITE_SEAL_SERVERS as string)?.split(',').filter(Boolean) || [],
+} as const
+
+/**
+ * Seal (§6.4) — threshold encryption gated by the on-chain `seal_approve` policy in
+ * `conversation.move`. Key server object ids come from the Seal docs' verified list and were
+ * `getObject`-checked on testnet before being pinned here.
+ *
+ * threshold 1 of 2 on purpose: a demo that cannot decrypt because one operator's server is
+ * having a bad afternoon is worse than a demo with a smaller quorum, and the ACCESS CONTROL —
+ * the part that is actually load-bearing — is enforced identically by every server.
+ */
+export const SEAL = {
+  packageId: '0xdccbeb87767be2b2346af5575eb139807205e4c23ec53dc616f951fe1d814112',
+  // Testnet key servers advertise a protocol version on-chain (`first_version`/`last_version`).
+  // 0xb012… is v2 and requires @mysten/seal 1.x, which requires @mysten/sui 2.x — a major bump
+  // this app cannot take while @mysten/walrus pins the 1.x line. 0x73d0… serves v1, so it is the
+  // committee we can actually reach. Proven end-to-end by scripts/seal-live.mjs.
+  servers: [
+    {
+      objectId: '0x73d05d62c18d9374e3ea529e8e0ed6161da1a141a94d3f76ae3fe4e99356db75',
+      aggregatorUrl: undefined as string | undefined,
+    },
+  ],
+  threshold: 1,
+  /** Minutes a session key stays valid (SDK caps this at 30). */
+  sessionTtlMin: 30,
+  /** Off ⇒ write plain AES-SIV, as before. Reading always accepts both. */
+  enabled: (import.meta.env.VITE_SEAL_OFF as string) !== '1',
 } as const
 
 /** Testnet WAL — what Walrus charges for storage. Swap SUI→WAL at stake.walrus.site, or via
