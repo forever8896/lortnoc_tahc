@@ -96,6 +96,10 @@ export function IdentityPanel({ onClose }: { onClose: () => void }) {
 
         <hr className="rule" />
 
+        <ExtensionUnlock busy={busy} run={run} />
+
+        <hr className="rule" />
+
         <Knock status={status} busy={busy} run={run} />
 
         {note && <Note>{note}</Note>}
@@ -265,6 +269,45 @@ function Records({
         <br />
         Roles gate <span className="signal">writes</span>, never reads: every record here is
         world-readable. Read-gating is the offchain gateway's job.
+      </div>
+    </div>
+  )
+}
+
+/**
+ * One membership, both unlocks: the 0G payment that bought this handle also lifts the codec's
+ * free-send limit inside the Telegram extension.
+ *
+ * The token used to be handed over exactly once, by postMessage, at the instant of claiming — so
+ * if the extension was not installed and listening on this page in that moment, it was gone and
+ * the only recourse was paying again. Now it is stored, re-offered on load, and re-issuable.
+ */
+function ExtensionUnlock({ busy, run }: { busy: string; run: RunFn }) {
+  const { backend } = useBackend()
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <Eyebrow>Telegram extension</Eyebrow>
+      <div className="mono" style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.7 }}>
+        Your membership also unlocks unlimited hidden messages in Telegram — no second payment.
+        Install the extension, open this page, and hit unlock.
+      </div>
+      <div>
+        <button
+          className="btn btn--ghost btn--sm"
+          disabled={!!busy}
+          onClick={() =>
+            run('unlock', async () => {
+              const r = await backend.unlockExtension()
+              if (r === 'unlocked') return 'Extension unlocked — the free-send limit is lifted in Telegram.'
+              if (r === 'no-extension')
+                return 'No extension answered on this page. Install it, reload, and try again.'
+              return 'No paid membership found for this handle — the codec stays on the free tier.'
+            })
+          }
+        >
+          {busy === 'unlock' ? <Spinner /> : null} Unlock the extension
+        </button>
       </div>
     </div>
   )

@@ -16,9 +16,9 @@ import * as ens from './live/ens'
 import { sendMessage, readMessages, findHeads, sui } from './live/sui'
 import { GATEWAY_ADDR, LORTNOC, REC, RECORD_SPECS, ensReady } from './live/config'
 import { commitmentOf, generateTicket } from './live/proof'
-import { fetchGroup, fetchKnocks, relayerReady, sendKnock, submitClaim } from './live/relayerClient'
+import { fetchGroup, fetchKnocks, reissueCodecToken, relayerReady, sendKnock, submitClaim } from './live/relayerClient'
 import { createKnockConfig, deriveKnockKey, openKnock, parseKnockConfig, sealKnock } from './live/knock'
-import { deliverMembershipToExtension } from './live/extensionBridge'
+import { deliverAndConfirm, redeliverMembershipToExtension, storedMembershipToken } from './live/extensionBridge'
 import { isMember, membershipReady, zeroG } from './live/membership'
 import type { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519'
 import { WAL_COIN_TYPE } from './live/config'
@@ -356,8 +356,9 @@ export class LiveBackend implements Backend {
     const claimed = await submitClaim({
       label, evmAddr: this.id.ownerAddress, suiAddr, pubkey: this.id.pubkeyHex, ticket,
     })
-    // Same membership unlocks the codec too — hand the token to the extension (§7/§8).
-    if (claimed.codecToken) deliverMembershipToExtension(claimed.codecToken)
+    // Same membership unlocks the codec too — hand the token to the extension (§7/§8) and keep
+    // a copy, so installing the extension later is enough to unlock it.
+    if (claimed.codecToken) void deliverAndConfirm(claimed.codecToken)
 
     onStage?.('waiting-for-ens')
     await pollFor(() => ens.resolvePubkey(handle), 120_000)
@@ -401,6 +402,41 @@ export class LiveBackend implements Backend {
     if (onChain.toString() !== root) {
       throw new Error('the relayer served a member set that does not match the chain — refusing to prove')
     }
+  }
+
+  /**
+   * Unlock the codec in the extension.
+   *
+   * Uses the token we kept from the claim if we have one. If we do not — the usual case, since it
+   * used to be posted once and stored nowhere — we ask the relayer to re-issue it. That requires
+   * proving we control the address the handle went to, which we can do because K_own is derived
+   * from MS and lives right here.
+   *
+   * Returns what actually happened, because "we posted a message into the void" and "the
+   * extension confirmed" are different outcomes and the UI should not conflate them.
+   */
+  async unlockExtension(): Promise<'unlocked' | 'no-extension' | 'not-a-member'> {
+    if (!this.id?.handle || !this.ms || !this.owner) throw new Error('claim a handle first')
+
+    let token = storedMembershipToken()
+    if (!token) {
+      // We hold every value the ticket committed to, and K_own signs as the address it went to —
+      // enough for the relayer to find the claim and re-issue. No nullifier derivation needed.
+      const label = shortName(this.id.handle)
+      const suiAddr = await this.suiAddress()
+      const signature = await this.owner.signMessage({ message: `lortnoc codec token for ${label}` })
+      const { codecToken } = await reissueCodecToken({
+        label, evmAddr: this.id.ownerAddress, suiAddr, pubkey: this.id.pubkeyHex, signature,
+      }).catch(() => ({ codecToken: null }))
+      if (!codecToken) return 'not-a-member'
+      token = codecToken
+    }
+    return (await deliverAndConfirm(token)) ? 'unlocked' : 'no-extension'
+  }
+
+  /** Re-offer a stored token on load, so the extension picks it up without being asked. */
+  redeliverCodecToken(): void {
+    redeliverMembershipToExtension()
   }
 
   // ---- ENS v2 self-sovereignty (§6.5) ------------------------------------------------------

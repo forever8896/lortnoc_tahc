@@ -29,6 +29,7 @@ import { SuiClient } from '@mysten/sui/client'
 import { Transaction } from '@mysten/sui/transactions'
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519'
 import { decodeSuiPrivateKey } from '@mysten/sui/cryptography'
+import { verifyMessage } from 'viem'
 import { ticketMessage } from '../shared/ticket.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -361,6 +362,60 @@ async function payStipend(recipient) {
   log(`stipend → ${recipient} (${res.digest})`)
   return res.digest
 }
+
+/**
+ * POST /codec-token — re-issue the codec capability to someone who already paid.
+ *
+ * The token is handed to the extension by postMessage at the moment of a claim. If the extension
+ * was not installed and listening on that page in that instant it was gone for good, and the only
+ * recourse was paying a second time — which is not an answer.
+ *
+ * We deliberately do NOT accept a nullifier. Nullifiers are public on-chain, so one proves
+ * nothing, and having the client re-derive it would couple us to Semaphore's internal formula.
+ * Instead the caller supplies the four values their ticket committed to; we recompute the binding,
+ * find the burned ticket whose `message` equals it, and require a signature from the address the
+ * handle went to. The caller must therefore know the exact bound values AND control that address.
+ */
+app.post('/codec-token', async (req, res) => {
+  const { label, evmAddr, suiAddr, pubkey, signature } = req.body ?? {}
+  try {
+    if (!CODEC_SECRET) return res.status(503).json({ error: 'codec tokens are not configured' })
+    if (!label || !evmAddr || !suiAddr || !pubkey || !signature) {
+      return res.status(400).json({ error: 'label, evmAddr, suiAddr, pubkey and signature are required' })
+    }
+
+    // 1. Find the burned ticket that committed to exactly these values.
+    const expected = ticketMessage(label, evmAddr, suiAddr, pubkey)
+    const logs = await zg.getLogs({
+      address: MEMBERSHIP,
+      event: {
+        type: 'event', name: 'TicketSpent',
+        inputs: [
+          { name: 'nullifier', type: 'uint256', indexed: true },
+          { name: 'message', type: 'uint256', indexed: false },
+          { name: 'relayer', type: 'address', indexed: true },
+        ],
+      },
+      fromBlock: 0n, toBlock: 'latest',
+    })
+    const burned = logs.find((l) => l.args.message === expected)
+    if (!burned) return res.status(403).json({ error: 'no paid claim matches those values' })
+
+    // 2. And the caller must control the address the handle went to.
+    const ok = await verifyMessage({
+      address: getAddress(evmAddr),
+      message: `lortnoc codec token for ${label}`,
+      signature,
+    }).catch(() => false)
+    if (!ok) return res.status(403).json({ error: 'signature does not match the claimant address' })
+
+    log(`re-issued codec token for ${label} (${evmAddr})`)
+    res.json({ codecToken: mintCodecToken(burned.args.nullifier) })
+  } catch (e) {
+    log('codec-token failed', e)
+    res.status(500).json({ error: String(e.shortMessage ?? e.message ?? e) })
+  }
+})
 
 // ---- knock relay (§6.8) --------------------------------------------------------------------
 //

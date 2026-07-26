@@ -34,6 +34,12 @@ export function App() {
     return () => { alive = false }
   }, [live, ms, identity])
 
+  // Installing the extension AFTER claiming used to mean the token was unreachable. Re-offer it
+  // on every load so it lands as soon as something is listening.
+  useEffect(() => {
+    if (identity?.handle && live) backend.redeliverCodecToken?.()
+  }, [identity, live, backend])
+
   if (!identity) return <Auth />
 
   const gated = live && membershipReady() && !identity.handle && member === false

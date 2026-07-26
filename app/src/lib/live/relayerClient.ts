@@ -50,6 +50,13 @@ export async function relayerReady(): Promise<boolean> {
 /** The member set. The caller MUST verify `root` against the chain before proving against it. */
 export const fetchGroup = (): Promise<GroupSnapshot> => call<GroupSnapshot>('/group', {}, 20_000)
 
+/** Re-issue the codec capability for a membership that was already spent. Used when the token
+ *  never reached the extension — the alternative was paying again, which is not an answer. */
+export const reissueCodecToken = (body: {
+  label: string; evmAddr: string; suiAddr: string; pubkey: string; signature: string
+}): Promise<{ codecToken: string | null }> =>
+  call('/codec-token', { method: 'POST', body: JSON.stringify(body) }, 30_000)
+
 /** Deliver a sealed knock (§6.8). The relay stores an opaque blob — it cannot read one, and
  *  cannot distinguish a correct knock from a wrong-answer one. */
 export const sendKnock = (toHandle: string, sealed: string): Promise<{ ok: boolean; pending: number }> =>

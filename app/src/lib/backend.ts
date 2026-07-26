@@ -32,6 +32,13 @@ export interface Backend {
   /** Write one of your own text records. */
   setRecord(key: string, value: string): Promise<string>
 
+  /** Unlock unlimited codec use in the Telegram extension using the membership already paid for.
+   *  'no-extension' means nothing was listening — not that it failed. */
+  unlockExtension(): Promise<'unlocked' | 'no-extension' | 'not-a-member'>
+
+  /** Re-offer a stored codec token to the extension. No-op when there is none. */
+  redeliverCodecToken?(): void
+
   // ---- knock: challenge-gated contact (§6.8) ---------------------------------------------------
   /** Publish a question. The answer is used to derive a key and then forgotten — it is never
    *  stored, never sent, and never published. */

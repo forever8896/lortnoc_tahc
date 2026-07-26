@@ -113,6 +113,10 @@ export class MockBackend implements Backend {
     return false
   }
 
+  async unlockExtension(): Promise<'unlocked' | 'no-extension' | 'not-a-member'> {
+    return 'not-a-member' // demo mode has no membership to unlock with
+  }
+
   async claimHandlePaid(): Promise<Identity> {
     throw new Error('demo mode has no chain — the paid claim path needs ?live')
   }
