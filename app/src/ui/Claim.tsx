@@ -16,7 +16,15 @@ const STAGE_COPY: Record<ClaimStage, string> = {
 
 export function Claim() {
   const { backend, identity, setIdentity } = useBackend()
-  const [name, setName] = useState('')
+  // Seed from ?handle= — the extension passes the logged-in Telegram username so the field
+  // arrives pre-typed (§6.7). Sanitised to the claim charset on read; still fully editable.
+  const [name, setName] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('handle') ?? ''
+    } catch {
+      return ''
+    }
+  })
   const [avail, setAvail] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')

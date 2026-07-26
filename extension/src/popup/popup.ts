@@ -1,4 +1,4 @@
-import { LOCAL, DEFAULT_CODEC_URL, FREE_LIMIT, WARN_AT } from '../shared/config'
+import { LOCAL, DEFAULT_CODEC_URL, FREE_LIMIT, WARN_AT, APP_URL, appUrlWithHandle } from '../shared/config'
 import { sendToCodec } from '../shared/messages'
 import type { HealthData } from '../shared/messages'
 
@@ -58,6 +58,22 @@ async function paintTrial(): Promise<void> {
   }
 }
 
+// Point the conversion banner at the app, with the Telegram handle prefilled when the content
+// script can read it (?handle=), so the claim field on app.lortnoctahc.com is pre-typed.
+async function prefillCta(): Promise<void> {
+  const cta = document.getElementById('cta') as HTMLAnchorElement | null
+  if (!cta) return
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+    if (!tab?.id || !(tab.url ?? '').includes('web.telegram.org')) return
+    if (!(await reachContentScript(tab.id))) return
+    const r = (await chrome.tabs.sendMessage(tab.id, { type: 'GET_TG_HANDLE' })) as { handle?: string | null }
+    cta.href = appUrlWithHandle(APP_URL, r?.handle)
+  } catch {
+    /* leave the default app URL (no prefill) */
+  }
+}
+
 async function load(): Promise<void> {
   const local = await chrome.storage.local.get([LOCAL.enabled, LOCAL.codecUrl])
   stegoOn = Boolean(local[LOCAL.enabled])
@@ -65,6 +81,7 @@ async function load(): Promise<void> {
   codecUrl.value = (local[LOCAL.codecUrl] as string) || DEFAULT_CODEC_URL
   void checkHealth()
   void paintTrial()
+  void prefillCta()
 }
 
 async function persist(): Promise<void> {

@@ -18,8 +18,8 @@ import {
   markBlocked,
   getMembershipToken,
 } from './metering'
-import { getSelfHandle } from './identity'
-import { UPGRADE_URL, LOCAL } from '../shared/config'
+import { getSelfHandle, getTelegramUsername } from './identity'
+import { UPGRADE_URL, LOCAL, appUrlWithHandle } from '../shared/config'
 
 const toHex = (u: Uint8Array): string => [...u].map((b) => b.toString(16).padStart(2, '0')).join('')
 import { parseFrame, FRAME } from './handshake'
@@ -81,6 +81,7 @@ function watchForAnswer(): void {
 
 let inbound: { reset: () => void } | null = null
 let selfHandle = '' // metering bucket key (§9), resolved in main()
+let tgUsername: string | null = null // Telegram @username, for prefilling the app claim field
 
 /** Short fingerprint of the conversation key — BOTH users should see the SAME value once
  *  the handshake is established. If they differ, the ECDH keys crossed (retry the connect). */
@@ -199,6 +200,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     void session.reset().then(() => sendResponse({ ok: true }))
     return true
   }
+  if (msg?.type === 'GET_TG_HANDLE') {
+    // The popup's conversion banner asks for this to prefill the app's claim field.
+    void getTelegramUsername().then((handle) => sendResponse({ handle }))
+    return true
+  }
   return false
 })
 
@@ -212,6 +218,7 @@ async function main(): Promise<void> {
   await initState()
   await loadMeter() // freemium counter + paid flag (§9)
   selfHandle = await getSelfHandle() // stable metering bucket (§9), resolved once
+  void getTelegramUsername().then((u) => (tgUsername = u)) // best-effort, for claim prefill
   // React instantly when the app delivers a membership token (paid claim) — no reload needed.
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && (LOCAL.meter in changes || LOCAL.membership in changes)) void loadMeter()
@@ -242,7 +249,7 @@ async function main(): Promise<void> {
     if (!token && isBlocked()) {
       // fast local pre-gate to skip a doomed round-trip; the codec is the real authority
       progress.fail('Free trial used up — unlock to keep sending')
-      showPaywall(UPGRADE_URL, sends())
+      showPaywall(appUrlWithHandle(UPGRADE_URL, tgUsername), sends())
       return null
     }
     const key = activeKey()
@@ -265,7 +272,7 @@ async function main(): Promise<void> {
             // x402: free limit reached server-side → paywall, funnel to pay
             await markBlocked()
             progress.fail('Free trial used up — unlock to keep sending')
-            showPaywall(UPGRADE_URL, sends())
+            showPaywall(appUrlWithHandle(UPGRADE_URL, tgUsername), sends())
           } else {
             console.warn('[lortnoc] encode failed:', res.error)
           }
