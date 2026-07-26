@@ -8,11 +8,20 @@
 // what makes them count as two different people. The Telegram account can be the same one; the
 // identity that matters here belongs to the extension, not to Telegram.
 //
-// Use **Saved Messages** as the chat. Messages you send appear in both windows, the inbound
-// observer watches outgoing bubbles as well as incoming ones, and `isMine()` compares against the
-// LOCAL keypair — so window B genuinely treats window A's offer as a stranger's.
+// TWO WAYS TO USE THIS, and they are for different jobs:
 //
-// Profiles persist in .dev-profiles/, so you log into Telegram once per window and never again.
+//   A. One Telegram account, Saved Messages — for FUNCTION and STABILITY.
+//      Both windows are the same account, so every bubble renders on the same side. It looks
+//      nothing like a conversation, and that does not matter: what you are testing is that the
+//      handshake converges, keys match, decode works, and a reset recovers.
+//
+//   B. Two Telegram accounts, one per window — for the DEMO.
+//      Real left/right bubbles, because they genuinely are two people. Needs no change here: the
+//      profiles are separate browser installs, so just log a different account into each.
+//
+// Either way each profile is its own extension install with its own handshake keypair — that, and
+// not the Telegram account, is what makes them two parties. Profiles persist in .dev-profiles/,
+// so the QR login is paid once per window.
 import { spawn, execSync } from 'node:child_process'
 import { existsSync, mkdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -90,16 +99,24 @@ for (const name of ['alice', 'bob']) {
 }
 
 console.log(`
-Next:
-  1. Log the SAME Telegram account into both windows (QR from your phone). One time only —
-     the profiles persist.
-  2. Open **Saved Messages** in both.
-  3. Turn PrivacyMaxxing on in both popups.
-  4. Click Connect in ONE window; Accept in the other.
-  5. Watch both consoles for:  [lortnoc] convKey fingerprint: …   ← must match.
+Pick the mode that matches what you are doing:
+
+  TESTING (one account) — same account in both windows, open Saved Messages in both.
+    Every bubble sits on the same side. Ugly, and irrelevant: you are checking the handshake,
+    not the layout.
+
+  DEMO (two accounts) — log a DIFFERENT Telegram account into each window and open the chat
+    between them. Real two-sided conversation, because it is one.
+
+Then, in both windows:
+  1. Turn PrivacyMaxxing on in the popup.
+  2. Confirm the console says:  [lortnoc] content script ready
+     If that line is missing, stop — nothing else you observe means anything.
+  3. Click Connect in ONE window; Accept in the other.
+  4. Compare  [lortnoc] convKey fingerprint: …  — the two MUST match.
 
 Then type. A message sent in either window should decode in both.
 
-Reset a side the way a real user would — remove the extension, or clear its session storage — and
-watch it re-handshake. That is the path that used to strand people permanently.
+Worth rehearsing on purpose: reset one side (remove the extension, or clear its session storage)
+and watch it re-handshake. That path used to strand both sides permanently.
 `)

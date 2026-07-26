@@ -73,12 +73,23 @@ npm run build && npm run pair
 
 That opens **two isolated browser profiles**, each with the extension loaded, both on Telegram Web.
 Each profile is a separate extension install, so each generates its own handshake keypair — and
-that, not the Telegram account, is what makes them two different people. Log the *same* account
-into both, open **Saved Messages**, and handshake with yourself.
+that, not the Telegram account, is what makes them two parties.
 
-It works because the inbound observer watches outgoing bubbles as well as incoming ones, and
-`isMine()` compares against the local keypair. Window B genuinely sees window A's offer as a
-stranger's.
+Two ways to use it, for two different jobs:
+
+**Testing — one account.** Log the *same* account into both windows and open **Saved Messages**.
+You can handshake with yourself, because window B sees window A's offer as a stranger's: the
+inbound observer watches outgoing bubbles as well as incoming ones, and `isMine()` compares against
+the *local* keypair. Every bubble renders on the same side, which looks nothing like a conversation
+and does not matter — you are testing that the handshake converges, keys match, decode works, and a
+reset recovers.
+
+**Demo — two accounts.** Log a *different* Telegram account into each window and open the chat
+between them. Now you get real left/right bubbles, because it genuinely is two people. No code
+change; the profiles are separate browser installs.
+
+Saved Messages cannot show a two-sided conversation, so anything you intend to film needs the
+second account.
 
 Profiles persist in `.dev-profiles/`, so the QR login is a one-time cost per window.
 
