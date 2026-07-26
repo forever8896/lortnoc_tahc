@@ -310,7 +310,7 @@ async function main(): Promise<void> {
   // Inbound: cover → /decode → bytes → handshake frame? handle it : AES-SIV decrypt.
   // Returns RETRY on transient failure (no key yet / codec error) so the bubble is
   // re-tried later — never permanently cached as "not ours" (the asymmetric-decode bug).
-  inbound = startInbound(client, () => get().enabled, async (cover) => {
+  inbound = startInbound(client, () => get().enabled, async (cover, fromHistory) => {
     let res
     try {
       res = await sendToCodec<DecodeData>({ type: 'DECODE', coverText: cover })
@@ -324,9 +324,19 @@ async function main(): Promise<void> {
     const bytes = fromB64(res.data.ciphertext)
     const frame = parseFrame(bytes)
     if (frame) {
-      console.info('[lortnoc] inbound frame:', frame.type === FRAME.OFFER ? 'OFFER' : 'ACK',
-        'from', toHex(frame.pubkey.slice(0, 6)), '· our status:', session.status())
-      await handleFrame(frame.type, frame.pubkey)
+      // A frame already in the chat when we loaded is a FOSSIL of an earlier session, and the
+      // keypair behind it is long gone. Acting on it derived a key against a pubkey the peer no
+      // longer holds, announced "Private session established", then reset the decode cache —
+      // which rescanned and found the next fossil, and the next. That loop is why both sides
+      // ended up established on DIFFERENT keys, each able to read only its own messages.
+      // Fossils still decode as messages below; they just never drive the handshake.
+      if (fromHistory) {
+        console.info('[lortnoc] ignoring a handshake frame from chat history (not a live invite)')
+      } else {
+        console.info('[lortnoc] inbound frame:', frame.type === FRAME.OFFER ? 'OFFER' : 'ACK',
+          'from', toHex(frame.pubkey.slice(0, 6)), '· our status:', session.status())
+        await handleFrame(frame.type, frame.pubkey)
+      }
       return null // handled as handshake — not a message
     }
     const key = activeKey()

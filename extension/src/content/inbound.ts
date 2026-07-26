@@ -15,9 +15,14 @@ import { attachCoverCard } from './ui'
  *  A symbol makes that mistake a compile error instead of a mystery. */
 export const RETRY: unique symbol = Symbol('lortnoc.retry')
 
-/** onDecode(coverText) → decoded message string, `null` if DEFINITELY not ours (safe to
- *  cache), or `RETRY` if it couldn't be decided now and should be tried again later. */
-export type DecodeFn = (coverText: string) => Promise<string | null | typeof RETRY>
+/** onDecode(coverText, fromHistory) → decoded message string, `null` if DEFINITELY not ours
+ *  (safe to cache), or `RETRY` if it couldn't be decided now and should be tried again later.
+ *
+ *  `fromHistory` is true for bubbles that were already on screen when we started watching. They
+ *  decode as messages exactly like any other, but they must NEVER drive the handshake: old
+ *  OFFER/ACK frames from previous sessions are still sitting in the chat, and acting on one keys
+ *  you to a pubkey the peer discarded long ago. */
+export type DecodeFn = (coverText: string, fromHistory: boolean) => Promise<string | null | typeof RETRY>
 
 function readBubbleText(bubble: Element, textSel: string, timeSel: string): string {
   const msg = bubble.querySelector(textSel)
@@ -73,6 +78,11 @@ export function startInbound(
 
   let scanning = false
   let dirty = false // DOM changed mid-scan → a newer bubble exists; restart from the top
+  // Bubbles that already existed when we started watching THIS chat. Keyed to the container
+  // element, because switching chats swaps it — carrying the old chat's set over would make the
+  // new chat's fossils look live, which is the exact failure this exists to prevent. Not cleared
+  // by reset(): "was this here when I opened the chat?" stays true after a session establishes.
+  let history: { container: Element; mids: Set<string> } | null = null
   // decode decision cached per data-mid: {…}=ours, null=DEFINITELY not ours. Only a
   // definitive verdict is cached — a transient failure (no key yet / codec error) is NOT
   // cached, so the message is retried (e.g. after a handshake establishes the key).
@@ -109,7 +119,16 @@ export function startInbound(
     // model round trip, so in DOM order a freshly-arrived bubble waits behind the entire
     // backlog — which is why a handshake took so long to land in a chat with history. Deep
     // history is pre-session chatter: seconds per bubble for a guaranteed miss.
-    const bubbles = Array.from(container.querySelectorAll(sel!.bubble)).reverse().slice(0, MAX_BACKLOG)
+    const all = Array.from(container.querySelectorAll(sel!.bubble))
+    // First sighting of this chat: everything on screen is pre-existing. Anything that shows up
+    // after this point arrived live and is allowed to drive the handshake.
+    if (history?.container !== container) {
+      history = {
+        container,
+        mids: new Set(all.map((b) => b.getAttribute(sel!.midAttr) ?? '').filter(Boolean)),
+      }
+    }
+    const bubbles = all.reverse().slice(0, MAX_BACKLOG)
     for (const bubble of bubbles) {
       if (dirty) return // something newer landed — restart the pass
       const el = bubble as HTMLElement
@@ -144,7 +163,7 @@ export function startInbound(
       // decode is seconds; a quick not-cover-text 422 shouldn't flash it)
       const cueTimer = window.setTimeout(() => msg.classList.add('lortnoc-decoding'), 400)
       try {
-        const decoded = await onDecode(text)
+        const decoded = await onDecode(text, history?.mids.has(mid) ?? false)
         window.clearTimeout(cueTimer)
         msg.classList.remove('lortnoc-decoding')
         if (decoded === RETRY) {
