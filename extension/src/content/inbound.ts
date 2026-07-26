@@ -47,11 +47,21 @@ function renderDecoded(
   const span = document.createElement('span')
   span.className = 'lortnoc-decoded'
   span.textContent = decoded + ' '
-  span.title = `Telegram stored: “${cover}”` // accessibility fallback
+  // No `title` — the native tooltip rendered the same cover text in a second, uglier place and
+  // raced the card on hover. The card below is the only presentation of it.
   attachCoverCard(span, cover) // hover → floating card with the cover text
   msg.insertBefore(span, msg.firstChild)
   ;(msg as HTMLElement).dataset.lortnocRendered = '1'
 }
+
+/** How many of the newest bubbles a scan will consider. Deep history is pre-session chatter and
+ *  costs seconds per bubble to reject. */
+const MAX_BACKLOG = 15
+/** Measured floor: a 16-byte AES-SIV ciphertext — the smallest thing we ever encode — comes back
+ *  as 27 words. Half that is a wide safety margin and still rejects most real chat for free. */
+const MIN_COVER_WORDS = 13
+/** Cap on preemptive restarts within one scan (see the loop in `scan`). */
+const MAX_RESTARTS = 4
 
 export function startInbound(
   client: TgClient,
@@ -62,6 +72,7 @@ export function startInbound(
   if (!sel) return { reset: () => {} }
 
   let scanning = false
+  let dirty = false // DOM changed mid-scan → a newer bubble exists; restart from the top
   // decode decision cached per data-mid: {…}=ours, null=DEFINITELY not ours. Only a
   // definitive verdict is cached — a transient failure (no key yet / codec error) is NOT
   // cached, so the message is retried (e.g. after a handshake establishes the key).
@@ -71,65 +82,91 @@ export function startInbound(
     if (scanning || !isReady()) return
     scanning = true
     try {
-      const container = Array.from(document.querySelectorAll<HTMLElement>(sel!.bubblesContainer)).find(
-        (c) => c.offsetParent !== null,
-      )
-      if (!container) return
-      // NEWEST FIRST. Decodes are sequential and each is a full model round trip, so in DOM
-      // order a freshly-arrived bubble waits behind the entire backlog — which is why a
-      // handshake took so long to land in a chat with history. The message that just arrived is
-      // also the one being waited on.
-      const bubbles = Array.from(container.querySelectorAll(sel!.bubble)).reverse()
-      for (const bubble of bubbles) {
-        const el = bubble as HTMLElement
-        const msg = bubble.querySelector(sel!.bubbleText) as HTMLElement | null
-        if (!msg) continue
-        const mid = bubble.getAttribute(sel!.midAttr) ?? ''
-
-        // already decided for this message? re-apply from cache if Telegram re-rendered
-        // the node (cheap), never re-hit the codec.
-        if (mid && seen.has(mid)) {
-          const hit = seen.get(mid)
-          if (hit && msg.dataset.lortnocRendered !== '1') {
-            renderDecoded(bubble, sel!.bubbleText, sel!.timeInMessage, hit.decoded, hit.cover)
-          }
-          continue
-        }
-        if (msg.dataset.lortnocRendered === '1') continue
-        if (el.dataset.lortnocPending === '1') continue
-
-        const text = readBubbleText(bubble, sel!.bubbleText, sel!.timeInMessage)
-        if (!text) continue
-        el.dataset.lortnocPending = '1'
-        // show the "decoding…" cue only if the decode is actually taking a moment (a GPT-2
-        // decode is seconds; a quick not-cover-text 422 shouldn't flash it)
-        const cueTimer = window.setTimeout(() => msg.classList.add('lortnoc-decoding'), 400)
-        try {
-          const decoded = await onDecode(text)
-          window.clearTimeout(cueTimer)
-          msg.classList.remove('lortnoc-decoding')
-          if (decoded === RETRY) {
-            // Transient (no key yet / codec error): record NOTHING, so the next scan tries
-            // again. Must be tested before the string branch — see RETRY.
-          } else if (typeof decoded === 'string') {
-            renderDecoded(bubble, sel!.bubbleText, sel!.timeInMessage, decoded, text)
-            if (mid) seen.set(mid, { decoded, cover: text })
-          } else if (mid) {
-            seen.set(mid, null) // DEFINITELY not ours — safe to never retry
-          }
-        } finally {
-          window.clearTimeout(cueTimer)
-          msg.classList.remove('lortnoc-decoding')
-          delete el.dataset.lortnocPending
-        }
+      // Restart whenever a bubble arrived mid-pass, so the newest message is always the next
+      // one decoded rather than the last. Without this, an incoming handshake ACK queues behind
+      // the entire visible history — minutes of decodes — and the handshake reads as broken.
+      //
+      // Bounded, because the restarts are self-triggering: rendering a decode mutates the DOM,
+      // and Telegram mutates it constantly on its own. Anything still outstanding is picked up
+      // by the next debounced scan, so a cap costs nothing but rules out a hot loop.
+      for (let i = 0; i < MAX_RESTARTS; i++) {
+        dirty = false
+        await pass()
+        if (!dirty) break
       }
     } finally {
       scanning = false
     }
   }
 
+  async function pass(): Promise<void> {
+    const container = Array.from(document.querySelectorAll<HTMLElement>(sel!.bubblesContainer)).find(
+      (c) => c.offsetParent !== null,
+    )
+    if (!container) return
+
+    // NEWEST FIRST, and only the newest MAX_BACKLOG. Decodes are sequential and each is a full
+    // model round trip, so in DOM order a freshly-arrived bubble waits behind the entire
+    // backlog — which is why a handshake took so long to land in a chat with history. Deep
+    // history is pre-session chatter: seconds per bubble for a guaranteed miss.
+    const bubbles = Array.from(container.querySelectorAll(sel!.bubble)).reverse().slice(0, MAX_BACKLOG)
+    for (const bubble of bubbles) {
+      if (dirty) return // something newer landed — restart the pass
+      const el = bubble as HTMLElement
+      const msg = bubble.querySelector(sel!.bubbleText) as HTMLElement | null
+      if (!msg) continue
+      const mid = bubble.getAttribute(sel!.midAttr) ?? ''
+
+      // already decided for this message? re-apply from cache if Telegram re-rendered
+      // the node (cheap), never re-hit the codec.
+      if (mid && seen.has(mid)) {
+        const hit = seen.get(mid)
+        if (hit && msg.dataset.lortnocRendered !== '1') {
+          renderDecoded(bubble, sel!.bubbleText, sel!.timeInMessage, hit.decoded, hit.cover)
+        }
+        continue
+      }
+      if (msg.dataset.lortnocRendered === '1') continue
+      if (el.dataset.lortnocPending === '1') continue
+
+      const text = readBubbleText(bubble, sel!.bubbleText, sel!.timeInMessage)
+      if (!text) continue
+      // Cheap local reject before spending a codec round trip. The smallest payload we ever
+      // emit (a 16-byte AES-SIV ciphertext) encodes to 27 words; a handshake frame is larger
+      // still. Anything under MIN_COVER_WORDS provably cannot be ours, and skipping it here
+      // is the difference between a scan costing seconds and costing minutes.
+      if (text.trim().split(/\s+/).length < MIN_COVER_WORDS) {
+        if (mid) seen.set(mid, null)
+        continue
+      }
+      el.dataset.lortnocPending = '1'
+      // show the "decoding…" cue only if the decode is actually taking a moment (a GPT-2
+      // decode is seconds; a quick not-cover-text 422 shouldn't flash it)
+      const cueTimer = window.setTimeout(() => msg.classList.add('lortnoc-decoding'), 400)
+      try {
+        const decoded = await onDecode(text)
+        window.clearTimeout(cueTimer)
+        msg.classList.remove('lortnoc-decoding')
+        if (decoded === RETRY) {
+          // Transient (no key yet / codec error): record NOTHING, so the next scan tries
+          // again. Must be tested before the string branch — see RETRY.
+        } else if (typeof decoded === 'string') {
+          renderDecoded(bubble, sel!.bubbleText, sel!.timeInMessage, decoded, text)
+          if (mid) seen.set(mid, { decoded, cover: text })
+        } else if (mid) {
+          seen.set(mid, null) // DEFINITELY not ours — safe to never retry
+        }
+      } finally {
+        window.clearTimeout(cueTimer)
+        msg.classList.remove('lortnoc-decoding')
+        delete el.dataset.lortnocPending
+      }
+    }
+  }
+
   let timer: number | undefined
   const debouncedScan = (): void => {
+    if (scanning) dirty = true // preempt the in-flight pass instead of dropping this mutation
     window.clearTimeout(timer)
     timer = window.setTimeout(() => void scan(), 250)
   }

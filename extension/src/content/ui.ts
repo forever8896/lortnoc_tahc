@@ -35,12 +35,12 @@ export function injectStyles(): void {
     .lortnoc-card {
       position: fixed;
       z-index: 2147483647;
-      max-width: 340px;
+      max-width: 400px;
       background: #0b0b0e;
       color: #edeae4;
       border: 1px solid rgba(18, 196, 190,.4);
       border-radius: 4px;
-      padding: 10px 12px;
+      padding: 11px 14px 12px;
       font: 300 12px/1.55 "LortnocJost", system-ui, sans-serif;
       box-shadow: 0 12px 34px rgba(0,0,0,.6);
       pointer-events: none;
@@ -49,9 +49,16 @@ export function injectStyles(): void {
     }
     .lortnoc-card.show { opacity: 1; }
     .lortnoc-card b {
-      display: block; margin-bottom: 5px; color: ${SIGNAL}; font-weight: 400;
+      display: block; margin-bottom: 7px; color: ${SIGNAL}; font-weight: 400;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase;
+    }
+    /* The cover text is the point of the card, so it gets reading type — not the label's size.
+       It is a whole sentence of prose; at 12px/1.55 with no measure it read as a tooltip. */
+    .lortnoc-card__cover {
+      font-size: 13.5px; line-height: 1.62; color: rgba(237,234,228,.94);
+      padding-left: 9px; border-left: 1px solid rgba(18,196,190,.28);
+      overflow-wrap: anywhere;
     }
     /* "working" cue while the codec runs (GPT-2 takes seconds) */
     .lortnoc-busy { opacity: .6; animation: lortnoc-pulse 1.1s ease-in-out infinite; }
@@ -286,13 +293,19 @@ export function attachCoverCard(el: HTMLElement, cover: string): void {
     const label = document.createElement('b')
     label.textContent = 'What Telegram stored'
     card.appendChild(label)
-    card.appendChild(document.createElement('br'))
-    card.appendChild(document.createTextNode(cover))
+    const body = document.createElement('div')
+    body.className = 'lortnoc-card__cover'
+    body.textContent = cover
+    card.appendChild(body)
     document.body.appendChild(card)
+    // Prefer below the message; flip above when there isn't room, so the card never has to be
+    // clamped over the decoded text it is explaining.
     const r = el.getBoundingClientRect()
     const w = card.offsetWidth
+    const h = card.offsetHeight
+    const below = r.bottom + 6
     card.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - w - 8))}px`
-    card.style.top = `${Math.min(r.bottom + 6, window.innerHeight - card.offsetHeight - 8)}px`
+    card.style.top = `${below + h + 8 <= window.innerHeight ? below : Math.max(8, r.top - h - 6)}px`
     requestAnimationFrame(() => card?.classList.add('show'))
   }
   const hide = (): void => {
