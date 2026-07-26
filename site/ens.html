@@ -38,12 +38,42 @@
     <h2>How it works here</h2>
     <ol class="steps">
       <li><b>Own resolver per account.</b> Claiming a handle deploys a <code>VerifiableFactory</code> proxy of <code>PermissionedResolverImpl</code> &mdash; their contract, not a row in a shared one.</li>
-      <li><b>Records carry the routing.</b> <code>pubkey</code>, <code>walrus</code>, <code>inbox</code>, <code>stealth</code>, <code>knock</code>.</li>
+      <li><b>Records carry the routing.</b> <code>pubkey</code>, <code>sui</code>, <code>inbox</code>, <code>discoverable</code>, <code>knock</code>. Each one separately permissioned.</li>
       <li><b>Delegate exactly one record.</b> <code>authorizeTextRoles(name, "eth.lortnoc.inbox", gateway, true)</code>. Our gateway rotates the inbox pointer and is <b>reverted</b> on everything else.</li>
       <li><b>Revoke without us.</b> Same call, <code>grant=false</code>. One transaction, the user&rsquo;s signature.</li>
       <li><b>Prove it&rsquo;s genuine.</b> <code>verifyContract(proxy)</code> returns the implementation &mdash; checkable without trusting our backend.</li>
-      <li><b>Unlinkable issuance.</b> Gated on an unspent zk nullifier, claim relayed so payer &ne; claimer.</li>
+      <li><b>Unlinkable issuance.</b> The paid claim burns a single-use zk nullifier on 0G, then a relayer issues the name on Sepolia &mdash; so the wallet that paid never signs for the handle. Verifiable: the address holding our founder handle has never sent a transaction. The registrar&rsquo;s on-chain gate is currently open, so the nullifier is enforced by the relayer rather than the contract.</li>
     </ol>
+
+    <figure class="flow">
+      <figcaption class="flow__cap">How a handle resolves &mdash; every hop is a real contract</figcaption>
+      <div class="flow__row">
+        <div class="flow__node"><b>ENS v2 root</b><span>RootRegistry &rarr; the ETHRegistry, on Sepolia</span></div>
+        <div class="flow__node"><b>lortnoctahc</b><span>our name, with our registry slotted underneath</span></div>
+        <div class="flow__node flow__node--signal"><b>LortnocRegistry</b><span>issues handles on our rule, not on &ldquo;this wallet paid&rdquo;</span></div>
+        <div class="flow__node flow__node--signal"><b>your resolver</b><span>a VerifiableFactory proxy only you administer</span></div>
+      </div>
+      <p class="flow__foot">Every handle gets its own resolver contract, not a row in a shared one. <code>verifyContract(proxy)</code> returns the canonical implementation, so a stranger can confirm yours is genuine without trusting us.</p>
+    </figure>
+
+    <figure class="flow">
+      <figcaption class="flow__cap">What lives on your resolver, and who may write it</figcaption>
+      <div class="flow__row">
+        <div class="flow__node"><b>pubkey</b><span>how people encrypt to you<br>you write &middot; gateway reverted</span></div>
+        <div class="flow__node"><b>sui</b><span>where your conversations live<br>you write &middot; gateway reverted</span></div>
+        <div class="flow__node"><b>knock</b><span>the question strangers must answer<br>you write &middot; gateway reverted</span></div>
+        <div class="flow__node flow__node--signal"><b>inbox</b><span>relay pointer &mdash; the one record we ask for<br>you write &middot; <em>gateway may write</em></span></div>
+      </div>
+      <div class="flow__gate">
+        <b>authorizeTextRoles(name, &quot;eth.lortnoc.inbox&quot;, gateway, true)</b>
+        <span>One call grants write access to exactly one text key. The role is resourced by <code>keccak256(node, part)</code>, so it cannot spill onto any other record &mdash; the gateway&rsquo;s attempt to write <code>pubkey</code> reverts on-chain, not in our code.</span>
+        <div class="flow__out">
+          <div class="yes">gateway &rarr; inbox: permitted, revocable</div>
+          <div class="no">gateway &rarr; pubkey, sui, knock: reverts</div>
+        </div>
+        <p class="flow__foot">Same call with <code>grant=false</code> takes it back. One transaction, your signature, no request to us.</p>
+      </div>
+    </figure>
   </section>
 
   <section>
@@ -51,7 +81,7 @@
     <p>v2 didn&rsquo;t just add features to v1. It made the registry pluggable, and our entire identity layer hangs off that one decision.</p>
 
     <h3><code>IRegistry</code> with a different ownership model</h3>
-    <p>Being able to slot our own registry under <code>lortnoc.eth</code> and have it issue names on a rule that isn&rsquo;t <em>&ldquo;this wallet paid&rdquo;</em> is the reason handles can be unlinkable to payment. In v1 that thought isn&rsquo;t expressible &mdash; you&rsquo;d be bolting policy onto a system whose ownership model already disagreed with you.</p>
+    <p>Being able to slot our own registry under <code>lortnoctahc.eth</code> and have it issue names on a rule that isn&rsquo;t <em>&ldquo;this wallet paid&rdquo;</em> is the reason handles can be unlinkable to payment. In v1 that thought isn&rsquo;t expressible &mdash; you&rsquo;d be bolting policy onto a system whose ownership model already disagreed with you.</p>
 
     <h3>Per-record roles, resourced by <code>keccak256(node, part)</code></h3>
     <p>This is the detail that makes least-privilege real rather than aspirational. Our gateway holds write access to exactly one text key and is reverted on every other. Not &ldquo;shouldn&rsquo;t&rdquo; &mdash; reverts, on-chain, every time.</p>
@@ -76,15 +106,15 @@
         <tr><th>Public</th><td>Fully linkable, deliberately.</td></tr>
       </table>
     </div>
-    <p><strong>The gate is the creative part, not the index behind it.</strong> Roles govern writes; this ladder is a read-time policy at the gateway &mdash; a separate mechanism, deliberately.</p>
+    <p><strong>The gate is the creative part, not the index behind it.</strong> Roles govern writes; this ladder is a read-time policy at the gateway &mdash; a separate mechanism, deliberately. Today the rung is a record the user sets, and the CCIP-Read resolver that would enforce it per-caller is the next build. We would rather show the dial honestly than claim an index we have not written.</p>
   </section>
 
   <section>
     <h2>Specifics</h2>
     <div class="spec-wrap">
       <table class="spec">
-        <tr><th>Handle</th><td><code>&lt;name&gt;.lortnoc.eth</code></td></tr>
-        <tr><th>Registry</th><td><code>LortnocRegistry</code>, implements <code>IRegistry</code>, under <code>lortnoc.eth</code></td></tr>
+        <tr><th>Handle</th><td><code>&lt;name&gt;.lortnoctahc.eth</code></td></tr>
+        <tr><th>Registry</th><td><code>LortnocRegistry</code>, implements <code>IRegistry</code>, under <code>lortnoctahc.eth</code></td></tr>
         <tr><th>Resolver</th><td>Per-account <code>VerifiableFactory</code> proxy of <code>PermissionedResolverImpl</code></td></tr>
         <tr><th>Permissions</th><td>Enhanced Access Control &mdash; per-record roles</td></tr>
         <tr><th>Delegation</th><td><code>authorizeTextRoles(name, key, account, grant)</code></td></tr>

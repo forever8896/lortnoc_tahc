@@ -41,9 +41,38 @@
       <li><b>Encrypt.</b> Seal encrypts each message to an identity namespaced under its conversation object. No single party holds the key.</li>
       <li><b>Scatter.</b> Walrus erasure-codes it across the network. Every node holds a fragment it can&rsquo;t read.</li>
       <li><b>Point.</b> A <code>ConversationHead</code> Sui object tracks the current blob. Blobs never change; only the pointer moves.</li>
-      <li><b>Find.</b> An ENS text record points at the manifest, so any device with the user&rsquo;s secret rebuilds their inbox.</li>
-      <li><b>Open.</b> Decrypted client-side with <code>id_seal</code>, derived on-device. Reading your own history is always free.</li>
+      <li><b>Find.</b> Conversations announce themselves as <code>ConversationCreated</code> events on Sui, so any device holding the user&rsquo;s secret rebuilds their inbox from chain with nothing stored by us.</li>
+      <li><b>Open.</b> Your Seal session key is signed by a Sui keypair derived on-device from your master secret &mdash; so the key servers answer to you, not to us. Reading your own history is always free.</li>
     </ol>
+
+    <figure class="flow">
+      <figcaption class="flow__cap">Sending a message</figcaption>
+      <div class="flow__row">
+        <div class="flow__node"><b>Your message</b><span>plaintext, never leaves the page</span></div>
+        <div class="flow__node flow__node--signal"><b>Seal encrypts it</b><span>identity = conversation object address + nonce</span></div>
+        <div class="flow__node"><b>Walrus stores it</b><span>erasure-coded across nodes, written via the upload relay</span></div>
+        <div class="flow__node"><b>Sui points at it</b><span>ConversationHead.append(blobId), seq bumped</span></div>
+      </div>
+    </figure>
+
+    <figure class="flow">
+      <figcaption class="flow__cap">Reading it back</figcaption>
+      <div class="flow__row">
+        <div class="flow__node"><b>Read the head</b><span>the Sui object lists every blob in order</span></div>
+        <div class="flow__node"><b>Fetch the blob</b><span>reconstructed by a Walrus aggregator</span></div>
+        <div class="flow__node flow__node--signal"><b>Ask for a key share</b><span>key servers decide &mdash; not us</span></div>
+        <div class="flow__node"><b>Plaintext</b><span>assembled client-side</span></div>
+      </div>
+      <div class="flow__gate">
+        <b>seal_approve(id, head)</b>
+        <span>Before releasing anything, every key server dry-runs this Move function against live chain state. Two assertions, both required: the identity is namespaced to <em>this</em> conversation object, and the caller is one of its participants.</span>
+        <div class="flow__out">
+          <div class="yes">participant &rarr; key share released, message opens</div>
+          <div class="no">anyone else &rarr; NoAccessError, from the key servers</div>
+        </div>
+        <p class="flow__foot">Access follows membership on-chain. We hold no key and cannot override the answer &mdash; verified end to end in <code>scripts/seal-live.mjs</code>.</p>
+      </div>
+    </figure>
   </section>
 
   <section>
@@ -72,7 +101,7 @@
         <tr><th>Access rule</th><td><code>seal_approve</code>, a Move function on Sui</td></tr>
         <tr><th>Batching</th><td>One blob per message today &mdash; Quilt measured, not yet economic at our message rate</td></tr>
         <tr><th>Pointer</th><td><code>ConversationHead</code> Sui object</td></tr>
-        <tr><th>User key</th><td><code>id_seal</code>, derived on-device, never transmitted</td></tr>
+        <tr><th>User key</th><td>Sui keypair derived on-device from the master secret &mdash; signs the Seal session key, never transmitted</td></tr>
       </table>
     </div>
     <p><a href="0g.html">We evaluated 0G Storage and kept Walrus &mdash; the reasoning is on the compute page &rarr;</a></p>

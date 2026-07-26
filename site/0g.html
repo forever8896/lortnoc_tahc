@@ -43,6 +43,28 @@
       <li><b>Send the winner.</b> That sentence about coffee is all the platform ever keeps.</li>
       <li><b>Decode.</b> The other end reverses it exactly. A valid auth tag means it was ours &mdash; an invalid one means it really was small talk.</li>
     </ol>
+
+    <figure class="flow">
+      <figcaption class="flow__cap">Where 0G sits in a single send</figcaption>
+      <div class="flow__row">
+        <div class="flow__node"><b>Your message</b><span>encrypted AES-SIV on the device first</span></div>
+        <div class="flow__node"><b>Written two ways</b><span>a pinned local GPT-2 turns the ciphertext into two different cover texts</span></div>
+        <div class="flow__node flow__node--signal"><b>0G judges</b><span>confidential compute picks the one that reads more like a person</span></div>
+        <div class="flow__node"><b>The winner sends</b><span>that sentence is all Telegram ever keeps</span></div>
+      </div>
+      <p class="flow__foot">It returns a single number &mdash; which candidate won. Nothing else crosses back, and nothing is retained.</p>
+    </figure>
+
+    <figure class="flow">
+      <figcaption class="flow__cap">The other half &mdash; membership on 0G Chain</figcaption>
+      <div class="flow__row">
+        <div class="flow__node"><b>Bridge and pay</b><span>ETH &rarr; native 0G in one transaction, ~12s</span></div>
+        <div class="flow__node flow__node--signal"><b>join(commitment)</b><span>your Semaphore commitment enters the paid set. Public: a wallet paid</span></div>
+        <div class="flow__node"><b>&hellip; later, prove it</b><span>a zero-knowledge proof that you know <em>some</em> commitment&rsquo;s secret</span></div>
+        <div class="flow__node flow__node--signal"><b>spendTicket(nullifier)</b><span>single-use, burned on-chain. Which member you are stays hidden</span></div>
+      </div>
+      <p class="flow__foot">wallet &rarr; commitment is public. commitment &rarr; handle is not. The chain severs there, which is the whole reason membership lives on 0G rather than in our database.</p>
+    </figure>
     <p><b>What 0G sees:</b> candidate cover texts. Ciphertext, never plaintext, and useless without a key that never leaves the device.</p>
   </section>
 
@@ -59,7 +81,7 @@
     <p>We&rsquo;d guess that wasn&rsquo;t the headline use case you designed for. It worked anyway, which says more about how general the primitive is than any benchmark would.</p>
 
     <h3>The broker model is the part people will underrate</h3>
-    <p>Being able to point at an attested response and say <em>this ran where we said it ran</em> is the difference between a privacy claim and a privacy proof. For a product whose entire pitch is &ldquo;don&rsquo;t trust us,&rdquo; verifiability isn&rsquo;t a feature of the compute &mdash; it&rsquo;s the reason we can use hosted compute at all.</p>
+    <p>Routing inference through a broker that settles per request &mdash; provider signer acknowledged, every request signed &mdash; is what lets a product whose entire pitch is &ldquo;don&rsquo;t trust us&rdquo; use hosted compute at all. We are honest about where we stop: we use the broker, we do not yet capture and verify a TEE attestation per response. The moment we do, a privacy claim becomes a privacy proof, and the fact that the path is already there is the point.</p>
     <p>0G Chain carries the other half: the Semaphore membership contract, where paying inserts a commitment and claiming burns a single-use nullifier. <code>wallet &rarr; commitment</code> is public; <code>commitment &rarr; handle</code> is not.</p>
   </section>
 
@@ -67,10 +89,10 @@
     <h2>Specifics</h2>
     <div class="spec-wrap">
       <table class="spec">
-        <tr><th>Sealed inference</th><td>0G confidential compute &mdash; best-of-N cover selection</td></tr>
+        <tr><th>Sealed inference</th><td>0G confidential compute &mdash; picks the more natural of two candidate covers, in the live send path</td></tr>
         <tr><th>Local codec</th><td>GPT-2, pinned, CPU, greedy &mdash; deterministic across restarts</td></tr>
         <tr><th>Encryption</th><td>AES-SIV, client-side, key never transmitted</td></tr>
-        <tr><th>Chain</th><td>0G Galileo, chain ID 16602</td></tr>
+        <tr><th>Chain</th><td>0G mainnet, chain ID 16661 &mdash; membership paid in real 0G. Galileo (16602) carries the same stack for testing</td></tr>
         <tr><th>Membership</th><td>Semaphore commitment + single-use nullifier</td></tr>
       </table>
     </div>
