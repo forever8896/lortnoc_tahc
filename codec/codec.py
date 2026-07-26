@@ -86,19 +86,23 @@ def select_info() -> str:
     return f"0g-best-of-{zerog.VARIANTS}" if zerog.enabled() else "off"
 
 
-def encode(data: bytes, fast: bool = False) -> str:
-    """fast=True skips best-of-N (single cover, no 0G round-trip). Used for handshake
-    frames, which carry only public keys and don't need cover-text polish."""
+def encode(data: bytes, fast: bool = False) -> tuple[str, str]:
+    """(cover text, selection method). fast=True skips best-of-N (single cover, no 0G
+    round-trip) — used for handshake frames, which carry only public keys.
+
+    The method is returned rather than dropped because 0G selection fails SILENTLY by
+    design (falls back to the first cover). Without it, a 0G outage is invisible: the
+    client keeps claiming "0G judged this" on a blind timer, and the one thing the 0G
+    prize asks us to prove is the thing we would stop noticing had stopped happening."""
     if _kind not in ("gpt2", "markov"):
-        return wordmap.encode(data)
+        return wordmap.encode(data), "single"
     # generate N candidate covers (only if 0G selection is enabled AND not fast — else 1)
     n = 1 if fast or not zerog.enabled() else zerog.VARIANTS
     with _lock:  # model is stateful; hold the lock only for generation
         covers = [coder.encode(data, _model, K) for _ in range(n)]
     if n == 1:
-        return covers[0]
-    best, _method = zerog.select_best(covers)  # 0G network call OUTSIDE the lock
-    return best
+        return covers[0], "single"
+    return zerog.select_best(covers)  # 0G network call OUTSIDE the lock
 
 
 def decode(cover: str) -> bytes:

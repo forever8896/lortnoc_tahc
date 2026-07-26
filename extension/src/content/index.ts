@@ -267,8 +267,12 @@ async function main(): Promise<void> {
       progress.set(0, 'AES-SIV · never leaves this page')
       const ct = encrypt(key, real)
       progress.set(1, 'GPT-2 · hiding it as chatter')
-      // best-of-N runs at the tail of /encode; surface it once generation is well underway
-      const tSelect = window.setTimeout(() => progress.set(2, '0G · judging 2 covers for the most natural'), 4500)
+      // Best-of-N runs at the tail of /encode. This label used to CLAIM "0G · judging 2 covers"
+      // on a blind 4.5s timer, which meant any send that stalled past 4.5s sat there accusing
+      // 0G of a failure that belonged to something else — and, worse, still claimed 0G had
+      // judged when 0G was down (selection falls back silently). Stay neutral here; the codec
+      // reports what actually happened and we say so below.
+      const tSelect = window.setTimeout(() => progress.set(2, 'Choosing the most natural of 2'), 4500)
       try {
         const res = await sendToCodec<EncodeData>({
           type: 'ENCODE',
@@ -287,7 +291,16 @@ async function main(): Promise<void> {
           }
           return null
         }
-        const { coverText, remaining: left, member } = res.data
+        const { coverText, remaining: left, member, select } = res.data
+        // Say what actually happened, now that we know. A silent 0G fallback used to be
+        // indistinguishable from a successful 0G judgement — which matters, because "proof of
+        // 0G inference" is the one thing we are meant to be able to demonstrate.
+        if (select?.startsWith('0g')) {
+          progress.set(2, '0G · judged 2 covers, picked the most natural')
+        } else if (select === 'fallback') {
+          progress.set(2, '0G unreachable — sent the first cover')
+          console.warn('[lortnoc] 0G selection fell back: the cover was NOT judged by 0G')
+        }
         if (typeof left === 'number' && (left >= 0 || member === true)) {
           await syncFromServer(left, member === true) // server enforcing → mirror its count
         } else {

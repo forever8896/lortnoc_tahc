@@ -7,7 +7,11 @@ export type CodecRequest =
 
 export type HealthData = { model: string; digest: string; ready: boolean }
 // remaining: free sends left (-1 = unmetered/member); member: on a paid token.
-export type EncodeData = { coverText: string; remaining?: number; member?: boolean }
+// `select` is the codec's honest report of whether 0G actually judged this cover:
+// '0g-testnet' | '0g-router' = it did, 'fallback' = 0G was unreachable and the first cover
+// was used, 'single' = selection skipped (handshake frames). 0G selection fails silently by
+// design, so without this the UI can only guess — and it used to guess on a timer.
+export type EncodeData = { coverText: string; remaining?: number; member?: boolean; select?: string }
 export type DecodeData = { ciphertext: string }
 
 export type CodecResponse<T = unknown> =

@@ -125,14 +125,22 @@ class Handler(BaseHTTPRequestHandler):
                         body.update({"upgrade": auth.UPGRADE_URL, "remaining": 0})
                         return self._json(402, body)
 
-                cover = codec.encode(ct, fast=fast)
+                cover, select = codec.encode(ct, fast=fast)
 
                 # Spend a free send only after a successful encode (members are unlimited).
                 if auth.ENFORCE and not fast and not verdict["member"]:
                     verdict["remaining"] = max(0, auth.FREE_LIMIT - auth.spend(req.get("handle")))
                 return self._json(
                     200,
-                    {"coverText": cover, "remaining": verdict["remaining"], "member": verdict["member"]},
+                    {
+                        "coverText": cover,
+                        "remaining": verdict["remaining"],
+                        "member": verdict["member"],
+                        # Honest per-request signal: "0g-testnet"/"0g-router" if 0G really
+                        # judged this cover, "fallback" if 0G was unreachable, "single" if
+                        # selection was skipped (handshake frames).
+                        "select": select,
+                    },
                 )
             if path == "/decode":
                 ct = codec.decode(req["coverText"])

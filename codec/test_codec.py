@@ -23,7 +23,7 @@ def test_active_backend_roundtrip():
     # whichever backend loaded (gpt2 if torch present, else wordmap)
     for _ in range(10):
         x = os.urandom(1 + os.urandom(1)[0] % 32)
-        assert codec.decode(codec.encode(x)) == x
+        assert codec.decode(codec.encode(x)[0]) == x
 
 
 if __name__ == "__main__":
