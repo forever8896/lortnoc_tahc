@@ -18,9 +18,11 @@
     "parentName": "lortnoctahc.eth",
     "reservedName": "lortnoc.eth",
     "registry": "0x2D95c86bd9a850d95897c604c8EB00131a9C62a5",
-    "registrar": "0x794ec3b1fb8ad0d23f3f654c20993ba4ff762c19",
+    "registrar": "0x49bba8ced07728fa09b8b2242aed5bb4c43f24ae",
     "deployedAt": "2026-07-25T16:46:40.145Z",
     "deployer": "0x61eE2fBcf2841d9094e2D42406Dd4f83a7981Bb8",
-    "registrarDeployBlock": 11348914
+    "registrarDeployBlock": 11348914,
+    "registrarPrevious": "0x794ec3b1fb8ad0d23f3f654c20993ba4ff762c19",
+    "registrarUpgradedAt": "2026-07-27T11:39:04.578Z"
   }
 }

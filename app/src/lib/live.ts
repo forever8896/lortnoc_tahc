@@ -107,6 +107,12 @@ export class LiveBackend implements Backend {
     void this.publishSuiAddress(true).catch((e) =>
       console.warn('[lortnoc] could not publish the Sui address (will retry next sign-in):', e),
     )
+    // Same treatment for `addr`. Handles claimed before the registrar wrote it have addr = 0x0,
+    // and since the registrar revokes its own roles at the end of a claim, the OWNER is now the
+    // only party who can ever set it — which means it has to be repaired from here.
+    void this.publishEthAddress(true).catch((e) =>
+      console.warn('[lortnoc] could not publish the ETH address (will retry next sign-in):', e),
+    )
     return id
   }
 
@@ -223,6 +229,27 @@ export class LiveBackend implements Backend {
     // unwelcome in the middle of signing in. Repair quietly or leave it for an explicit action.
     if (!canSignLocally && silentOnly) return
     await ens.setText(this.id.handle, REC.sui, addr, canSignLocally ? owner : undefined)
+  }
+
+  /** Publish `addr` for this handle — the record explorers and wallets read first.
+   *
+   *  Idempotent: a matching record costs one eth_call and no transaction. Silent-only during
+   *  sign-in, so a repair never interrupts it with a wallet popup. */
+  private async publishEthAddress(silentOnly = false): Promise<void> {
+    if (!this.id?.handle) return
+    const owner = this.owner
+    if (!owner) return
+    const current = await ens.readAddr(this.id.handle)
+    if (current && current.toLowerCase() === owner.address.toLowerCase()) return
+    // Only the key holding the resolver's roles can write. On the paid path that is the
+    // MS-derived owner; on the free path the handle stayed with the connected wallet, and this
+    // silent repair simply does not apply.
+    const canSignLocally = await ens.canWriteText(this.id.handle, owner.address, REC.pubkey)
+    if (!canSignLocally) {
+      if (silentOnly) return
+      throw new Error('this key cannot write records for the handle')
+    }
+    await ens.setAddr(this.id.handle, owner.address, owner)
   }
 
   private heads(): Record<string, string> {

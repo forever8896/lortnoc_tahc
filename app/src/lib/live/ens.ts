@@ -52,6 +52,11 @@ const resolverAbi = [
   { type: 'function', name: 'authorizeTextRoles', stateMutability: 'nonpayable', inputs: [{ name: 'toName', type: 'bytes' }, { name: 'key', type: 'string' }, { name: 'account', type: 'address' }, { name: 'grant', type: 'bool' }], outputs: [{ type: 'bool' }] },
   { type: 'function', name: 'hasRoles', stateMutability: 'view', inputs: [{ name: 'resource', type: 'uint256' }, { name: 'roleBitmap', type: 'uint256' }, { name: 'account', type: 'address' }], outputs: [{ type: 'bool' }] },
   { type: 'function', name: 'clearRecords', stateMutability: 'nonpayable', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [] },
+  // `addr` is the record every explorer and wallet asks for first. Handles claimed before
+  // 2026-07-27 have it unset, which made them read as "does not resolve" despite a correctly
+  // linked resolver and a perfectly good pubkey text record.
+  { type: 'function', name: 'addr', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ type: 'address' }] },
+  { type: 'function', name: 'setAddr', stateMutability: 'nonpayable', inputs: [{ name: 'node', type: 'bytes32' }, { name: 'addr', type: 'address' }], outputs: [] },
 ] as const
 
 const registryAbi = [
@@ -327,6 +332,38 @@ export async function setText(
   const { request } = await publicClient.simulateContract({
     account, address: resolver, abi: resolverAbi, functionName: 'setText',
     args: [nodeOf(handle), key, value],
+  })
+  const hash = await client.writeContract(request)
+  await publicClient.waitForTransactionReceipt({ hash })
+  return hash
+}
+
+/** The ETH address a handle resolves to. Read straight from the resolver: an unset addr is a
+ *  legitimate 0x0 answer, not a resolution failure, so there is nothing for the gateway path to
+ *  add here. */
+export async function readAddr(handle: string): Promise<Address | null> {
+  const resolver = await resolverFor(handle)
+  if (!resolver) return null
+  try {
+    return await publicClient.readContract({
+      address: resolver, abi: resolverAbi, functionName: 'addr', args: [nodeOf(handle)],
+    }) as Address
+  } catch {
+    return null
+  }
+}
+
+/** Publish the ETH address for a handle. Same signer rules as setText — see the note there. */
+export async function setAddr(handle: string, addr: Address, signer?: Account): Promise<Hex> {
+  assertEnsSetup()
+  const resolver = await resolverFor(handle)
+  if (!resolver) throw new Error(`${handle} has no resolver`)
+  const { client, account } = signer
+    ? { client: ownerClient(signer), account: signer }
+    : await walletClient()
+  const { request } = await publicClient.simulateContract({
+    account, address: resolver, abi: resolverAbi, functionName: 'setAddr',
+    args: [nodeOf(handle), addr],
   })
   const hash = await client.writeContract(request)
   await publicClient.waitForTransactionReceipt({ hash })

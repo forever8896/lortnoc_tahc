@@ -5,6 +5,7 @@ pragma solidity ^0.8.24;
 interface IPermissionedResolver {
     function initialize(address admin, uint256 roleBitmap, bytes[] calldata setters) external;
     function setText(bytes32 node, string calldata key, string calldata value) external;
+    function setAddr(bytes32 node, address addr) external;
     function grantRootRoles(uint256 roleBitmap, address account) external returns (bool);
     function revokeRootRoles(uint256 roleBitmap, address account) external returns (bool);
 }
@@ -219,8 +220,15 @@ contract LortnocRegistrar {
 
         IPermissionedResolver r = IPermissionedResolver(resolver);
 
-        // 2. Publish the messaging pubkey while we still hold roles.
+        // 2. Publish the messaging pubkey while we still hold roles — and the ETH address.
+        //
+        //    `addr` matters more than it looks: it is the record every ENS explorer and wallet
+        //    asks for first. Writing only the custom text key left every handle resolving to
+        //    0x0, so tooling reported our names as not resolving at all even though the resolver
+        //    was correctly linked and the text record read back fine. It must be written here,
+        //    in this transaction, because step 4 drops the only authority we ever hold.
         r.setText(node, PUBKEY_KEY, pubkey);
+        r.setAddr(node, claimant);
 
         // 3-4. Hand the resolver over, then drop our own authority. Order matters: EAC forbids
         //      removing the last assignee of a role, so grant before revoking.

@@ -414,11 +414,33 @@ now reversed).
 > | Ours | Sepolia address |
 > |---|---|
 > | `LortnocRegistry` (UserRegistry proxy) | `0x2D95c86bd9a850d95897c604c8EB00131a9C62a5` |
-> | `LortnocRegistrar` | `0x794ec3b1fb8ad0d23f3f654c20993ba4ff762c19` |
+> | `LortnocRegistrar` | `0x49bba8ced07728fa09b8b2242aed5bb4c43f24ae` (v2, 2026-07-27) |
+> | `LortnocRegistrar` (v1, superseded) | `0x794ec3b1fb8ad0d23f3f654c20993ba4ff762c19` — roles revoked |
+> | `lortnoctahc.eth` resolver | `0x615309c3B7B2CfeB92D2b8e28f93DD566d556255` |
 > | owner / deployer | `0x61eE2fBcf2841d9094e2D42406Dd4f83a7981Bb8` |
 >
 > First handle: **`lortnoc.lortnoctahc.eth`**, resolver `0x764FeD7390354FBf2Ec27a7471ef20f9c1a9CF83`
 > (factory-verified). Both names expire 2027-07-25. The whole setup cost 0.0029 Sepolia ETH.
+>
+> **⚠️ RESOLUTION BUG — FOUND AND FIXED 2026-07-27, after the ENS team reported our names not resolving on the
+> Sepolia explorer.** Their guess was "a resolver exists but was never linked." Half right, and not the half that
+> mattered. Measured, not assumed:
+> - **The PARENT had no resolver.** `getSubregistry("lortnoctahc")` correctly returned LortnocRegistry, but
+>   `getResolver("lortnoctahc")` was `0x0`, so `UniversalResolverV2.resolve()` reverted `ResolverNotFound(bytes)`
+>   for `lortnoctahc.eth` itself. Fixed by deploying a `PermissionedResolver` proxy for the parent (same canonical
+>   factory the handles use) and linking it with `setResolver`. Handle resolution never depended on this — v2 picks
+>   the resolver covering the longest suffix — so the children were fine throughout.
+> - **Every handle had `addr` unset.** `_claim` wrote only `eth.lortnoc.pubkey`, and `addr` is the record explorers
+>   and wallets read FIRST. All 10 handles resolved a text record perfectly while reporting `addr = 0x0`, which
+>   tooling renders as "does not resolve". `_claim` now writes `setAddr(node, claimant)` in the same transaction —
+>   it HAS to be there, because step 4 revokes the only authority the registrar ever holds, after which the owner
+>   alone can write. Pre-existing handles are repaired by the owner, in-app, on sign-in
+>   (`LiveBackend.publishEthAddress`), since we cannot sign for them.
+>
+> Repair scripts: `scripts/ens/fix-resolution.mjs` (parent resolver + records + backfill) and
+> `scripts/ens/upgrade-registrar.mjs` (redeploy + move `ROLE_REGISTRAR`, grant-before-revoke — EAC refuses to
+> remove a role's last assignee). Both idempotent. **Redeploying the registrar does NOT carry over `isRelayer`:
+> `setRelayer` must be re-run or every relayed claim reverts `NotRelayer`.**
 >
 > - **`lortnoctahc.eth`** — our name in the v2 `ETHRegistry`; handles are `<label>.lortnoctahc.eth`.
 > - **`lortnoc.eth`** — registered to the same owner, deliberately unused: it makes the `eth.lortnoc.*` record
@@ -428,7 +450,7 @@ now reversed).
 >   → LortnocRegistry → handle → that handle's own resolver.
 > - **`LortnocRegistrar`** (`contracts/src/LortnocRegistrar.sol`) — holds `ROLE_REGISTRAR` and nothing else, so
 >   **any wallet can claim permissionlessly**. `claim()` is ONE transaction that: deploys the caller's own
->   `PermissionedResolver` proxy via the factory → writes `eth.lortnoc.pubkey` → grants the caller every root role
+>   `PermissionedResolver` proxy via the factory → writes `eth.lortnoc.pubkey` **and `addr`** → grants the caller every root role
 >   on it → **revokes its own** → registers the subname pointing at it. The registrar is admin for exactly one
 >   transaction and holds no authority over the handle afterwards. `claimFor` keeps the relayed-claim path
 >   (payer ≠ claimer, §8 Layer 1); an optional `gate` swaps the free tier for nullifier-gated issuance (§7).

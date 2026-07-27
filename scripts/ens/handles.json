@@ -1,0 +1,62 @@
+[
+ {
+  "label": "lortnoc",
+  "owner": "0x61ee2fbcf2841d9094e2d42406dd4f83a7981bb8",
+  "resolver": "0x764fed7390354fbf2ec27a7471ef20f9c1a9cf83",
+  "node": "0xdadd39cb1dfa3ab21966fb0806aec338eac0afa4739e33e734b6c4f5890717dc"
+ },
+ {
+  "label": "paidmember",
+  "owner": "0x7315af7728e9de93772864d3cb263910789776aa",
+  "resolver": "0x769f5f3d6e7815c5e96c5e1c215045ea0324ebbc",
+  "node": "0x607b54ad3ebc6748899decdbdbf649daa8706a348d8f5fad0b2b0e41d69f2fbe"
+ },
+ {
+  "label": "founder",
+  "owner": "0xeccc891ccf7c009c2e07b31f659f844ccf6e2e36",
+  "resolver": "0xe1fc4728bf08dc18655d0bc88a6c27d0ca47cf09",
+  "node": "0xe4f5af577d3f2d788df1045fb1bca530f90b2eb6c2b48fce4df61ac7e2b4ad6e"
+ },
+ {
+  "label": "sovereign",
+  "owner": "0x2e7720b37935fceedc27482a4c00a0e46f692c6a",
+  "resolver": "0x74c21215074308303b8db2a33f0377b7f23a58c7",
+  "node": "0xf82a023784d00090138dd9a3844bf9b41d40875c02b540c7927316fc9d659687"
+ },
+ {
+  "label": "kilian",
+  "owner": "0x72ded404efd7943d2a9edfac548ee1f886f1b241",
+  "resolver": "0x05047b8a394f04ee509344d1c9ae762ad509e107",
+  "node": "0xf2eaa4ff37c6f2e305d4179fa63a8b97cbea8d613851ed6d4cda317eb428ca9b"
+ },
+ {
+  "label": "kirsten",
+  "owner": "0x447cea1c2341d287c60cad1a52f1e990ee91d998",
+  "resolver": "0xc70d7292a44b166ebe76af439b08dae1d084f473",
+  "node": "0xe85cd645dd21a4f6dc9c45d142762c7d1dd6ded229717f166abba1de3f42552a"
+ },
+ {
+  "label": "brianpistar",
+  "owner": "0xb4a05d4f1d2917c89535e87cb96904fd34bf2bc0",
+  "resolver": "0x3e45b43813de170d4e486ed4cbaed5586373347b",
+  "node": "0xa677bf0be231e9597f4ad7575ba17cadd2fdbebf645b67bc4dda4eac8a37a350"
+ },
+ {
+  "label": "brian",
+  "owner": "0x9a6bb722bfe0a9e56f24a27b786dca52653b8081",
+  "resolver": "0x8b6cd2f082a53efba603dfe02d20cdab7f327768",
+  "node": "0xada528e7c42eaa40c17ee3a5516d69a162f9ae88fb7e35d49daacbfed2187de0"
+ },
+ {
+  "label": "grandson",
+  "owner": "0x40dbeb37d8f3457afc1e4a2e53faad7d16463f9b",
+  "resolver": "0x172f1c51eb0e58bc814d56b8191875421b2d116f",
+  "node": "0xb6782572da258ce6dac9e1fcd0523f28d44e560bd33a568555bc5ccb0e79e2de"
+ },
+ {
+  "label": "kevin",
+  "owner": "0x3ecbefb7870ce01785e84b3a222d0d2235f57511",
+  "resolver": "0x3f46fe69c75ef316020df86ce61bf3575e534d87",
+  "node": "0x9255367201f035a2c3943863d4c560612a1b038325ee6fd522d8a096c09589f3"
+ }
+]
