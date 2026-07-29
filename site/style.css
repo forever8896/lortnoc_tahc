@@ -636,7 +636,9 @@ textarea{ resize:vertical; min-height:84px; }
 .close__form{ width:100%; max-width:520px; margin:clamp(36px,4vw,56px) auto 0; align-items:stretch; }
 .close__form .btn{ align-self:center; }
 .close__form .signup__msg{ text-align:center; }
-.close__form input[type="email"]{
+/* Both visible fields, not just the email — they sit stacked and centred under the wordmark,
+   so a left-aligned second field reads as misaligned. :not(.hp) keeps the honeypot out of it. */
+.close__form input:not(.hp){
   width:100%; text-align:center; font-size:16px; padding:17px 20px;
 }
 .close .actions{ margin-top:clamp(28px,3vw,40px); }
