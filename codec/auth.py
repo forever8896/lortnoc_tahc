@@ -117,9 +117,39 @@ def _norm_handle(handle) -> str:
     return h if h.startswith("@") else "@" + h
 
 
+def reserve(handle, membership) -> dict:
+    """Atomically check-and-claim one free send. Returns {allow, member, remaining}
+    (remaining=-1 for members).
+
+    Reserve/release rather than check-then-spend, because the caller does a multi-second model
+    call between deciding and charging. When those were separate steps, N concurrent requests
+    from one handle at remaining=1 all passed the check before any of them charged, and every
+    one got cover text — the free limit was soft against a trivially parallel client. Claiming
+    the slot inside the same lock as the check closes that; `release` refunds it if the encode
+    fails, so a codec error still costs the user nothing.
+    """
+    if verify_membership(membership):
+        return {"allow": True, "member": True, "remaining": -1}
+    key = _norm_handle(handle)
+    with _lock:
+        used = _counts.get(key, 0)
+        if used >= FREE_LIMIT:
+            return {"allow": False, "member": False, "remaining": 0}
+        _counts[key] = used + 1
+        return {"allow": True, "member": False, "remaining": FREE_LIMIT - (used + 1)}
+
+
+def release(handle) -> int:
+    """Refund a reservation whose encode failed. Never goes below zero."""
+    key = _norm_handle(handle)
+    with _lock:
+        _counts[key] = max(0, _counts.get(key, 0) - 1)
+        return _counts[key]
+
+
 def authorize(handle, membership) -> dict:
-    """Decide whether this /encode may proceed. Does NOT spend — call spend() after a
-    successful encode. Returns {allow, member, remaining} (remaining=-1 for members)."""
+    """Read-only view of the gate, for callers that must not consume quota (tests, /health).
+    The request path uses reserve()."""
     if verify_membership(membership):
         return {"allow": True, "member": True, "remaining": -1}
     key = _norm_handle(handle)

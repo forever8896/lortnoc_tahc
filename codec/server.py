@@ -21,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import auth
 import codec
+import coder  # for NotCoverText — the single condition that earns a 422
 
 HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "8080"))
@@ -115,21 +116,31 @@ class Handler(BaseHTTPRequestHandler):
 
                 # Capability gate (§7/§9). Handshake frames (fast) carry only pubkeys — never
                 # metered, so key exchange is never blocked. Reading (/decode) is always free.
+                #
+                # RESERVE now, COMMIT after a successful encode. authorize() used to be a pure
+                # check, with the ~seconds-long model call sitting between it and spend() — so
+                # on a threaded server, N concurrent requests from one handle at remaining=1 all
+                # passed before any of them spent, and all N got cover text.
                 verdict = {"member": False, "remaining": -1}
+                reserved = False
                 if auth.ENFORCE and not fast:
-                    verdict = auth.authorize(req.get("handle"), req.get("membership"))
+                    verdict = auth.reserve(req.get("handle"), req.get("membership"))
                     if not verdict["allow"]:
                         # x402-shaped 402: `accepts` lets an x402 client pay for membership
                         # inline; `upgrade` is the simple funnel for a non-x402 client.
                         body = auth.x402_402_body(self._membership_url(), "lortnoc membership", "free limit reached")
                         body.update({"upgrade": auth.UPGRADE_URL, "remaining": 0})
                         return self._json(402, body)
+                    reserved = not verdict["member"]
 
-                cover, select = codec.encode(ct, fast=fast)
+                try:
+                    cover, select = codec.encode(ct, fast=fast)
+                except Exception:
+                    # A failed encode must not cost the user a free send.
+                    if reserved:
+                        auth.release(req.get("handle"))
+                    raise
 
-                # Spend a free send only after a successful encode (members are unlimited).
-                if auth.ENFORCE and not fast and not verdict["member"]:
-                    verdict["remaining"] = max(0, auth.FREE_LIMIT - auth.spend(req.get("handle")))
                 return self._json(
                     200,
                     {
@@ -140,21 +151,29 @@ class Handler(BaseHTTPRequestHandler):
                         # judged this cover, "fallback" if 0G was unreachable, "single" if
                         # selection was skipped (handshake frames).
                         "select": select,
+                        # Which backend actually produced this cover (§6.2). The dispatcher
+                        # falls back silently gpt2 -> markov -> wordmap, and the client used to
+                        # announce "GPT-2 · hiding it as chatter" regardless — claiming a model
+                        # that never ran. Same honesty rule as `select`: say what happened.
+                        "model": codec.MODEL,
                     },
                 )
             if path == "/decode":
                 ct = codec.decode(req["coverText"])
                 return self._json(200, {"ciphertext": base64.b64encode(ct).decode()})
             return self._json(404, {"error": "not found"})
+        except coder.NotCoverText:
+            # THE ONLY path to 422. The extension caches a 422 permanently as "definitely not
+            # ours" and never retries that bubble, so this must mean exactly "ordinary
+            # chatter" — never "the request was malformed" and never "something broke in
+            # here", both of which would silently swallow a real message forever.
+            return self._json(422, {"error": "not codec cover text"})
         except (KeyError, ValueError) as e:
-            # KeyError: unknown cover word; ValueError: coder rejected the tokens.
-            # Both mean "not one of ours" -> fail closed. (base64/json errors on /encode
-            # also raise ValueError, but /encode never hits this in normal use.)
-            if path == "/decode":
-                return self._json(422, {"error": "not codec cover text"})
+            # Malformed request (missing field, bad base64, oversized payload). A client bug,
+            # not a verdict about the cover text — so 400, which the extension retries.
             return self._json(400, {"error": str(e)})
-        except Exception as e:  # noqa: BLE001 - surface any other error as 400
-            return self._json(400, {"error": str(e)})
+        except Exception as e:  # noqa: BLE001 - anything unexpected is ours, not the caller's
+            return self._json(500, {"error": str(e)})
 
     def log_message(self, *_):  # quiet; no request logging (gateway hygiene)
         pass

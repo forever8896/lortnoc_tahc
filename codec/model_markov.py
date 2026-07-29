@@ -17,6 +17,8 @@ import os
 import pickle
 import re
 
+import coder
+
 _HERE = os.path.dirname(__file__)
 _CACHE = os.path.join(_HERE, ".cache")
 # public-domain corpora (Project Gutenberg); fetched once, cached in .cache/
@@ -136,7 +138,10 @@ class MarkovModel:
         return " ".join(self.id2word[t] for t in tokens)
 
     def from_words(self, cover: str) -> list[int]:
-        return [self.word2id[w] for w in cover.split()]  # KeyError if not our word
+        try:
+            return [self.word2id[w] for w in cover.split()]
+        except KeyError as e:
+            raise coder.NotCoverText(f"unknown cover word: {e.args[0]!r}") from None
 
     def digest(self) -> str:
         import hashlib
