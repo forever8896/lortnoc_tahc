@@ -50,19 +50,57 @@ Strict priority, so if time runs out you stop at a natural cut line and still ha
       registers the subname. Per-record delegation (`inbox`→gateway; `pubkey` write reverts; revoke in one tx) +
       `verifyContract` handle proof, asserted by `scripts/ens/demo.mjs` and surfaced in the app as a permission
       table read live off the resolver. Runbook: `app/docs/LIVE-SETUP.md`.
-      *Open:* nullifier-gating (`gate` hook present, unset) and the discoverability/knock gateway.
+      **Paid-tier gating is live — via the relayer, not the on-chain hook.** `POST /claim` checks the
+      `ticketMessage` binding, simulates, burns the nullifier on 0G, then calls `claimFor` on Sepolia.
+      The registrar's `gate` hook is the *alternative* path and is deliberately unset (free tier).
 
-## P2 — Differentiators & reliability *(only if P1 is moving)*
+## P2 — Differentiators & reliability
 
-- [ ] **Wallet-signature identity** — swap the handshake's random keypair for a wallet-signature-derived one
-      (the handshake/ECDH piping is already built; this is the small next brick).
-- [ ] **Arithmetic-coding codec** — built + proven in a worktree (`CODEC_CODER=arith`, default off). More *natural*
-      cover text (not shorter — measured). Merge/deploy decision pending.
-- [ ] **Native-mode 1:1 DM** — reliable full-stack fallback demo (poll, single-writer head).
-- [ ] **Knock** (challenge-gated contact) — the creative headline.
-- [ ] **Discoverability gateway** — conditional resolution / findability ladder.
-- [ ] **Storage benchmark** artifact (Walrus+Seal vs 0G Storage).
-- [ ] **Unified inbox + conversion CTA.**
+- [x] **Knock** (challenge-gated contact) — **DONE, the creative headline.** `app/src/lib/live/knock.ts`
+      (Argon2id `deriveKnockKey` → `sealKnock`/`openKnock`, no answer ever published) + relayer transport
+      (`POST /knock`, `GET /knocks/:handle`, 429 rate limiting, TTL, oldest-out eviction so a flood cannot
+      bury real knocks) + UI in `app/src/ui/IdentityPanel.tsx`. The rate limiting is the security property,
+      not a nicety: it is what makes guessing online-only (§6.8).
+- [x] **Native-mode 1:1 DM** — **DONE.** `app/src/ui/Messenger.tsx` + `Thread.tsx` over
+      `sendMessage`/`readMessages` (`live/sui.ts`); polled, single-writer head, as scoped.
+- [~] **Discoverability** — records **done**, gateway **not**. `eth.lortnoc.discoverable` and
+      `eth.lortnoc.findhash` are in `RECORD_SPECS` and user-writable through the permission table. What does
+      not exist is the conditional-resolution gateway — nothing read-gates records per caller, so the
+      five-rung ladder is currently *declared* by the record rather than *enforced* at resolve time.
+      Say it that way in the pitch; the enforcement is the creative claim and it is the part still open.
+- [ ] **Wallet-signature identity in the extension** — `content/session.ts` still calls `genKeyPair()` (random
+      per conversation). The app already derives `K_msg` from `MS`; the app→extension bridge
+      (`content/appbridge.ts`) currently carries only the membership token. Small brick, real payoff: it is
+      what upgrades a throwaway handshake key to a portable identity.
+- [ ] **Arithmetic-coding codec** — built + proven in a worktree (`CODEC_CODER=arith`), **not merged into
+      `codec/`**. More *natural* cover text (not shorter — measured). Merge/deploy decision pending.
+- [ ] **Storage benchmark** artifact (Walrus+Seal vs 0G Storage) — no `bench/`. The cost half is already
+      done and stronger than a testnet bench (CLAUDE.md §6.4); only latency/durability columns are missing.
+- [ ] **Unified inbox + conversion CTA** — the three-lane inbox (§6.7) is not built.
+
+## P3 — Test coverage & repo hygiene ✅ *(added 2026-07-29)*
+
+`npm test` from the root — six tiers, 277 tests, gated in CI by `.github/workflows/test.yml`.
+
+- [x] **unit (88)** — crypto, framing, session state machine, metering, ticket binding. Imports the real
+      product source; no re-implementation.
+- [x] **invariants (16)** — CLAUDE.md §4 as executable checks (no MTProto/bot token, no World ID, plaintext
+      never reaches the codec, key material never in `storage.local`, the coder never samples).
+- [x] **codec (77)** — coder reversibility, the x402 paywall (previously **zero** tests), HTTP status contract.
+- [x] **contracts (55)** — `LortnocMembership` + `LortnocRegistrar` under Foundry. Asserts locally what only a
+      live deploy script had checked: after `claim()` the registrar holds no roles and cannot write.
+- [x] **browser (29)** — the DOM layer in real Chromium against a Telegram Web K fixture.
+- [x] **integration (12)** — the full extension data path against a live codec.
+
+**Findings fixed in the same pass** (full write-up: `docs/AUDIT.md`) — a one-sided reconnect that hung
+forever, a free-send race that let 40 concurrent sends through a limit of 3, `422` overloading that could
+silently swallow a real message, the UI claiming GPT-2 whichever backend ran, and the §5.1 key-derivation
+table hand-inlined across **seven** sites (now `shared/keys.mjs`, verified byte-identical).
+
+- [ ] **The relayer has no tests** — 479 lines, a funded key, five cross-chain steps with hand-rolled
+      idempotency (in-flight lock, resume-if-already-spent, skip-if-already-taken, confirm-by-state because
+      0G propagates receipts slowly). The resume branches only trigger by crashing mid-claim, which is
+      exactly what cannot be rehearsed live. **Largest remaining gap in the repo.**
 
 ## ❌ OUT — do not build (scope guards)
 
@@ -186,5 +224,30 @@ on 0G, the message is bound), but it can censor or stall; anyone can run one. Te
 
 ---
 
-**Where we stand:** P0 hero demo live; ENS v2, Sui/Walrus/Seal and 0G membership all **on-chain and asserted**.
-Remaining: the **<3-min demo video**, the browser click-through of `?live`, and P2 polish.
+**Where we stand:** P0 hero demo live. ENS v2, Sui/Walrus/Seal and 0G membership all on-chain and asserted.
+The paid loop is closed across three chains. Knock and native-mode DM are built. The suite (P3) now gates
+all of it in CI.
+
+**Remaining, in the order it matters:**
+
+1. **The <3-min demo video** — a hard 0G prize requirement, and nothing else unblocks it.
+2. **Relayer tests** — the one component holding a funded key with zero coverage.
+3. **Discoverability enforcement** — the records exist; the conditional-resolution gateway that makes the
+   ladder real does not. This is the ENS "Most Creative Use" claim, so the gap is worth either closing or
+   stating plainly on the booth.
+4. **§12 Q1 — continuity eligibility.** Still unanswered, worth ~$8.5k, and it is a question for the
+   organisers rather than a build task. Ask before it stops mattering.
+
+---
+
+## How to keep this file honest
+
+This checklist and CLAUDE.md §2 both drifted badly enough to be actively misleading — CLAUDE.md said
+"Pre-code" beside three live deployments, and this file listed Knock and native DM as unbuilt after they
+shipped. Reviewing against a stale doc produces confidently wrong conclusions, which is how a completed
+feature gets re-planned.
+
+**Rule: a status claim cites the file that backs it.** "Knock — done" is unfalsifiable; "Knock — done,
+`app/src/lib/live/knock.ts` + relayer `POST /knock` + `IdentityPanel.tsx`" can be checked in ten seconds and
+goes red the moment someone deletes it. Prefer `[~]` with an explicit split over a binary tick when only
+half a thing exists — the discoverability entry above is the model.

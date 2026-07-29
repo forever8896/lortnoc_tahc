@@ -8,7 +8,8 @@ import type {
   ClaimStage, Conversation, EnsStatus, Health, Identity, Message, OpenedKnock, RecordPerm, SendStage,
 } from './types'
 import {
-  deriveConvKey, deriveMasterSecret, deriveMessagingKey, deriveOwnerKey, fromHex, toHex, type KeyPair,
+  deriveConvKey, deriveMasterSecret, deriveMessagingKey, deriveOwnerKey, deriveSuiKey,
+  fromHex, toHex, type KeyPair,
 } from './crypto'
 import { privateKeyToAccount } from 'viem/accounts'
 import type { PrivateKeyAccount } from 'viem'
@@ -200,10 +201,9 @@ export class LiveBackend implements Backend {
     if (this.suiKp) return this.suiKp
     if (!this.ms) throw new Error('no identity')
     const { Ed25519Keypair } = await import('@mysten/sui/keypairs/ed25519')
-    const { hkdf } = await import('@noble/hashes/hkdf.js')
-    const { sha256 } = await import('@noble/hashes/sha2.js')
-    const sk = hkdf(sha256, this.ms, new TextEncoder().encode('lortnoc/sui/ed25519/v1'), new Uint8Array(), 32)
-    this.suiKp = Ed25519Keypair.fromSecretKey(sk)
+    // deriveSuiKey keeps the empty HKDF info this originally used — every funded testnet Sui
+    // address in play was derived that way, and changing it would strand the WAL balance.
+    this.suiKp = Ed25519Keypair.fromSecretKey(deriveSuiKey(this.ms))
     return this.suiKp
   }
 

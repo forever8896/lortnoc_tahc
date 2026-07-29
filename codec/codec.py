@@ -27,6 +27,10 @@ _lock = threading.Lock()
 
 BACKEND = os.environ.get("CODEC_BACKEND", "auto").lower()
 K = int(os.environ.get("CODEC_K", "3"))
+# Falling back to the wordmap placeholder is allowed only when asked for explicitly, or when
+# it IS what was asked for. Tests and local dev set CODEC_BACKEND=wordmap; production does
+# not, and there a silent fallback should be a startup failure rather than a quiet downgrade.
+ALLOW_WORDMAP = BACKEND == "wordmap" or os.environ.get("CODEC_ALLOW_WORDMAP", "") == "1"
 
 _kind: str
 _model = None
@@ -74,9 +78,22 @@ def _load() -> None:
             if BACKEND == "markov":
                 raise
             print(f"[codec] markov unavailable ({e}); falling back to wordmap")
-    _kind = "wordmap"
-    MODEL, DIGEST = wordmap.MODEL, wordmap.DIGEST
-    print(f"[codec] backend=wordmap ({MODEL} {DIGEST})")
+    # wordmap is a byte->word table, not steganography: the cover text is a deterministic
+    # public encoding anyone can reverse without a key. Confidentiality still rests entirely
+    # on AES-SIV, so nothing leaks — but the product claim ("hidden in ordinary chatter") does
+    # not hold, and a silent degradation is exactly the kind of thing that goes unnoticed
+    # until it is on stage. In production, refuse rather than pretend.
+    if ALLOW_WORDMAP:
+        _kind = "wordmap"
+        MODEL, DIGEST = wordmap.MODEL, wordmap.DIGEST
+        print(f"[codec] backend=wordmap ({MODEL} {DIGEST})")
+        print("[codec] WARNING: wordmap is a placeholder, NOT steganography — cover text is "
+              "publicly reversible. Set CODEC_BACKEND=gpt2 or markov for a real backend.")
+        return
+    raise RuntimeError(
+        "no real codec backend loaded (gpt2 and markov both unavailable) and wordmap is "
+        "disabled. Set CODEC_ALLOW_WORDMAP=1 to run on the placeholder anyway."
+    )
 
 
 _load()

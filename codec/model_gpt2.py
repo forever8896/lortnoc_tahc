@@ -19,6 +19,8 @@ from __future__ import annotations
 import os
 import re
 
+import coder
+
 # Priming context sets the TONE of the cover text (it's not emitted — identical on both
 # ends). A warm, chatty opener makes GPT-2 continue as friendly small-talk instead of
 # drifting into confessional rambling. Tune live via the CODEC_PRIME env (no rebuild).
@@ -145,7 +147,12 @@ class GPT2Model:
         return " ".join(self.tok2word[t] for t in tokens)
 
     def from_words(self, cover: str) -> list[int]:
-        return [self.word2tok[w] for w in cover.split()]  # KeyError if not our word
+        try:
+            return [self.word2tok[w] for w in cover.split()]
+        except KeyError as e:
+            # A word we never emit ⇒ this is ordinary chatter, not a truncated/corrupted
+            # message of ours. NotCoverText is what server.py turns into a 422 (see coder.py).
+            raise coder.NotCoverText(f"unknown cover word: {e.args[0]!r}") from None
 
     def digest(self) -> str:
         import hashlib

@@ -109,11 +109,6 @@ function noteTagFailure(): void {
   }
 }
 
-// Every handshake frame is acted on AT MOST ONCE (by type+pubkey). Without this, the
-// inbound.reset() re-scan after a session establishes re-decodes the OFFER/ACK bubbles and
-// re-fires the accept banner / onAck → an infinite handshake loop that resends frames.
-const handledFrames = new Set<string>()
-
 /** Establish from a received offer: derive K_conv, send our ack, re-scan. */
 async function establishFromOffer(pubkey: Uint8Array): Promise<void> {
   const ack = await session.acceptOffer(pubkey) // derives K_conv, status → established
@@ -138,14 +133,13 @@ async function handleFrame(type: number, pubkey: Uint8Array): Promise<void> {
   if (session.status() === 'established') {
     if (type === FRAME.OFFER && !session.isPeer(pubkey)) {
       console.info('[lortnoc] peer re-offered with a new key — re-establishing')
-      handledFrames.clear()
+      session.clearHandledFrames()
       await establishFromOffer(pubkey)
     }
     return
   }
-  const fkey = `${type}:${toHex(pubkey)}`
-  if (handledFrames.has(fkey)) return // already processed (e.g. re-scanned after reset)
-  handledFrames.add(fkey)
+  // Replay guard lives in session.ts so that reset() clears it — see the comment there.
+  if (session.alreadyHandled(type, pubkey)) return // e.g. re-scanned after inbound.reset()
   console.info('[lortnoc] handshake frame received:', type === FRAME.OFFER ? 'offer' : 'ack')
   if (type === FRAME.OFFER) {
     if (session.status() === 'offered') {
@@ -273,7 +267,9 @@ async function main(): Promise<void> {
     try {
       progress.set(0, 'AES-SIV · never leaves this page')
       const ct = encrypt(key, real)
-      progress.set(1, 'GPT-2 · hiding it as chatter')
+      // Neutral until the codec tells us which backend actually ran — see below. Naming a
+      // model here would be a guess, and it was wrong whenever the dispatcher had fallen back.
+      progress.set(1, 'Hiding it as ordinary chatter')
       // Best-of-N runs at the tail of /encode. This label used to CLAIM "0G · judging 2 covers"
       // on a blind 4.5s timer, which meant any send that stalled past 4.5s sat there accusing
       // 0G of a failure that belonged to something else — and, worse, still claimed 0G had
@@ -298,7 +294,18 @@ async function main(): Promise<void> {
           }
           return null
         }
-        const { coverText, remaining: left, member, select } = res.data
+        const { coverText, remaining: left, member, select, model } = res.data
+        // Name the backend only once the codec has told us which one ran. `wordmap` is the
+        // dependency-free placeholder, not steganography — say so rather than let a silent
+        // degradation look like a normal send.
+        if (model) {
+          if (model.startsWith('gpt2')) progress.set(1, 'GPT-2 · hid it as chatter')
+          else if (model.startsWith('markov')) progress.set(1, 'Markov · hid it as chatter')
+          else {
+            progress.set(1, 'Placeholder codec — cover text is NOT steganographic')
+            console.warn('[lortnoc] codec is running the wordmap placeholder:', model)
+          }
+        }
         // Say what actually happened, now that we know. A silent 0G fallback used to be
         // indistinguishable from a successful 0G judgement — which matters, because "proof of
         // 0G inference" is the one thing we are meant to be able to demonstrate.

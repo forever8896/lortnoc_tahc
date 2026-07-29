@@ -18,8 +18,7 @@ import { privateKeyToAccount } from 'viem/accounts'
 import { Identity } from '@semaphore-protocol/identity'
 import { Group } from '@semaphore-protocol/group'
 import { generateProof } from '@semaphore-protocol/proof'
-import { hkdf } from '@noble/hashes/hkdf.js'
-import { sha256 } from '@noble/hashes/sha2.js'
+import { deriveMasterSecret, deriveSemaphoreSecret } from '../../shared/keys.mjs'
 import { ROOT, loadEnv, log, ticketMessage, claimScope } from './lib/ens.mjs'
 
 const argv = process.argv.slice(2)
@@ -76,12 +75,10 @@ const semaphoreAbi = parseAbi([
 /** id_sem — the Semaphore identity secret (§5.1). Derived from MS; never leaves the device. */
 function identityFromWallet() {
   // Stand-in for MS: the app derives MS from a wallet signature. Here we derive deterministically
-  // from the key itself so the script is reproducible without a browser.
-  const ms = hkdf(sha256, Buffer.from(process.env.PRIVATE_KEY.replace(/^0x/, ''), 'hex'),
-                  new TextEncoder().encode('lortnoc/ms/v1'), new TextEncoder().encode('master'), 32)
-  const sem = hkdf(sha256, ms, new TextEncoder().encode(`lortnoc/semaphore/v1${INDEX === '0' ? '' : `/${INDEX}`}`),
-                   new TextEncoder().encode('sem'), 32)
-  return new Identity(Buffer.from(sem).toString('hex'))
+  // from the key itself so the script is reproducible without a browser. Both paths go through
+  // shared/keys.mjs, so a CLI-generated proof is valid against an app-inserted commitment.
+  const ms = deriveMasterSecret(Buffer.from(process.env.PRIVATE_KEY.replace(/^0x/, ''), 'hex'))
+  return new Identity(deriveSemaphoreSecret(ms, Number(INDEX)))
 }
 
 const gasPrice = await publicClient.getGasPrice()

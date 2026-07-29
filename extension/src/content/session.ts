@@ -16,6 +16,38 @@ type Session = {
 
 const s: Session = { keyPair: null, peerPub: null, convKey: null, status: 'none' }
 
+/**
+ * Handshake replay guard: every OFFER/ACK frame is acted on AT MOST ONCE, keyed by
+ * `type:pubkey`. Without it, the `inbound.reset()` re-scan that follows a successful
+ * handshake re-decodes the OFFER/ACK bubbles still on screen and re-fires the accept banner
+ * → an infinite handshake loop that resends frames.
+ *
+ * It lives HERE, next to the state it guards, because it is part of the session's lifetime.
+ * It used to be module state in content/index.ts, where nothing cleared it on reset — so a
+ * one-sided Disconnect→Connect hung forever: the resetting side sent a fresh OFFER, the peer
+ * (who had not reset) re-established and ACKed with its UNCHANGED pubkey, and that ACK was
+ * dropped as "already handled" from the first handshake. Status stayed 'offered', no error
+ * surfaced, and the 25-second timeout blamed the other side. That is precisely the recovery
+ * the key-mismatch toast tells users to perform.
+ */
+const handledFrames = new Set<string>()
+
+const frameKey = (type: number, pub: Uint8Array): string =>
+  `${type}:${Array.from(pub, (b) => b.toString(16).padStart(2, '0')).join('')}`
+
+/** True if this exact frame was already acted on. Records it either way. */
+export function alreadyHandled(type: number, pub: Uint8Array): boolean {
+  const k = frameKey(type, pub)
+  if (handledFrames.has(k)) return true
+  handledFrames.add(k)
+  return false
+}
+
+/** Forget every seen frame — used when the peer restarts and we re-establish from scratch. */
+export function clearHandledFrames(): void {
+  handledFrames.clear()
+}
+
 const b64 = (u: Uint8Array): string => btoa(String.fromCharCode(...u))
 const unb64 = (x: string): Uint8Array => Uint8Array.from(atob(x), (c) => c.charCodeAt(0))
 
@@ -109,5 +141,8 @@ export async function reset(): Promise<void> {
   s.peerPub = null
   s.convKey = null
   s.status = 'none'
+  // MUST clear the replay guard too. Disconnect means "forget this conversation entirely";
+  // leaving stale frame keys behind is what made a one-sided reconnect hang forever.
+  handledFrames.clear()
   await persist()
 }

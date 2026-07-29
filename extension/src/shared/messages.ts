@@ -11,7 +11,17 @@ export type HealthData = { model: string; digest: string; ready: boolean }
 // '0g-testnet' | '0g-router' = it did, 'fallback' = 0G was unreachable and the first cover
 // was used, 'single' = selection skipped (handshake frames). 0G selection fails silently by
 // design, so without this the UI can only guess — and it used to guess on a timer.
-export type EncodeData = { coverText: string; remaining?: number; member?: boolean; select?: string }
+// `model` is the codec's honest report of WHICH backend produced this cover ('gpt2/k3',
+// 'markov-o3/k3', 'wordmap-256/v1'). The dispatcher falls back silently gpt2 -> markov ->
+// wordmap, and the progress stepper used to announce "GPT-2" whichever one ran. Same rule as
+// `select`: report what happened, do not assert what was hoped for.
+export type EncodeData = {
+  coverText: string
+  remaining?: number
+  member?: boolean
+  select?: string
+  model?: string
+}
 export type DecodeData = { ciphertext: string }
 
 export type CodecResponse<T = unknown> =

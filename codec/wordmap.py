@@ -16,6 +16,8 @@ FILE behind the same `encode`/`decode` signatures — nothing else changes. Unti
 the cover text is word-like rather than grammatical; that's expected.
 """
 
+import coder  # for NotCoverText — the "ordinary chatter" signal server.py maps to 422
+
 # A pool of common lowercase ASCII words; the first 256 unique ones form the byte table.
 _POOL = (
     "the of and to in is that it for on with as was at by an be this from or had "
@@ -68,9 +70,12 @@ def encode(data: bytes) -> str:
 
 
 def decode(text: str) -> bytes:
-    """cover text -> ciphertext bytes. Raises KeyError on any non-codec word."""
+    """cover text -> ciphertext bytes. Raises coder.NotCoverText on any non-codec word."""
     words = text.strip().split()
-    return bytes(_INDEX[w] for w in words)
+    try:
+        return bytes(_INDEX[w] for w in words)
+    except KeyError as e:
+        raise coder.NotCoverText(f"unknown cover word: {e.args[0]!r}") from None
 
 
 # Model identity, so /health can pin what both ends agree on.

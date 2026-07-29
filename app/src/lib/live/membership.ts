@@ -11,6 +11,7 @@ import {
   type Address, type Hex, type WalletClient,
 } from 'viem'
 import zerog from './zerog-deployment.json'
+import { deriveSemaphoreSecret } from '../../../../shared/keys.mjs'
 
 export const zeroGChain = defineChain({
   id: 16661,
@@ -138,14 +139,12 @@ async function confirmJoin(hash: Hex, commitment: bigint, timeoutMs = 5 * 60_000
   )
 }
 
-/** id_sem → Semaphore identity commitment (§5.1). The secret stays on this device forever. */
+/** id_sem → Semaphore identity commitment (§5.1). The secret stays on this device forever.
+ *  Shares its derivation with proof.ts::identityFrom via shared/keys.mjs — the commitment
+ *  inserted on payment and the one the proof is generated against have to be the same value. */
 export async function commitmentFrom(ms: Uint8Array): Promise<bigint> {
   const { Identity } = await import('@semaphore-protocol/identity')
-  const { hkdf } = await import('@noble/hashes/hkdf.js')
-  const { sha256 } = await import('@noble/hashes/sha2.js')
-  const sem = hkdf(sha256, ms, new TextEncoder().encode('lortnoc/semaphore/v1'), new TextEncoder().encode('sem'), 32)
-  const hex = Array.from(sem, (b) => b.toString(16).padStart(2, '0')).join('')
-  return new Identity(hex).commitment
+  return new Identity(deriveSemaphoreSecret(ms)).commitment
 }
 
 export const fmt0G = (wei: bigint, dp = 3): string => `${(Number(wei) / 1e18).toFixed(dp)} 0G`
