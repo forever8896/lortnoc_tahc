@@ -84,11 +84,11 @@ we write every message a few different ways, locally.
 
 @0G sealed compute picks the one that reads most human. and keeps nothing.
 
-the encoder stays on your machine, because hosted inference isn't deterministic
+the encoder stays on your machine.
 
-and determinism is what makes a message decodable.
+hosted inference isn't deterministic, and determinism is what makes a message decodable.
 
-0G chain also settles DM payments, behind a nullifier.
+0G chain also settles DM payments.
 
 **5/**
 thank you @0G 🙏
