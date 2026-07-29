@@ -1,0 +1,6 @@
+# The admin route lists Telegram handles of people interested in a surveillance-evasion tool.
+# robots.txt is not a security control — the route is behind a bearer token (api/admin.js) — but
+# there is no reason to help a crawler find it either.
+User-agent: *
+Disallow: /admin.html
+Disallow: /api/

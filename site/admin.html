@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Signups — Lortnoc Tahc</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  /* Deliberately plain. This is a tool, not a page. */
+  .admin{ max-width:1200px; margin:0 auto; padding:clamp(24px,4vw,56px) clamp(16px,4vw,40px); }
+  .admin h1{ font-size:26px; font-weight:300; margin:0 0 6px; }
+  .admin__sub{ color:var(--muted); font-size:13px; font-family:var(--mono); margin:0 0 28px; }
+  .admin__gate{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .admin__gate input{ max-width:420px; }
+  .tabs{ display:flex; gap:8px; margin:26px 0 16px; flex-wrap:wrap; }
+  .tab{ background:none; border:1px solid var(--rule); color:var(--muted); font-family:var(--mono);
+        font-size:12px; padding:8px 14px; cursor:pointer; }
+  .tab[aria-selected="true"]{ color:var(--signal); border-color:rgba(var(--signal-rgb),0.45); }
+  .counts{ display:flex; gap:22px; flex-wrap:wrap; font-family:var(--mono); font-size:12px; color:var(--muted); margin-bottom:18px; }
+  .counts b{ color:var(--ink); font-weight:400; }
+  table.data{ width:100%; border-collapse:collapse; font-size:13px; }
+  table.data th{ text-align:left; font-family:var(--mono); font-size:11px; letter-spacing:0.08em;
+                 text-transform:uppercase; color:var(--muted); font-weight:400;
+                 padding:10px 12px; border-bottom:1px solid var(--rule); white-space:nowrap; }
+  table.data td{ padding:11px 12px; border-bottom:1px solid var(--rule); vertical-align:top; color:var(--ink); }
+  table.data td.mono{ font-family:var(--mono); font-size:12px; }
+  table.data td.msg{ color:var(--muted); max-width:420px; }
+  select{ background:var(--bg); color:var(--ink); border:1px solid var(--rule); padding:5px 8px;
+          font-family:var(--mono); font-size:11px; }
+  .del{ background:none; border:1px solid var(--rule); color:var(--muted); font-family:var(--mono);
+        font-size:11px; padding:5px 9px; cursor:pointer; }
+  .del:hover{ color:#f0806a; border-color:rgba(240,128,106,0.4); }
+  .bar{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
+  .hidden{ display:none; }
+  .msg{ font-family:var(--mono); font-size:12px; min-height:1.2em; }
+  .msg--err{ color:#f0806a; } .msg--ok{ color:var(--signal); }
+</style>
+</head>
+<body>
+<div class="admin">
+  <h1>Signups</h1>
+  <p class="admin__sub">waitlist &amp; alpha · lortnoctahc.com</p>
+
+  <div id="gate">
+    <div class="admin__gate">
+      <input id="token" type="password" placeholder="Admin token" autocomplete="current-password" spellcheck="false">
+      <button class="btn" id="unlock" type="button">Unlock</button>
+    </div>
+    <p class="msg msg--err" id="gate-msg"></p>
+  </div>
+
+  <div id="panel" class="hidden">
+    <div class="counts" id="counts"></div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="alpha" aria-selected="true">Alpha testers</button>
+      <button class="tab" role="tab" data-tab="waitlist" aria-selected="false">Waitlist</button>
+    </div>
+
+    <div class="bar">
+      <button class="del" id="refresh" type="button">Refresh</button>
+      <a class="del" id="export" href="#" download>Export CSV</a>
+      <span class="msg" id="msg"></span>
+    </div>
+
+    <div id="table"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var KEY = 'lortnoc_admin_token';           // sessionStorage: gone when the tab closes
+  var tab = 'alpha';
+  var data = { alpha: [], waitlist: [], counts: {} };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  };
+  var token = function () { return sessionStorage.getItem(KEY) || ''; };
+
+  function api(method, body) {
+    return fetch('/api/admin', {
+      method: method,
+      headers: {
+        'Authorization': 'Bearer ' + token(),
+        'Content-Type': 'application/json'
+      },
+      body: body ? JSON.stringify(body) : undefined
+    });
+  }
+
+  function say(text, ok) {
+    var el = $('msg');
+    el.textContent = text || '';
+    el.className = 'msg ' + (ok ? 'msg--ok' : 'msg--err');
+    if (text) setTimeout(function () { el.textContent = ''; }, 2600);
+  }
+
+  function load() {
+    return api('GET').then(function (r) {
+      if (r.status === 401) throw new Error('unauthorised');
+      return r.json();
+    }).then(function (d) {
+      data = d;
+      $('gate').classList.add('hidden');
+      $('panel').classList.remove('hidden');
+      render();
+    });
+  }
+
+  function render() {
+    var c = data.counts || {};
+    $('counts').innerHTML =
+      '<span>waitlist <b>' + (c.waitlist || 0) + '</b></span>' +
+      '<span>alpha <b>' + (c.alpha || 0) + '</b></span>' +
+      '<span>new <b>' + (c.new || 0) + '</b></span>' +
+      '<span>invited <b>' + (c.invited || 0) + '</b></span>' +
+      '<span>onboarded <b>' + (c.onboarded || 0) + '</b></span>';
+
+    $('export').href = '/api/admin?export=' + tab;
+    // The CSV route needs the bearer header, which a plain <a> cannot send — fetch it instead.
+    $('export').onclick = function (e) {
+      e.preventDefault();
+      api('GET').then(function () {
+        return fetch('/api/admin?export=' + tab, { headers: { 'Authorization': 'Bearer ' + token() } });
+      }).then(function (r) { return r.text(); }).then(function (text) {
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+        a.download = tab + '.csv';
+        a.click();
+      });
+    };
+
+    var rows = data[tab] || [];
+    var html;
+    if (!rows.length) {
+      html = '<p class="admin__sub">Nothing here yet.</p>';
+    } else if (tab === 'alpha') {
+      html = '<table class="data"><tr><th>Telegram</th><th>Status</th><th>Message</th><th>Agreed</th><th>Signed up</th><th></th></tr>' +
+        rows.map(function (r) {
+          return '<tr>' +
+            '<td class="mono">@' + esc(r.telegram) + '</td>' +
+            '<td><select data-id="' + r.id + '">' +
+              ['new', 'invited', 'onboarded'].map(function (s) {
+                return '<option value="' + s + '"' + (r.status === s ? ' selected' : '') + '>' + s + '</option>';
+              }).join('') + '</select></td>' +
+            '<td class="msg">' + esc(r.message || '') + '</td>' +
+            '<td class="mono">' + esc(String(r.agreed_at || '').slice(0, 10)) + '</td>' +
+            '<td class="mono">' + esc(String(r.created_at || '').slice(0, 10)) + '</td>' +
+            '<td><button class="del" data-del="alpha" data-id="' + r.id + '">Delete</button></td>' +
+          '</tr>';
+        }).join('') + '</table>';
+    } else {
+      html = '<table class="data"><tr><th>Email</th><th>Source</th><th>Signed up</th><th></th></tr>' +
+        rows.map(function (r) {
+          return '<tr>' +
+            '<td class="mono">' + esc(r.email) + '</td>' +
+            '<td class="mono">' + esc(r.source || '') + '</td>' +
+            '<td class="mono">' + esc(String(r.created_at || '').slice(0, 10)) + '</td>' +
+            '<td><button class="del" data-del="waitlist" data-id="' + r.id + '">Delete</button></td>' +
+          '</tr>';
+        }).join('') + '</table>';
+    }
+    $('table').innerHTML = html;
+
+    Array.prototype.forEach.call($('table').querySelectorAll('select'), function (sel) {
+      sel.addEventListener('change', function () {
+        api('PATCH', { table: 'alpha', id: Number(sel.getAttribute('data-id')), status: sel.value })
+          .then(function (r) { say(r.ok ? 'Saved.' : 'Could not save.', r.ok); return load(); });
+      });
+    });
+    Array.prototype.forEach.call($('table').querySelectorAll('[data-del]'), function (btn) {
+      btn.addEventListener('click', function () {
+        // No confirm() — a modal dialog is a poor fit here and the row is one click to re-add.
+        api('DELETE', { table: btn.getAttribute('data-del'), id: Number(btn.getAttribute('data-id')) })
+          .then(function (r) { say(r.ok ? 'Deleted.' : 'Could not delete.', r.ok); return load(); });
+      });
+    });
+  }
+
+  $('unlock').addEventListener('click', function () {
+    sessionStorage.setItem(KEY, $('token').value.trim());
+    $('gate-msg').textContent = '';
+    load().catch(function () {
+      sessionStorage.removeItem(KEY);
+      $('gate-msg').textContent = 'That token was not accepted.';
+    });
+  });
+  $('token').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('unlock').click(); });
+  $('refresh').addEventListener('click', function () { load().then(function () { say('Refreshed.', true); }); });
+  Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (b) {
+    b.addEventListener('click', function () {
+      tab = b.getAttribute('data-tab');
+      document.querySelectorAll('.tab').forEach(function (x) {
+        x.setAttribute('aria-selected', String(x === b));
+      });
+      render();
+    });
+  });
+
+  if (token()) load().catch(function () { sessionStorage.removeItem(KEY); });
+})();
+</script>
+</body>
+</html>

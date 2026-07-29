@@ -1,0 +1,8 @@
+{
+  "name": "lortnoctahc-site",
+  "private": true,
+  "description": "Marketing site + signup functions. Static HTML with Vercel serverless functions under api/.",
+  "dependencies": {
+    "@vercel/postgres": "^0.10.0"
+  }
+}
