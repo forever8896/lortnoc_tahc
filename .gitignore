@@ -52,6 +52,7 @@ extension/.dev-profiles/
 # candidates of unclear provenance, which undercuts exactly the claim the release workflow makes.
 lortnoc-tahc-extension-*/
 lortnoc-tahc-extension-*.zip
+lortnoc-tahc-extension-*.zip.sha256
 
 # Browser binaries for the Playwright test tier (npx playwright install chromium).
 /node_modules/

@@ -1,9 +1,13 @@
 import { defineManifest } from '@crxjs/vite-plugin'
+import pkg from './package.json'
 
 export default defineManifest({
   manifest_version: 3,
   name: 'lortnoc tahc',
-  version: '0.8.7',
+  // ONE version, read from package.json. It used to be hardcoded here as well, and the two are
+  // not interchangeable: Chrome reads THIS one to decide whether an install is an update, so a
+  // bumped package.json with a stale manifest ships fixes that no existing user is offered.
+  version: pkg.version,
   description: 'Type real, send cover text, decode inline — a stego overlay for Telegram Web.',
   icons: {
     16: 'icons/on-16.png',
