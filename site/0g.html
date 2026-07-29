@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Compute — 0G Confidential Compute | Lortnoc Tahc</title>
-<meta name="description" content="How Lortnoc Tahc uses 0G confidential compute as a judge for best-of-N cover text, why the reversible encoder stays local, and what that split taught us.">
+<meta name="description" content="How Lortnoc Tahc uses 0G confidential compute to judge best-of-N cover text, why the reversible block coder has to stay local, and how anonymous membership settles on 0G Chain.">
 <meta name="theme-color" content="#08080A">
 <link rel="preload" href="fonts/jost/jost-300.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
@@ -24,22 +24,22 @@
       <span class="brand__name">0G &middot; Confidential Compute</span>
     </div>
     <h1>Intelligent AI for creating realistic conversation obfuscation.</h1>
-    <p class="lede">Every message written several ways. Sealed compute picks the one that sounds most human.</p>
+    <p class="lede">Every message written several ways. Confidential compute picks the one that sounds most human.</p>
   </div>
 
   <section>
     <h2>Why we built on it</h2>
     <p>Natural Language Encryption turns a private message into small talk. That only protects anyone if the small talk is convincing &mdash; a sentence nobody would actually send is itself a flag, and being flagged is worse than sending in the clear.</p>
     <p>So we write every message several ways and something has to pick the most natural one. <strong>That judge necessarily sees text derived from the user&rsquo;s message.</strong></p>
-    <p>Run it on an ordinary inference endpoint and we&rsquo;d have manufactured the exact record this product exists to prevent. 0G&rsquo;s confidential compute lets the judgement happen somewhere that can&rsquo;t retain what it judged.</p>
+    <p>Run it on an ordinary inference endpoint and we&rsquo;d have manufactured the exact record this product exists to prevent &mdash; a provider log tying a wallet to the sentences it was deciding between. 0G&rsquo;s confidential compute moves that judgement somewhere designed not to retain it, and the request never carries plaintext in the first place.</p>
   </section>
 
   <section>
     <h2>How it works here</h2>
     <ol class="steps">
       <li><b>Encrypt.</b> AES-SIV, client-side. Everything downstream sees ciphertext only.</li>
-      <li><b>Write it several ways.</b> A pinned local GPT-2 encodes that ciphertext into multiple different cover texts.</li>
-      <li><b>Judge in sealed compute.</b> 0G scores which candidate reads most like a person wrote it.</li>
+      <li><b>Write it several ways.</b> A pinned local GPT-2 block-codes that ciphertext into several different cover texts, each of which decodes back to the same bytes.</li>
+      <li><b>Judge in confidential compute.</b> 0G scores which candidate reads most like a person wrote it. If it is unreachable, the first candidate sends anyway &mdash; a slower message beats a blocked one.</li>
       <li><b>Send the winner.</b> That sentence about coffee is all the platform ever keeps.</li>
       <li><b>Decode.</b> The other end reverses it exactly. A valid auth tag means it was ours &mdash; an invalid one means it really was small talk.</li>
     </ol>
@@ -48,7 +48,7 @@
       <figcaption class="flow__cap">Where 0G sits in a single send</figcaption>
       <div class="flow__row">
         <div class="flow__node"><b>Your message</b><span>encrypted AES-SIV on the device first</span></div>
-        <div class="flow__node"><b>Written two ways</b><span>a pinned local GPT-2 turns the ciphertext into two different cover texts</span></div>
+        <div class="flow__node"><b>Written two ways</b><span>a pinned local GPT-2 block-codes the ciphertext into two covers that decode identically</span></div>
         <div class="flow__node flow__node--signal"><b>0G judges</b><span>confidential compute picks the one that reads more like a person</span></div>
         <div class="flow__node"><b>The winner sends</b><span>that sentence is all Telegram ever keeps</span></div>
       </div>
@@ -58,7 +58,7 @@
     <figure class="flow">
       <figcaption class="flow__cap">The other half &mdash; membership on 0G Chain</figcaption>
       <div class="flow__row">
-        <div class="flow__node"><b>Bridge and pay</b><span>ETH &rarr; native 0G in one transaction, ~12s</span></div>
+        <div class="flow__node"><b>Bridge and pay</b><span>ETH &rarr; native 0G via LI.FI &mdash; measured at ~20s, $0.13 gas</span></div>
         <div class="flow__node flow__node--signal"><b>join(commitment)</b><span>your Semaphore commitment enters the paid set. Public: a wallet paid</span></div>
         <div class="flow__node"><b>&hellip; later, prove it</b><span>a zero-knowledge proof that you know <em>some</em> commitment&rsquo;s secret</span></div>
         <div class="flow__node flow__node--signal"><b>spendTicket(nullifier)</b><span>single-use, burned on-chain. Which member you are stays hidden</span></div>
@@ -69,28 +69,28 @@
   </section>
 
   <section>
-    <h2>For the 0G team</h2>
-    <p>We asked whether we could deploy our own model into your TEE, and you told us straight that it isn&rsquo;t supported yet. That answer shaped the architecture, and it shaped it for the better.</p>
+    <h2>Why the codec is local and only the judgement is remote</h2>
+    <p>A steganographic codec has two halves, and only one of them can tolerate hosted inference.</p>
 
-    <h3>It forced a split we should have found on our own</h3>
-    <p>Being told no made us work out which half of a steganographic codec actually needs determinism. The reversible arithmetic coding does &mdash; byte-identical distributions or the message is simply gone. The naturalness judgement doesn&rsquo;t; it&rsquo;s a preference between finished candidates that nobody ever has to reproduce.</p>
-    <p>Once that was clear, sealed inference was obviously the right home for the judge and obviously the wrong home for the coder. <strong>Determinism where reversibility needs it, sealed compute where privacy does.</strong> We wouldn&rsquo;t have drawn that line as cleanly if the easy path had been open.</p>
+    <h3>Reversibility needs determinism; naturalness does not</h3>
+    <p>Our encoder is a <strong>block coder</strong>: at each step the model offers its top 2<sup>k</sup> tokens and the ciphertext&rsquo;s next <em>k</em> bits index into them. Decoding re-runs the same model over the same tokens and recovers those bits. It works for any model &mdash; but only if both ends see byte-identical distributions. Hosted GPU inference is non-deterministic even at temperature zero, so routing the coder through it would not degrade the message, it would destroy it.</p>
+    <p>Choosing between finished candidates has no such constraint. Nobody ever has to reproduce a preference. So the line falls naturally: <strong>determinism where reversibility needs it, confidential compute where privacy does.</strong></p>
 
-    <h3>We&rsquo;re using it as a judge, not a chatbot</h3>
-    <p>Most confidential-inference demos are a private assistant. We&rsquo;re using it as something narrower and stranger: a component that sees derived material, forms an opinion, returns a ranking, and keeps nothing.</p>
-    <p>We&rsquo;d guess that wasn&rsquo;t the headline use case you designed for. It worked anyway, which says more about how general the primitive is than any benchmark would.</p>
+    <h3>A judge, not a chatbot</h3>
+    <p>The usual shape for confidential inference is a private assistant. This is narrower: a component that sees derived material, forms an opinion, returns a single integer, and keeps nothing. It never sees plaintext, and the cover text it does see is public by construction &mdash; it is the sentence about to be posted to Telegram.</p>
 
-    <h3>The broker model is the part people will underrate</h3>
-    <p>Routing inference through a broker that settles per request &mdash; provider signer acknowledged, every request signed &mdash; is what lets a product whose entire pitch is &ldquo;don&rsquo;t trust us&rdquo; use hosted compute at all. We are honest about where we stop: we use the broker, we do not yet capture and verify a TEE attestation per response. The moment we do, a privacy claim becomes a privacy proof, and the fact that the path is already there is the point.</p>
-    <p>0G Chain carries the other half: the Semaphore membership contract, where paying inserts a commitment and claiming burns a single-use nullifier. <code>wallet &rarr; commitment</code> is public; <code>commitment &rarr; handle</code> is not.</p>
+    <h3>Where we stop, stated plainly</h3>
+    <p>Requests are routed through a broker that settles per request, with the provider signer acknowledged and every request signed. We do <strong>not</strong> yet capture and verify a TEE attestation per response. Until we do, this is a privacy <em>architecture</em>, not a privacy <em>proof</em> &mdash; the difference matters and we would rather name it than let the word &ldquo;sealed&rdquo; carry weight it has not earned.</p>
+    <p>Selection also fails soft. If 0G is unreachable the codec sends the first candidate rather than blocking the message, and the client says which happened instead of claiming a judgement that never ran.</p>
   </section>
 
   <section>
     <h2>Specifics</h2>
     <div class="spec-wrap">
       <table class="spec">
-        <tr><th>Sealed inference</th><td>0G confidential compute &mdash; picks the more natural of two candidate covers, in the live send path</td></tr>
-        <tr><th>Local codec</th><td>GPT-2, pinned, CPU, greedy &mdash; deterministic across restarts</td></tr>
+        <tr><th>Confidential inference</th><td>0G compute &mdash; picks the more natural of two candidate covers, in the live send path. Routed through a broker sidecar on 0G testnet; falls back to the first candidate if unreachable</td></tr>
+        <tr><th>Local codec</th><td>GPT-2, pinned, CPU, greedy &mdash; block coder, deterministic across restarts. Never hosted</td></tr>
+        <tr><th>Attestation</th><td>Not yet verified per response &mdash; broker-signed requests only</td></tr>
         <tr><th>Encryption</th><td>AES-SIV, client-side, key never transmitted</td></tr>
         <tr><th>Chain</th><td>0G mainnet, chain ID 16661 &mdash; membership paid in real 0G. Galileo (16602) carries the same stack for testing</td></tr>
         <tr><th>Membership</th><td>Semaphore commitment + single-use nullifier</td></tr>
@@ -99,9 +99,9 @@
   </section>
 
   <section class="pscta">
-    <h2>PS: We have a real business model.</h2>
-    <p>We took real paying users during ETHGlobal Lisbon.</p>
-    <a class="btn" href="business.html">Learn more</a>
+    <h2>PS: There is a business model behind this.</h2>
+    <p>An account is bought once, not funded by reading what you send. The unit economics are public.</p>
+    <a class="btn" href="business.html">See the numbers</a>
   </section>
 
   <nav class="docnav">

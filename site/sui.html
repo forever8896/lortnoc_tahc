@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Storage — Sui, Walrus &amp; Seal | Lortnoc Tahc</title>
-<meta name="description" content="How Lortnoc Tahc uses Quilt, Seal threshold encryption and Walrus — and which design decisions by the Mysten team made the architecture possible.">
+<meta name="description" content="How Lortnoc Tahc stores conversations on Walrus, encrypts them with Seal behind an on-chain seal_approve policy, and tracks them with a ConversationHead object on Sui.">
 <meta name="theme-color" content="#08080A">
 <link rel="preload" href="fonts/jost/jost-300.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
@@ -33,12 +33,13 @@
     <p>So we needed two properties, together: <strong>storage that can&rsquo;t read what it holds</strong>, and <strong>an access rule we can&rsquo;t quietly change.</strong></p>
     <p>Walrus gives the first &mdash; erasure-coded fragments spread across nodes, none of which ever holds a whole blob. Seal gives the second &mdash; decryption gated by <code>seal_approve</code>, a Move function running on Sui, rather than a conditional inside our backend.</p>
     <p>Neither alone would have been enough. We needed the pair.</p>
+    <p class="note"><b>Where we currently sit on the trust curve.</b> Seal supports a key-server committee; we run against <b>one server at threshold 1 of 2</b>, so today the honest description is &ldquo;encryption behind an on-chain access policy&rdquo; rather than &ldquo;threshold encryption across a committee&rdquo;. The policy is real and enforced by a party that is not us &mdash; but a single operator could still refuse, or be compelled. Raising the threshold is a configuration change, not a redesign, and it is gated on a client-version conflict rather than on anything we would have to rebuild.</p>
   </section>
 
   <section>
     <h2>How it works here</h2>
     <ol class="steps">
-      <li><b>Encrypt.</b> Seal encrypts each message to an identity namespaced under its conversation object. No single party holds the key.</li>
+      <li><b>Encrypt.</b> Seal encrypts each message to an identity namespaced under its conversation object &mdash; <code>headAddress&nbsp;||&nbsp;nonce</code>, so a member of one conversation cannot request shares for another.</li>
       <li><b>Scatter.</b> Walrus erasure-codes it across the network. Every node holds a fragment it can&rsquo;t read.</li>
       <li><b>Point.</b> A <code>ConversationHead</code> Sui object tracks the current blob. Blobs never change; only the pointer moves.</li>
       <li><b>Find.</b> Conversations announce themselves as <code>ConversationCreated</code> events on Sui, so any device holding the user&rsquo;s secret rebuilds their inbox from chain with nothing stored by us.</li>
@@ -60,12 +61,12 @@
       <div class="flow__row">
         <div class="flow__node"><b>Read the head</b><span>the Sui object lists every blob in order</span></div>
         <div class="flow__node"><b>Fetch the blob</b><span>reconstructed by a Walrus aggregator</span></div>
-        <div class="flow__node flow__node--signal"><b>Ask for a key share</b><span>key servers decide &mdash; not us</span></div>
+        <div class="flow__node flow__node--signal"><b>Ask for a key share</b><span>the key server decides &mdash; not us</span></div>
         <div class="flow__node"><b>Plaintext</b><span>assembled client-side</span></div>
       </div>
       <div class="flow__gate">
         <b>seal_approve(id, head)</b>
-        <span>Before releasing anything, every key server dry-runs this Move function against live chain state. Two assertions, both required: the identity is namespaced to <em>this</em> conversation object, and the caller is one of its participants.</span>
+        <span>Before releasing a key share, the key server dry-runs this Move function against live chain state. Two assertions, both required: the identity is namespaced to <em>this</em> conversation object, and the caller is one of its participants.</span>
         <div class="flow__out">
           <div class="yes">participant &rarr; key share released, message opens</div>
           <div class="no">anyone else &rarr; NoAccessError, from the key servers</div>
@@ -76,20 +77,18 @@
   </section>
 
   <section>
-    <h2>For the Walrus and Seal team</h2>
-    <p>Three decisions you made are the reason this project has the shape it does.</p>
+    <h2>Three properties this depends on</h2>
 
-    <h3>Quilt</h3>
-    <p>Most blob stores treat small objects as somebody else&rsquo;s problem. Chat is <em>nothing but</em> small objects &mdash; a message is a few hundred bytes, and Walrus bills an encoded floor per blob regardless of size, so one-blob-per-message is a pricing catastrophe at scale. Quilt is the answer to that, and at 660 items per blob the saving is roughly 650&times;.</p>
-    <p class="note">We are not using it yet, and the measurement is why. We wrote a three-message quilt to testnet: it came back <b>445,556 bytes</b>. Quilt pads to its sliver structure, so a small quilt has a sizeable floor of its own &mdash; and a 1:1 conversation produces messages one at a time, never filling one. Batching would mean holding a message back from its recipient to save storage we are not yet spending. So we ship one blob per message today, with the switch costed and the read path already proven against per-patch aggregator reads.</p>
-
-    <h3><code>seal_approve</code> as arbitrary Move</h3>
-    <p>The obvious way to build access control for threshold encryption is a fixed vocabulary: allowlist, time-lock, token-gate. You made the policy a Move function evaluated by dry-run instead, so it can be anything expressible on Sui.</p>
-    <p>That&rsquo;s what makes a nullifier-gated policy conceivable at all. We&rsquo;re on the session-key path today, but we designed toward the harder version precisely because you left the ceiling that high.</p>
+    <h3><code>seal_approve</code> is arbitrary Move, not a fixed vocabulary</h3>
+    <p>The usual shape for access control over encrypted data is a menu: allowlist, time-lock, token-gate. Seal makes the policy a Move function evaluated by dry-run, so it can be anything expressible on Sui.</p>
+    <p>That is what lets our rule be <em>conversation membership</em> rather than an address list we maintain. Add a participant on-chain and they can read; remove them and they cannot, with nothing re-keyed client-side and no list for us to be asked to edit.</p>
 
     <h3>Immutable blobs, mutable pointer</h3>
-    <p>Splitting a durable append-only log from a Sui object that moves is a separation we&rsquo;d otherwise have had to invent badly. Our <code>ConversationHead</code> is your primitive with two extra fields.</p>
-    <p>And RedStuff&rsquo;s self-healing is what lets us tell users their data outlives us without hedging the sentence.</p>
+    <p>A durable append-only log separated from a small object that moves is the right decomposition for a conversation, and it is one we would otherwise have had to invent badly. <code>ConversationHead</code> is that primitive with two extra fields. RedStuff&rsquo;s self-healing is what makes &ldquo;your data outlives us&rdquo; a statement rather than a hope.</p>
+
+    <h3>Per-blob pricing, which is why we do not batch yet</h3>
+    <p>Walrus bills an <em>encoded</em> floor per blob regardless of size, so every blob under ~217&nbsp;KB costs the same. Chat is nothing but small objects &mdash; a message is a few hundred bytes, which expands about 220,000&times;. One blob per message is therefore a pricing problem at scale, and Quilt is the answer: at 660 items per blob it is roughly a 650&times; saving.</p>
+    <p class="note"><b>We ship one blob per message anyway, and the measurement is why.</b> We wrote a three-message quilt to testnet and it came back at <b>445,556 bytes</b> &mdash; Quilt pads to its sliver structure, so a small quilt carries a large floor of its own and can cost more than the blobs it replaces. The 650&times; assumes a saturated quilt, and a 1:1 conversation emits messages one at a time. Batching would mean delaying delivery to the recipient to save storage we are not yet spending. The switch is costed and the read path already verified against per-patch aggregator reads, so this is a threshold to cross on volume, not a rewrite.</p>
   </section>
 
   <section>
@@ -97,20 +96,21 @@
     <div class="spec-wrap">
       <table class="spec">
         <tr><th>Storage</th><td>Walrus &mdash; erasure-coded, self-healing, immutable</td></tr>
-        <tr><th>Encryption</th><td>Seal, identity namespaced per conversation object</td></tr>
-        <tr><th>Access rule</th><td><code>seal_approve</code>, a Move function on Sui</td></tr>
-        <tr><th>Batching</th><td>One blob per message today &mdash; Quilt measured, not yet economic at our message rate</td></tr>
-        <tr><th>Pointer</th><td><code>ConversationHead</code> Sui object</td></tr>
+        <tr><th>Encryption</th><td>Seal, identity namespaced per conversation object (<code>headAddress&nbsp;||&nbsp;nonce</code>)</td></tr>
+        <tr><th>Access rule</th><td><code>seal_approve</code>, a Move function dry-run by the key servers against live chain state</td></tr>
+        <tr><th>Key servers</th><td>One, at threshold 1 of 2 &mdash; an on-chain policy, not yet a committee</td></tr>
+        <tr><th>Batching</th><td>One blob per message &mdash; Quilt measured and deliberately deferred until message volume justifies it</td></tr>
+        <tr><th>Pointer</th><td><code>ConversationHead</code> Sui object; blobs immutable, only the pointer moves</td></tr>
         <tr><th>User key</th><td>Sui keypair derived on-device from the master secret &mdash; signs the Seal session key, never transmitted</td></tr>
+        <tr><th>Network</th><td>Sui testnet; Walrus writes via Mysten&rsquo;s upload relay</td></tr>
       </table>
     </div>
-    <p><a href="0g.html">We evaluated 0G Storage and kept Walrus &mdash; the reasoning is on the compute page &rarr;</a></p>
   </section>
 
   <section class="pscta">
-    <h2>PS: We have a real business model.</h2>
-    <p>We took real paying users during ETHGlobal Lisbon.</p>
-    <a class="btn" href="business.html">Learn more</a>
+    <h2>PS: There is a business model behind this.</h2>
+    <p>An account is bought once, not funded by reading what you send. The unit economics are public.</p>
+    <a class="btn" href="business.html">See the numbers</a>
   </section>
 
   <nav class="docnav">

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Identity — ENS v2 sub-names | Lortnoc Tahc</title>
-<meta name="description" content="How Lortnoc Tahc uses ENS v2 — custom registry, Permissioned Resolver, per-record EAC roles — and which v2 decisions made the identity layer possible.">
+<meta name="description" content="How Lortnoc Tahc issues ENS v2 sub-names: a custom registry, a per-account Permissioned Resolver, and per-record EAC roles the holder can delegate and revoke without asking us.">
 <meta name="theme-color" content="#08080A">
 <link rel="preload" href="fonts/jost/jost-300.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
@@ -38,7 +38,7 @@
     <h2>How it works here</h2>
     <ol class="steps">
       <li><b>Own resolver per account.</b> Claiming a handle deploys a <code>VerifiableFactory</code> proxy of <code>PermissionedResolverImpl</code> &mdash; their contract, not a row in a shared one.</li>
-      <li><b>Records carry the routing.</b> <code>pubkey</code>, <code>sui</code>, <code>inbox</code>, <code>discoverable</code>, <code>knock</code>. Each one separately permissioned.</li>
+      <li><b>Records carry the routing.</b> <code>pubkey</code>, <code>sui</code>, <code>walrus</code>, <code>inbox</code>, <code>discoverable</code>, <code>knock</code>. Each one separately permissioned.</li>
       <li><b>Delegate exactly one record.</b> <code>authorizeTextRoles(name, "eth.lortnoc.inbox", gateway, true)</code>. Our gateway rotates the inbox pointer and is <b>reverted</b> on everything else.</li>
       <li><b>Revoke without us.</b> Same call, <code>grant=false</code>. One transaction, the user&rsquo;s signature.</li>
       <li><b>Prove it&rsquo;s genuine.</b> <code>verifyContract(proxy)</code> returns the implementation &mdash; checkable without trusting our backend.</li>
@@ -77,26 +77,25 @@
   </section>
 
   <section>
-    <h2>For the ENS team</h2>
-    <p>v2 didn&rsquo;t just add features to v1. It made the registry pluggable, and our entire identity layer hangs off that one decision.</p>
+    <h2>Why this needs v2</h2>
+    <p>v2 did not just add features to v1. It made the registry pluggable, and the whole identity layer hangs off that one change.</p>
 
     <h3><code>IRegistry</code> with a different ownership model</h3>
-    <p>Being able to slot our own registry under <code>lortnoctahc.eth</code> and have it issue names on a rule that isn&rsquo;t <em>&ldquo;this wallet paid&rdquo;</em> is the reason handles can be unlinkable to payment. In v1 that thought isn&rsquo;t expressible &mdash; you&rsquo;d be bolting policy onto a system whose ownership model already disagreed with you.</p>
+    <p>Slotting our own registry under <code>lortnoctahc.eth</code> and having it issue names on a rule that is not <em>&ldquo;this wallet paid&rdquo;</em> is what lets a handle be unlinkable to its payment. In v1 the thought is not expressible: you would be bolting policy onto a system whose ownership model already disagreed with you.</p>
 
     <h3>Per-record roles, resourced by <code>keccak256(node, part)</code></h3>
-    <p>This is the detail that makes least-privilege real rather than aspirational. Our gateway holds write access to exactly one text key and is reverted on every other. Not &ldquo;shouldn&rsquo;t&rdquo; &mdash; reverts, on-chain, every time.</p>
-    <p>Demonstrating that revert live is the best thirty seconds of our demo, and it&rsquo;s entirely your primitive doing the work.</p>
+    <p>This is what makes least-privilege real rather than aspirational. The gateway holds write access to exactly one text key and is reverted on every other. Not &ldquo;shouldn&rsquo;t&rdquo; &mdash; reverts, on-chain, every time, whatever our backend intends.</p>
 
     <h3><code>verifyContract</code> and <code>TokenRegenerated</code></h3>
-    <p>Two things that only exist because someone thought past the happy path. <code>verifyContract</code> means a counterparty can confirm a resolver came from the canonical factory without trusting us at all. And bumping the token version on a role change, so revocation invalidates stale approvals, is the kind of detail that comes from asking what happens <em>after</em> a revoke rather than during one.</p>
+    <p>Two primitives that exist because someone thought past the happy path. <code>verifyContract</code> lets a counterparty confirm a resolver came from the canonical factory without trusting us at all. And bumping the token version on a role change, so revocation invalidates stale approvals, answers what happens <em>after</em> a revoke rather than during one.</p>
 
-    <h3>One sharp edge, since you&rsquo;ll want to know we actually used it</h3>
-    <p><code>grantRoles</code> reverts on the resolver; the <code>authorize*Roles</code> wrappers are the way in. Cost us an afternoon before we read the source. Worth documenting louder &mdash; it&rsquo;s the first thing anyone reaching for EAC will try.</p>
+    <h3>A sharp edge worth knowing</h3>
+    <p><code>grantRoles</code> reverts on the resolver; the <code>authorize*Roles</code> wrappers are the way in. It is the first thing anyone reaching for EAC will try, and the failure is silent enough to cost an afternoon.</p>
   </section>
 
   <section>
     <h2>Discoverability is a dial, not a switch</h2>
-    <p>Because every handle resolves through a CCIP-Read gateway, real code runs on each lookup and can answer differently per record and per caller. Five rungs, held in one text record:</p>
+    <p>Findability should not be one bit. Five rungs, held in a text record the user owns and writes:</p>
     <div class="spec-wrap">
       <table class="spec">
         <tr><th>Ghost</th><td>Not findable. Only someone handed the handle directly can reach them.</td></tr>
@@ -106,7 +105,8 @@
         <tr><th>Public</th><td>Fully linkable, deliberately.</td></tr>
       </table>
     </div>
-    <p><strong>The gate is the creative part, not the index behind it.</strong> Roles govern writes; this ladder is a read-time policy at the gateway &mdash; a separate mechanism, deliberately. Today the rung is a record the user sets, and the CCIP-Read resolver that would enforce it per-caller is the next build. We would rather show the dial honestly than claim an index we have not written.</p>
+    <p class="note"><b>What is built, and what is not.</b> The record is live: a user sets their rung and it resolves like any other record. What does <em>not</em> exist yet is the CCIP-Read resolver that would enforce it &mdash; running real code on each lookup and answering differently per caller, so a profile resolves for a mutual and not for a stranger. <strong>Today the ladder is declared, not enforced.</strong></p>
+    <p>We are specific about that because the enforcement is the interesting half. ENS roles govern <em>writes</em>; read-gating is a separate mechanism at the resolver, and only v2&rsquo;s pluggable resolution makes it expressible at all. Claiming the dial works today would be claiming the part we have not written.</p>
   </section>
 
   <section>
@@ -124,9 +124,9 @@
   </section>
 
   <section class="pscta">
-    <h2>PS: We have a real business model.</h2>
-    <p>We took real paying users during ETHGlobal Lisbon.</p>
-    <a class="btn" href="business.html">Learn more</a>
+    <h2>PS: There is a business model behind this.</h2>
+    <p>An account is bought once, not funded by reading what you send. The unit economics are public.</p>
+    <a class="btn" href="business.html">See the numbers</a>
   </section>
 
   <nav class="docnav">
