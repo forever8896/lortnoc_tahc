@@ -97,9 +97,12 @@
   // LIVE stays false until `lortnoctahc.eth` actually resolves to ADDRESS on mainnet.
   // Ownership and the addr record are separate: moving the name does NOT move the money,
   // so this flag flips only after resolution has been re-verified against chain.
+  // Verified against mainnet 2026-07-29: addr record, controller and registrant all resolve to
+  // ADDRESS. Re-verify before changing either value — ownership and the addr record are separate,
+  // so a name can look correctly moved while still routing money somewhere else.
   var ENS     = 'lortnoctahc.eth';
   var ADDRESS = '0x08d1384214f15866F849BE148b8E8aB4a814D19E';
-  var LIVE    = false;
+  var LIVE    = true;
 
   if (LIVE) {
     document.getElementById('donate-ens').textContent = ENS;
