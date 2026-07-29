@@ -27,6 +27,31 @@ HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "8080"))
 MAX_BODY = 256 * 1024  # generous cap for chat-sized payloads
 
+# ---- Paused mode -----------------------------------------------------------------------------
+# Flipped with `fly secrets set CODEC_PAUSED=1` — no redeploy, and `fly secrets unset` undoes it.
+#
+# Deliberately NOT the same thing as scaling the machine to zero. A dead host gives the client a
+# connection timeout, and a timeout is indistinguishable from bad wifi or a broken extension: people
+# file issues, or quietly conclude the project is abandoned. An immediate, worded 503 is the thing
+# that actually manages expectations.
+PAUSED = os.environ.get("CODEC_PAUSED", "") == "1"
+PAUSED_URL = os.environ.get("CODEC_PAUSED_URL", "https://lortnoctahc.com")
+PAUSED_MESSAGE = os.environ.get(
+    "CODEC_PAUSED_MESSAGE",
+    "The hosted codec is paused during the closed alpha. "
+    "Join at lortnoctahc.com — or run your own: git clone, cd codec, python3 server.py",
+)
+# What /health reports as its `model` while paused.
+#
+# This string is load-bearing and it is worth knowing why. Already-installed extensions cannot be
+# updated remotely, and their popup prints /health's `model` field VERBATIM:
+#
+#     if (res.ok && res.data.ready) setChip(status, res.data.model ?? 'codec ok', ...)
+#
+# So this is the ONLY channel that reaches someone running an older build. Keep it short enough to
+# fit the popup chip, and keep it accurate.
+PAUSED_MODEL = os.environ.get("CODEC_PAUSED_MODEL", "paused — alpha signup at lortnoctahc.com")
+
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
@@ -76,6 +101,15 @@ class Handler(BaseHTTPRequestHandler):
             headers={"X-PAYMENT-RESPONSE": auth.x402_settle_header(settlement)},
         )
 
+    def _paused_body(self):
+        """503 body for /encode and /decode while paused.
+
+        503 rather than 402 (which the extension maps to the paywall) or 500 (which reads as a
+        crash). `paused: true` is the machine-readable flag a newer client keys off; `message` and
+        `url` are what an older one can at least surface as an error string.
+        """
+        return {"paused": True, "error": PAUSED_MESSAGE, "message": PAUSED_MESSAGE, "url": PAUSED_URL}
+
     def _read_json(self):
         n = int(self.headers.get("Content-Length", "0"))
         if n <= 0 or n > MAX_BODY:
@@ -92,12 +126,21 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.rstrip("/") == "/membership":
             return self._membership()
         if self.path.rstrip("/") == "/health":
+            # /health stays 200 while paused, ON PURPOSE. It is the only channel that reaches an
+            # already-installed extension (see PAUSED_MODEL above), and a non-200 would make the
+            # popup show a bare "offline" instead of the message.
+            #
+            # `ready: true` alongside a 503 on /encode is internally inconsistent, and that is a
+            # knowing trade: the alternative reaches nobody. `paused: true` is the honest field for
+            # any client new enough to read it.
             return self._json(
                 200,
                 {
-                    "model": codec.MODEL,
+                    "model": PAUSED_MODEL if PAUSED else codec.MODEL,
                     "digest": codec.DIGEST,
                     "ready": True,
+                    "paused": PAUSED,
+                    **({"message": PAUSED_MESSAGE, "url": PAUSED_URL} if PAUSED else {}),
                     "select": codec.select_info(),
                     "auth": auth.status(),
                 },
@@ -108,6 +151,9 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.rstrip("/")
         if path == "/membership":  # x402 clients may POST the paid request
             return self._membership()
+        if PAUSED and path in ("/encode", "/decode"):
+            # Before the body is read: fail fast and cheap, and never spend model time while paused.
+            return self._json(503, self._paused_body(), headers={"Retry-After": "3600"})
         try:
             req = self._read_json()
             if path == "/encode":

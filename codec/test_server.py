@@ -335,6 +335,83 @@ class MembershipResourceTests(ServerTestCase):
             auth.X402_DEV_ACCEPT = original
 
 
+class PausedModeTests(ServerTestCase):
+    """Paused mode — the mechanism the alpha rollout depends on (docs/LAUNCH-PLAN.md §1).
+
+    The point of pausing rather than scaling to zero is that users get a WORDED response instead
+    of a timeout. These tests pin the parts that make that true, especially the /health channel,
+    which is the only way to say anything to an extension that is already installed and cannot be
+    updated remotely.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self._paused = server.PAUSED
+        server.PAUSED = True
+
+    def tearDown(self):
+        server.PAUSED = self._paused
+        super().tearDown()
+
+    def test_encode_returns_503_not_a_timeout(self):
+        status, body, headers = self.encode(os.urandom(16))
+        self.assertEqual(status, 503)
+        self.assertTrue(body["paused"])
+        self.assertIn("lortnoctahc.com", body["message"])
+        self.assertIn("Retry-After", headers)
+
+    def test_decode_is_paused_too(self):
+        status, body, _ = self.decode("some cover text that is long enough to try")
+        self.assertEqual(status, 503)
+        self.assertTrue(body["paused"])
+
+    def test_503_is_not_402_so_the_paywall_does_not_fire(self):
+        # The extension maps 402 to "free trial used up" and shows the upgrade funnel. A paused
+        # service showing a paywall would be actively misleading.
+        self.assertNotEqual(self.encode(os.urandom(16))[0], 402)
+
+    def test_health_stays_200_while_paused(self):
+        # A non-200 makes the popup render a bare "offline" chip and the message never lands.
+        status, body, _ = _get(f"{self.base}/health")
+        self.assertEqual(status, 200)
+        self.assertTrue(body["paused"])
+
+    def test_health_model_carries_the_message_to_installed_extensions(self):
+        # popup.ts: setChip(status, res.data.model ?? 'codec ok', ...) — printed verbatim.
+        # This is the whole reason /health stays up, so assert the actual contract.
+        _, body, _ = _get(f"{self.base}/health")
+        self.assertEqual(body["model"], server.PAUSED_MODEL)
+        self.assertIn("lortnoctahc.com", body["model"])
+        self.assertLess(len(body["model"]), 60, "too long for the popup chip")
+
+    def test_paused_costs_no_model_time(self):
+        # Rejected before the body is read, so a paused box cannot be used to burn CPU.
+        original = codec.encode
+        codec.encode = lambda *a, **k: (_ for _ in ()).throw(AssertionError("codec ran while paused"))
+        try:
+            self.assertEqual(self.encode(os.urandom(16))[0], 503)
+        finally:
+            codec.encode = original
+
+    def test_membership_still_works_while_paused(self):
+        # Pausing the codec must not break the paid path for anyone mid-claim.
+        self.assertEqual(_get(f"{self.base}/membership")[0], 402)
+
+    def test_unpausing_restores_service(self):
+        # The whole value of a flag over `scale count 0` is that it reverses instantly.
+        server.PAUSED = False
+        status, body, _ = self.encode(os.urandom(16))
+        self.assertEqual(status, 200)
+        self.assertIn("coverText", body)
+        _, health, _ = _get(f"{self.base}/health")
+        self.assertFalse(health["paused"])
+        self.assertEqual(health["model"], codec.MODEL)
+
+    def test_not_paused_by_default(self):
+        # A deploy that shipped paused by accident would be an outage nobody looked for.
+        self.assertEqual(os.environ.get("CODEC_PAUSED", ""), "")
+
+
 class BodyLimitTests(ServerTestCase):
     def test_an_oversized_body_is_rejected_rather_than_buffered(self):
         oversized = base64.b64encode(os.urandom(200 * 1024)).decode()
