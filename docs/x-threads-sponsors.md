@@ -1,110 +1,153 @@
 # sponsor threads — posts 2-5
 
-your post 1 goes on top of each. these follow the format:
-2 = what the app/platform is · 3 = what tech + why we needed it ·
-4 = how the integration worked · 5 = thanks
+your post 1 goes on top of each.
 
-surface split used throughout:
-- **lortnoctahc plugin** = browser extension, hides real messages inside telegram
-- **lortnoctahc dm** = our own fully private messenger
+format: 2 = what the app and platform is · 3 = what tech and why we needed it
+· 4 = how the integration worked · 5 = thanks
+
+surfaces kept distinct throughout:
+**Lortnoctahc plugin** = the browser extension inside Telegram
+**Lortnoctahc DM** = our own messenger
 
 ---
 
-## ens — for lortnoctahc DM
+## ens — for Lortnoctahc DM
 
 **2/**
-lortnoctahc dm is our own messenger. fully private, no platform in the middle.
+Lortnoctahc DM is our own messenger.
 
-you get there from the plugin — a browser extension that hides your real messages inside telegram.
+fully private. nothing sitting on anyone else's platform.
 
-the plugin is the on-ramp. dm is where you land.
+you get there from the plugin.
+
+install it, keep using Telegram, bring your friends over when you're ready.
+
+the plugin is the on-ramp. DM is where you land.
 
 **3/**
-every dm account is an @ens v2 sub-name.
+every DM account is an @ens v2 subname.
 
-we sell those accounts. that only works if the account is genuinely yours — one a company can delete is a rental, not an asset.
+why we needed that:
 
-v1 couldn't do it. control there is all-or-nothing: whoever can write, can write everything.
+we sell accounts. that's the business.
+
+but an account a company can delete isn't an asset.
+
+it's a rental.
+
+which is exactly what everyone is trying to escape.
 
 **4/**
-we run our own registry under lortnoc.eth, built on v2's UserRegistry.
+we run our own registry under lortnoc.eth.
 
-every user gets their own resolver. our gateway can write exactly one text record and is reverted on every other. every time.
+every user gets their own resolver.
 
-claims are relayed, so the payer and the owner are never the same address.
+our gateway can write one record. it gets reverted on everything else.
+
+and claims are relayed, so whoever paid and whoever owns the name are never the same address.
 
 **5/**
 thank you @ens 🙏
 
-v2 making the registry pluggable is the only reason any of this was expressible. we got to issue names on a rule that isn't "this wallet paid" — and that's the whole privacy story.
+v2 made the registry pluggable.
+
+that's the only reason we could issue names on a rule that isn't "this wallet paid"
+
+which is the whole privacy story.
 
 ---
 
-## 0G — for BOTH surfaces
+## 0G — for both surfaces
 
 **2/**
-two surfaces:
+two things we built:
 
-lortnoctahc plugin — browser extension, hides your real messages inside telegram
+Lortnoctahc plugin. encrypts your messages into small talk inside Telegram.
 
-lortnoctahc dm — our own fully private messenger
+Lortnoctahc DM. our own fully private messenger.
 
-0G shows up in both.
+0G is in both.
 
 **3/**
-in the plugin: cover text only works if it reads like a person wrote it.
+small talk only works if it sounds like small talk.
 
-a sentence nobody would ever really send is itself a flag.
+a sentence nobody would ever really send is a flag all by itself.
 
-so something has to judge how natural it sounds — and that judge sees text derived from your private message. it can't be anywhere that logs.
+so something has to judge how human it reads.
+
+but that judge sees text derived from your private message.
+
+it can't be anywhere that keeps logs.
 
 **4/**
-we write each message several ways locally. @0G sealed compute scores which reads most human, and keeps nothing.
+we write every message a few different ways, locally.
 
-the encoder stays local — hosted inference isn't deterministic, and determinism is what makes a message decodable.
+@0G sealed compute picks the one that reads most human. and keeps nothing.
 
-0G chain settles dm payments behind a nullifier.
+the encoder stays on your machine, because hosted inference isn't deterministic
+
+and determinism is what makes a message decodable.
+
+0G chain also settles DM payments, behind a nullifier.
 
 **5/**
 thank you @0G 🙏
 
-you told us straight that deploying our own model into the tee wasn't supported yet. that answer forced a cleaner split than the easy path would have — determinism where reversibility needs it, sealed compute where privacy does.
+you told us straight that we couldn't deploy our own model into the TEE yet.
+
+that answer gave us a better architecture than the easy path would have.
+
+determinism where it's needed. sealed compute where privacy is.
 
 ---
 
-## sui / walrus / seal — for lortnoctahc DM
+## sui / walrus / seal — for Lortnoctahc DM
 
 **2/**
-lortnoctahc dm is our own messenger — fully private, nothing left sitting on anyone's platform.
+Lortnoctahc DM is our own messenger.
 
-you arrive from the plugin, which hides your real messages inside telegram.
+fully private. nothing left sitting on anyone's platform.
 
-the plugin is the hook. dm is the destination.
+you arrive from the plugin, which hides your real messages inside Telegram.
+
+the plugin is the hook. DM is the destination.
 
 **3/**
-dm conversations have to live somewhere.
+your DM conversations have to live somewhere.
 
-if that somewhere is ours, we've made ourselves the easiest thing in the system to subpoena.
+if that somewhere is us, we've made ourselves the easiest thing in the whole system to subpoena.
 
-so we needed two things together: storage that can't read what it holds, and an access rule we can't quietly change.
+so we needed two things at once:
+
+storage that can't read what it holds.
+
+and an access rule we can't quietly change.
 
 **4/**
-messages get threshold-encrypted by @sui seal, then scatter across walrus as fragments no single node can read.
+messages get threshold encrypted by @sui seal.
 
-a sui object tracks the current blob.
+then scatter across walrus as fragments no single node can read.
 
-who may decrypt is seal_approve — a move function running on-chain, not a check buried in our backend.
+a sui object tracks the current one.
+
+and who's allowed to decrypt is seal_approve. a move function running on chain.
+
+not a check hidden in our backend.
 
 **5/**
-thank you @sui + walrus + seal 🙏
+thank you @sui, walrus and seal 🙏
 
-making the access policy arbitrary move instead of a fixed allowlist is what let us design toward a vault gated on a zk nullifier. the ceiling being that high changed what we tried.
+making the access policy arbitrary move instead of a fixed allowlist
+
+is what let us design toward a vault gated on a zk nullifier.
+
+the ceiling being that high changed what we even tried.
 
 ---
 
 ## notes
 
-- **quilt is NOT claimed** anywhere here — your own commit says it was measured
-  and skipped. the earlier site copy still leans on it.
-- handles kept in your short forms (`@ens`, `@sui`, `@0G`). worth confirming
-  they're the live accounts before posting — that's what triggers reposts.
+- **no quilt claim anywhere** — your own commit says it was measured and
+  skipped. the sui page on the site still leads on it.
+- handles left in your short forms (`@ens`, `@sui`, `@0G`). worth confirming
+  they're the live accounts, that's what triggers the reposts.
