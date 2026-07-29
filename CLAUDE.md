@@ -1,8 +1,23 @@
 # CLAUDE.md — the authoritative build spec for lortnoc_tahc
 
-This file is the **single source of truth** for what we build and how the pieces fit — the complete plan,
-architecture, and per-integration spec. There is no separate design doc; read this fully before touching code, and
-update it in the same change as any code that alters an interface, schema, or flow below.
+This file is the **single source of truth for the DESIGN** — what we build and how the pieces fit. There is no
+separate design doc; read this fully before touching code, and update it in the same change as any code that
+alters an interface, schema, or flow below.
+
+> **It is NOT the source of truth for status.** The code is. This document described a shipped product as
+> "Pre-code" for weeks while three chains held live deployments, and `CHECKLIST.md` listed Knock and native-mode
+> DM as unbuilt after both had shipped. Reviewing against a stale status line does not merely waste time — it
+> produces confidently wrong conclusions, and a completed feature gets re-planned.
+>
+> **Three rules, learned the hard way:**
+> 1. **Check §2.1 (the implementation map) before concluding anything is unbuilt**, then check the file.
+> 2. **A status claim cites the file that backs it.** "Knock — done" is unfalsifiable; "Knock — done,
+>    `app/src/lib/live/knock.ts` + relayer `POST /knock`" can be checked in ten seconds and goes red when
+>    someone deletes it.
+> 3. **Where the build diverged from this plan, the divergence is documented in place** rather than quietly
+>    left to contradict the surrounding prose — see §7 (the relayer is the enforcement point, not
+>    `verifyAndSpend`), §12 Q3 (our own coder, not `nethical6`), and §11 (phases complete). Historical prose is
+>    kept where the reasoning still teaches something; it is marked, not deleted.
 
 **Product surfaces & domains**
 
@@ -27,8 +42,59 @@ generates cover text is invisible plumbing — **never the pitch. We are not "an
 
 ## 2. Status
 
-Pre-code. Repo holds this spec + `site-font.zip` (brand assets). No build system, scaffold, or git history yet.
-When you scaffold, record the toolchain in §11.
+**Built and deployed.** ~12k LOC across seven workspaces, live on three chains.
+
+| Workspace | What it is | State |
+|---|---|---|
+| `extension/` | MV3 Telegram Web overlay (§6.1) — the hero demo | Working; v0.8.7; released via `.github/workflows/release.yml` |
+| `codec/` | Stego codec HTTP service (§6.2), stdlib Python | Working; `gpt2` / `markov` / `wordmap` backends |
+| `app/` | React PWA — Mirror + Native modes (§6.6/§6.7) | Working; Seal wired end-to-end |
+| `contracts/` | `LortnocMembership` (0G) + `LortnocRegistrar` (Sepolia) | Deployed; Foundry tests in `contracts/test/` |
+| `shared/` | §5.1 key-derivation table (`keys.mjs`) + ticket signal (`ticket.mjs`) | One implementation, imported everywhere |
+| `relayer/` | Carries a burned ticket from 0G → ENS handle → Sui stipend | Working; **untested** |
+| `scripts/ens/` | Deploy/claim/repair CLI, pinned to the ENS v2 Sepolia tag | Working |
+
+**Live addresses** are in §6.5 (Sepolia ENS v2) and the 0G membership block below it; the machine-readable
+source of truth is `app/src/lib/live/ens-deployment.json` and `zerog-deployment.json`.
+
+**Tests: `npm test` from the repo root** — six tiers (unit · invariants · codec · contracts · browser ·
+integration), 277 tests, gated in CI by `.github/workflows/test.yml`. See `test/README.md` for what each tier
+proves and, more importantly, **what it does not cover**. A standing audit lives in `docs/AUDIT.md`.
+
+The one rule for the suite: **tests import the real product source, never a copy of it.** The suite that preceded
+this one re-implemented `crypto.ts` inside the test file and so kept passing against a key derivation the product
+had already deleted.
+
+### 2.1 Implementation map — spec § → code → tests
+
+The section you are reading is the design. This table is where it actually lives. **Check it before concluding
+anything is unbuilt** — this document described a shipped product as "pre-code" for weeks, and reviewing against
+a stale status line produces confidently wrong conclusions.
+
+| Spec | Code | Tests | State |
+|---|---|---|---|
+| §5.1 key derivation | `shared/keys.mjs` (+ `keys.d.mts`) | `test/unit/parity.test.mjs` | **One** implementation; was inlined in 7 places |
+| §5.3 Tier-1 handshake | `extension/src/content/{handshake,session}.ts` | `test/unit/{handshake,session}.test.mjs` | Done |
+| §6.1 Telegram overlay | `extension/src/content/{index,compose,inbound,selectors}.ts` | `test/browser/dom.test.mjs` | Done; **selectors unverifiable offline** |
+| §6.2 codec service | `codec/{server,codec,coder,model_*}.py` | `codec/test_*.py`, `test/integration/` | Done; gpt2 · markov · wordmap |
+| §6.3 0G | `codec/zerog.py`, `codec/zerog-sidecar/`, `contracts/src/LortnocMembership.sol` | `contracts/test/LortnocMembership.t.sol` | Done; mainnet 16661 |
+| §6.4 Sui/Walrus/Seal | `app/src/lib/live/{sui,seal}.ts`, `app/contracts/move/` | `app/scripts/seal-live.mjs` (manual) | Done; **no automated tier** |
+| §6.5 ENS v2 | `contracts/src/LortnocRegistrar.sol`, `app/src/lib/live/ens.ts`, `scripts/ens/` | `contracts/test/LortnocRegistrar.t.sol` | Done except conditional resolution |
+| §6.6 native DM | `app/src/ui/{Messenger,Thread}.tsx` over `live/sui.ts` | — | Done; polled, single-writer |
+| §6.7 unified inbox | — | — | **Not built** |
+| §6.8 knock | `app/src/lib/live/knock.ts`, relayer `POST /knock`, `IdentityPanel.tsx` | `app/scripts/knock.test.mjs` | **Done** |
+| §7 paid membership | `contracts/src/LortnocMembership.sol`, `app/src/lib/live/{membership,lifi,proof}.ts`, `relayer/server.mjs` | `contracts/test/`, `test/unit/ticket.test.mjs` | Done; **relayer untested** |
+| §9 freemium metering | `extension/src/content/metering.ts`, `codec/auth.py` | `test/unit/metering.test.mjs`, `codec/test_auth.py` | Done |
+
+**Where the paid tier is actually enforced.** Not by `LortnocRegistrar.gate`, which is deliberately unset (that
+is the free tier). The relayer's `POST /claim` is the enforcement point: it checks the `ticketMessage` binding,
+simulates so a bad proof costs no gas, burns the nullifier on 0G, then calls `claimFor` on Sepolia. The on-chain
+`gate` hook is the alternative design, kept for when issuance should be trustless rather than relayed.
+
+**Known gaps, stated once so nobody re-discovers them as surprises:** the relayer has no tests; nothing
+automated touches Walrus/Seal; the browser tier runs against a fixture and cannot prove `selectors.ts` still
+matches today's Telegram build; §6.5's conditional-resolution gateway is unbuilt, so the discoverability ladder
+is currently declared by a text record rather than enforced at resolve time.
 
 ---
 
@@ -222,10 +288,10 @@ Each spec: **Purpose · Interface · Data · Flow · Scope/failure.** IN = requi
   button). Inbound uses a `MutationObserver` on the message-list container.
 - **Data.** Reads raw compose text and raw inbound bubble text (pre-render, to dodge autocorrect/emoji mangling).
   Cover payload = `AES-SIV.encrypt(K_conv(c), realText)` → `POST /encode` → cover text.
-  **⚠️ Crypto reconciliation (CF-5).** `nethical6` already does AES-SIV + PBKDF2 **internally** with its own key
-  model. Wrapping the CLI as-is uses *its* crypto, not our HKDF-derived `K_conv` (§5.1). Resolve by either (a)
-  stripping `nethical6` to the bare arithmetic coder and doing our own AES-SIV over `K_conv`, or (b) feeding
-  `K_conv` into its crypto path. This is integration work, not a thin wrap.
+  **✅ CF-5 (crypto reconciliation) — MOOT, never arose.** The concern was that wrapping `nethical6` would use
+  *its* internal AES-SIV + PBKDF2 rather than our HKDF-derived `K_conv` (§5.1). We wrote our own coder instead
+  (§12 Q3), so there is no foreign key model to reconcile: the extension encrypts with `K_conv` via
+  `shared/keys.mjs` and the codec sees ciphertext only, exactly as §4 requires.
 - **Flow.**
   - *Outbound:* read compose → `AES-SIV.encrypt` → `/encode` → replace compose contents with cover text →
     play the "shuffle" animation → let Telegram send. Plaintext never leaves the page.
@@ -255,10 +321,13 @@ Each spec: **Purpose · Interface · Data · Flow · Scope/failure.** IN = requi
   logits directly) and **byte-deterministic inference** (CPU, greedy/`temp=0`). Keep the model **warm as a persistent
   process**; **host ONE instance both ends call** so encode and decode hit the same process (determinism automatic,
   no cross-machine matching). The extension does AES-SIV client-side; the service sees **ciphertext only** (§4).
-- **Build path.** Either (a) a minimal arithmetic-coding coder over GPT-2 `transformers` logits (most control,
-  full logprobs for free), or (b) wrap `nethical6/conversation-steganography` (does AES-SIV + arithmetic coding
-  already, but a PoC — see CF-4/CF-5). Start with (a) if the coder is quick; keep (b) as fallback. **First milestone:
-  `decode(encode(x)) == x` for 100 random payloads, deterministic across process restarts.**
+- **Build path — RESOLVED: (a), and `nethical6` was never used.** `codec/coder.py` is a **block (bin) coder**
+  rather than arithmetic coding: at each step the model yields its top `2^k` tokens and `k` ciphertext bits index
+  into them. Reversibility therefore does not depend on *which* model, only that it is deterministic — which is
+  why `codec/test_coder.py` proves it against `model_mock.py` with no GPU. An arithmetic-coding variant exists in
+  a worktree (`CODEC_CODER=arith`, more natural cover text, not shorter) and is **not merged**.
+  **First milestone — MET:** `decode(encode(x)) == x` for 100 random payloads, asserted by
+  `test/integration/pipeline.test.mjs` against a live codec.
 - **0G note (settled).** We asked the 0G team about deploying our *own* model/container into their compute/TEE (to
   run the codec on 0G with our own logprobs+determinism) — **they confirmed it is not supported / too complex on
   their end.** So the codec is **definitively local**; 0G's role is §6.3 (membership + optional non-codec assist).
@@ -570,14 +639,23 @@ today") the gateway auto-expires. Temporary discoverability nobody has to rememb
    registers the subname. `authorizeTextRoles` then delegates `eth.lortnoc.inbox` to the gateway, the gateway's
    `pubkey` write **reverts**, and the user **revokes** in one tx. `verifyContract(proxy)` = trustless handle proof.
    Asserted end-to-end by `scripts/ens/demo.mjs`; surfaced in the app as a live permission table read off-chain.
-3. Deploy Semaphore membership + verifier on **0G Galileo (chain 16602)**; wire pay → insert identity commitment
-   (confirm bn254 precompiles `0x06/0x07/0x08` on 0G first).
+3. ✅ **Semaphore membership + verifier on 0G** — Galileo (16602) for testing *and* **mainnet (16661) for real**;
+   bn254 precompiles confirmed first. `join()` inserts the commitment; `spendTicket()` burns a nullifier.
 4. ✅ **`LortnocRegistry`** (a `UserRegistry` proxy, slotted under `lortnoctahc` via `setSubregistry`) + a custom
-   `LortnocRegistrar` holding `ROLE_REGISTRAR`. **Still open:** nullifier-gating (the `gate` hook is in the
-   contract, unset = free tier) and relaying (`claimFor` exists; no relayer service yet).
-5. **Discoverability + knock (§6.8):** gateway serves the §5.4 records and does **conditional read-gating** +
-   knock-verification (a read/offchain concern, orthogonal to the on-chain write-roles). `setAlias` conversion flow
-   if time remains.
+   `LortnocRegistrar` holding `ROLE_REGISTRAR`. **Relaying is live** — `relayer/` (fly.io) runs the whole paid
+   loop in one request: binding check → simulate → burn the nullifier on 0G → `claimFor` on Sepolia → Sui + gas
+   stipends, idempotent so a retry resumes rather than double-spending. The registrar's `gate` hook stays unset
+   on purpose: enforcement lives at the relayer (§2.1), and `gate` is the trustless-issuance alternative.
+5. **Discoverability + knock (§6.8) — HALF DONE, and the halves are worth separating.**
+   - ✅ **Knock**: `app/src/lib/live/knock.ts` (Argon2id → `sealKnock`/`openKnock`; the answer is never
+     published) + relayer transport (`POST /knock`, `GET /knocks/:handle`) + UI in `IdentityPanel.tsx`. The
+     relayer's 429 rate limiting **is** the security property — it is what keeps guessing online-only.
+   - ✅ **Discoverability records**: `eth.lortnoc.discoverable` and `eth.lortnoc.findhash` are in
+     `RECORD_SPECS` and user-writable through the permission table.
+   - ❌ **Conditional read-gating**: nothing resolves records per-caller. The five-rung ladder is therefore
+     *declared* by a text record, not *enforced* at resolve time — and the enforcement is the creative claim.
+     Either build it or say it that way on the booth; do not let the record imply the gateway. `setAlias`
+     conversion flow also unbuilt.
 6. **No hard-coded ENS *values*** in app logic beyond the pinned deployment addresses (prize req). Prepare the
    in-person ENS-booth demo (Sunday AM): lead with the per-record role revoke.
 
@@ -612,7 +690,14 @@ today") the gateway auto-expires. Temporary discoverability nobody has to rememb
   counterparty's plaintext (invariant §4). Frame as "a private encrypted copy of your own Telegram," not harvesting.
   Full scroll-harvest is OUT (post-hackathon).
 
-### 6.8 Challenge-gated contact — "knock" — **IN (creative differentiator)**
+### 6.8 Challenge-gated contact — "knock" — **BUILT ✅ (creative differentiator)**
+
+> **As built.** `app/src/lib/live/knock.ts` — `createKnockConfig` / `parseKnockConfig` /
+> `deriveKnockKey` (Argon2id, `DEFAULT_KDF = {t:2, m:19456, p:1}`) / `normaliseAnswer` /
+> `sealKnock` / `openKnock`. Transport: relayer `POST /knock` + `GET /knocks/:handle`, with
+> per-IP+handle rate limiting (429), TTL expiry, and oldest-out eviction so a flood cannot bury
+> real knocks. UI: `app/src/ui/IdentityPanel.tsx`. Round-trip test: `app/scripts/knock.test.mjs`.
+> The mechanism below is what shipped, not a plan.
 
 - **Purpose.** Consent-first, spam-proof connection: **nobody can even notify you of intent-to-connect unless they
   clear a gate you configure** — a shared password or a trivia answer (*"what bar did we meet at?"*). Turns "anyone
@@ -656,7 +741,29 @@ native mode). **Reading your own already-stored history is always free** — it'
 join(commitment)              // payable; inserts commitment, grows Merkle root
 verifyAndSpend(proof, root, nullifier, signal) → bool   // reverts if nullifier already spent
 ```
-`LortnocRegistry.register()` (§6.5) calls `verifyAndSpend` before issuing the subname.
+> **⚠️ AS BUILT — the shipped surface differs from the sketch above, and the difference is the design.**
+> `LortnocMembership` (0G mainnet `0xe903…e3d6`) exposes `join(commitment)` **payable** and
+> `spendTicket(SemaphoreProof)` — not `verifyAndSpend`. And the subname is **not** issued by a contract
+> reading another contract's state: no chain can read another's, so **the relayer is the bridge**.
+>
+> `relayer/server.mjs` `POST /claim` is the real enforcement point, in this order:
+> 1. **Binding check** — recompute `ticketMessage(label, evmAddr, suiAddr, pubkey)` and reject unless it
+>    equals `proof.message`. Cheap, and it defeats every redirection attempt at once, before any gas.
+> 2. **Simulate** `spendTicket`, so an invalid proof costs nothing.
+> 3. **Burn** the nullifier on 0G — confirmed by reading *state*, not by awaiting a receipt, because 0G
+>    propagates receipts slowly enough that `waitForTransactionReceipt` throws for transactions that
+>    already succeeded. Reporting failure on a ticket you just burned is the one irreversible error here.
+> 4. **`claimFor`** on Sepolia — the claimant never signs, so payer ≠ claimer (§8 Layer 1).
+> 5. **Stipends** — Sui + Sepolia gas, best-effort: the handle is already issued, so a funding hiccup must
+>    not turn a successful claim into an error the user cannot act on.
+>
+> Every step is **idempotent**: a retry after a partial failure resumes from on-chain state rather than
+> double-spending. `LortnocRegistrar.gate` (the `verifyAndSpend`-shaped hook) is present but **unset on
+> purpose** — it is the trustless-issuance alternative for when relaying is no longer acceptable.
+>
+> **The relayer is a trust assumption and we say so (§8 Layer 4):** it can censor or stall a claim; it
+> cannot forge or redirect one (the nullifier is burned on-chain, the pubkey is bound into the proof), and
+> it never learns which payment a ticket came from. Anyone can run one. **It also has no tests** — see §2.1.
 
 ---
 
@@ -715,29 +822,47 @@ counter, or on-chain rate-limit) is post-hackathon. Only the **paid** tier gets 
 
 ## 11. Build order (risk-first) & toolchain
 
-**Phase 0 — de-risk (first ~3h, parallel; any red = pivot):** (a) **Telegram byte-exactness test** — send constrained
-plain cover text, read back from DOM, assert byte-identical — **blocker if it fails**; (b) **0G logprobs/determinism
-probe** — `router-api.0g.ai/v1` with `logprobs:true`, same request twice, diff (confirms CF-1, informational only);
-(c) **local codec round-trip** — `nethical6` `decode(encode(x))==x` deterministic, model kept warm; (d) Sui faucet +
-WAL early (rate-limited), confirm bn254 precompiles on 0G Galileo. **Phase 1 — hero demo:** the §6.1 overlay, local
-deterministic codec, own AES-SIV (CF-5), pre-shared key for the stage pair. **Phase 2 — sponsor coverage
-(parallel):** §6.4 (Walrus+Seal round-trip, session-key fallback) · §6.5 (**DONE** — own `lortnoctahc.eth` →
-LortnocRegistry + LortnocRegistrar → per-user resolvers; discoverability gateway still open) · §6.3 (Semaphore on Galileo + one sealed-inference call + <3-min video).
-**Phase 3 — polish:** minimal native-mode DM (reliable fallback demo); pitch, diagram, videos, ENS-booth prep.
-Hero demo + Sui + ENS are the winning submission on their own; 0G adds the top prize.
-**Cut for the weekend:** realtime relay/libp2p (poll instead); PWA as a full app; Tier-1 in-band handshake on the
-demo path; nullifier-inside-`seal_approve`; ERC-5564 payment layer (roadmap).
+**Phases 0–3 are COMPLETE.** Kept below as the record of what was de-risked and in what order; the live
+status is `CHECKLIST.md` and the map in §2.1. Phase 0 (Telegram byte-exactness — the blocker; 0G
+logprobs/determinism probe confirming CF-1; local codec round-trip; Sui faucet + bn254 precompiles) all
+came back green or informative. Phase 1 shipped the §6.1 overlay. Phase 2 delivered all three sponsor
+tracks. Phase 3 delivered native-mode DM, and Tier-1 in-band handshake — listed as cut below — was built
+anyway and is now the only keying path.
 
-**Toolchain (ENS/app/contracts confirmed in use; rest proposed):** **pnpm** monorepo (workspaces: `extension/`, `codec/`, `gateway/`,
-`contracts/`, `app/`) · **Vite + CRXJS** for the MV3 extension · **Foundry** for Solidity (Semaphore on 0G Galileo;
+**What actually remains:** the **<3-min demo video** (a hard 0G prize requirement, and nothing else
+unblocks it) · **relayer tests** (the one funded-key component with zero coverage) · **conditional
+resolution** for the discoverability ladder (§6.5 step 5) · **§12 Q1 continuity eligibility**, which is a
+question for the organisers, not a build task.
+
+**Cut for the weekend, and honestly still cut:** realtime relay/libp2p (poll instead); PWA as a full app;
+nullifier-inside-`seal_approve`; ERC-5564 payment layer (roadmap); the §6.7 unified inbox; `bench/`.
+
+**Toolchain (AS BUILT — this section describes the repo, not a plan).** **npm, not pnpm, and NOT a workspace
+monorepo**: each of `extension/ · app/ · codec/ · contracts/ · relayer/ · shared/ · scripts/ens/` carries its own
+manifest and lockfile and is installed independently (`npm ci --prefix <dir>`). The root `package.json` exists only
+to orchestrate tests and deliberately declares no runtime dependencies, so adding it cannot change how any
+workspace resolves its own. There is no `gateway/` — the equivalent is `relayer/`, a plain Node/Express service on
+fly.io, not a Cloudflare Worker. Cross-workspace sharing is by **relative import into `shared/`**
+(`../../shared/keys.mjs`), which is why `app/vite.config.ts` sets `fs.allow` to the repo root and dedupes `viem`
+(and only viem — see the measured note in that file about `@noble`).
+· **Vite + CRXJS** for the MV3 extension · **Foundry** for Solidity (Semaphore on 0G Galileo;
 `LortnocRegistry` cloned from ENS v2 `UserRegistryImpl` on Sepolia) · **viem** for ENS v2 contract calls
 (`deployProxy`, `authorizeTextRoles`, `verifyContract`, `UniversalResolverV2.resolve`) pinned to the `2026-06-29`
 addresses · **Sui CLI + Move** for the `ConversationHead` + `seal_approve` module · **Python + HuggingFace `transformers`
-(GPT-2, CPU)** for the codec HTTP service (own arithmetic coder over local logits; `nethical6` as fallback; model
-warm as a persistent process, one hosted instance both ends call) · **Cloudflare Worker + D1** for the
-offchain gateway (discoverability read-gating, knock relay/verification, claim relayer) · SDKs: `@mysten/walrus`,
-`@mysten/seal`, `@mysten/sui`, `@semaphore-protocol/*`, `@0gfoundation/0g-compute-ts-sdk`,
-`@scopelift/stealth-address-sdk`.
+(GPT-2, CPU)** for the codec HTTP service (our own block coder over local logits — no `nethical6`, §12 Q3;
+markov and wordmap as dependency-free fallback backends; model warm as a persistent process, one hosted
+instance both ends call) · `relayer/` (Node + Express on fly.io) for the
+offchain gateway work that exists — claim relaying and the knock relay; discoverability read-gating is still
+unbuilt · SDKs: `@mysten/walrus`, `@mysten/seal`, `@mysten/sui`, `@semaphore-protocol/*`,
+`@0gfoundation/0g-compute-ts-sdk`, `@scopelift/stealth-address-sdk`.
+
+**Testing (as built).** `npm test` at the root runs six tiers via `test/run.mjs`; `npm run test:<tier>` runs one.
+No test framework is installed for the JS tiers — Node's built-in `node:test` plus native TypeScript type-stripping
+means the tests import `extension/src/**/*.ts` directly, with no build step and no compiled copy to drift. The
+Python tiers use stdlib `unittest` via `codec/run_tests.py` (which also collects the older bare-`test_*`-function
+files that `unittest discover` silently ignores). Contracts use `forge test`; the browser tier uses Playwright over
+a Telegram Web K DOM fixture. Tiers that need something absent (a codec, Chromium) **skip rather than fail**, so the
+default run stays green offline. Full map and coverage gaps: `test/README.md`.
 
 **Storage benchmark (justification artifact — keep, don't skip).** A small `bench/` TS harness runs identical
 encrypted payloads through a `BlobStore` interface against **Walrus+Seal** and **0G Storage** on their testnets, over
@@ -750,22 +875,38 @@ workload off live on-chain values and the actual encoding math, so `bench/` only
 columns. It also supplies the bench's headline finding — the 63-storage-unit floor makes "batch, never per-message"
 a 650× effect, not a tuning note.
 
-**Locked decisions (§12):** Q2 → **Semaphore** · Q3 → **wrap `nethical6`** (local, deterministic) · Q4 →
+**Locked decisions (§12):** Q2 → **Semaphore** · Q3 → **own block coder, NOT `nethical6`** (see below) · Q4 →
 **membership on 0G + on-chain ENS v2 naming on Sepolia** (full v2 identity layer, pinned `2026-06-29`; §6.5) · Q6 →
 **wallet-signature default** · Q7 → **assume NO usable logprobs; codec stays local** (CF-1) · Storage → **Walrus+Seal
 core; 0G Storage evaluated & deferred** (§6.4, kept for Seal's access-control + durability). Still open: Q1
 (continuity eligibility), Q5 (Electron — default no).
 
+**⚠️ Q3 resolved differently from the plan, and the difference matters.** The spec repeatedly says "wrap
+`nethical6/conversation-steganography`". **We did not.** `codec/coder.py` is our own block (bin) coder —
+model-agnostic, exactly reversible, ~80 lines — over our own model adapters (`model_gpt2.py`,
+`model_markov.py`, `model_mock.py`, `wordmap.py`). No `nethical6` code is in the tree.
+Consequences worth knowing: **CF-5 (the crypto reconciliation problem) never arose** — there is no foreign
+AES-SIV/PBKDF2 key model to reconcile, because we own the whole path and encrypt with our own `K_conv`. And
+the GPL-3.0 obligation that wrapping the Go CLI would have carried **does not apply**. Reversibility is
+proven model-independently against `model_mock.py` (`codec/test_coder.py`), which is why it can be asserted
+with no GPU. Treat every remaining "wrap nethical6" mention in this document as historical.
+
 ## 12. Open decisions (resolve before building the affected layer)
 
 **Technical**
-1. **Continuity eligibility** — dated pre-Lisbon prototype? (Unlocks ~$8.5k.)
-2. **Paid-access mechanism** — Semaphore (lean; flashy, on-theme) vs. blind vouchers (lighter fallback).
-3. **Codec sourcing** — wrap the GPL Go CLI (lean, speed) vs. reimplement minimal stego.
-4. **Membership/registry host** — **RESOLVED (§6.5):** **membership (Semaphore) on 0G Galileo** (doubles as 0G's
-   required address); **naming = on-chain ENS v2 on Sepolia** (`LortnocRegistry implements IRegistry` under
-   `lortnoctahc.eth`, pinned to the `2026-06-29` deployment). Two chains, distinct jobs; relayed claim bridges them.
-5. **Desktop feel** — Electron wrap or browser extension only.
+1. **Continuity eligibility — STILL OPEN, and the only one that is.** Dated pre-Lisbon prototype? (Unlocks
+   ~$8.5k.) This is a question for the organisers, not a build task — ask before it stops mattering.
+2. **Paid-access mechanism** — ~~Semaphore vs. blind vouchers~~ **RESOLVED: Semaphore**, deployed on 0G
+   mainnet (16661) and Galileo (16602), exercised live with real payments (§7).
+3. **Codec sourcing** — ~~wrap the GPL Go CLI vs. reimplement minimal stego~~ **RESOLVED: our own block
+   coder** (`codec/coder.py` over `model_*.py`). No `nethical6` code in the tree — so CF-5 never arose and
+   the GPL-3.0 obligation does not apply. See the note above §12.
+4. **Membership/registry host** — **RESOLVED (§6.5):** **membership (Semaphore) on 0G** — Galileo (16602) for
+   testing and **mainnet (16661) for real value**; **naming = on-chain ENS v2 on Sepolia**
+   (`LortnocRegistry implements IRegistry` under `lortnoctahc.eth`, pinned to the `2026-06-29` deployment).
+   Two chains, distinct jobs; the relayer (`relayer/`, live on fly.io) bridges them in one request.
+5. **Desktop feel** — **RESOLVED by default: browser extension only.** No Electron wrap was built and none is
+   planned; the extension plus the PWA cover both surfaces.
 6. **Identity model** — ~~passphrase-default vs. wallet-optional~~ **RESOLVED: wallet-signature default, passphrase
    fallback** (§5.1). Fallback exists because some smart-contract/MPC wallets and all passkeys can't derive
    deterministically. Invariant: identity wallet ≠ payment wallet (§4).
@@ -839,6 +980,8 @@ core; 0G Storage evaluated & deferred** (§6.4, kept for Seal's access-control +
 - **Semaphore v4 (zk set-membership + nullifier, §7)** — `https://docs.semaphore.pse.dev/` · contracts
   (`Semaphore.sol` + `SemaphoreVerifier.sol`) `https://docs.semaphore.pse.dev/technical-reference/contracts` ·
   `https://github.com/semaphore-protocol`.
-- **`nethical6/conversation-steganography` (codec, Go CLI, GPL-3.0; local + deterministic, §6.2)** —
+- **`nethical6/conversation-steganography` — PRIOR ART, NOT A DEPENDENCY.** Evaluated as a wrap target and
+  rejected in favour of our own block coder (§12 Q3); no code from it is in the tree, so its GPL-3.0 does not
+  reach us. Kept here as the reference that shaped the design:
   `https://github.com/nethical6/conversation-steganography`.
 - **Crypto primitives** — AES-SIV (RFC 5297) · HKDF-SHA256 (RFC 5869) · Argon2id (RFC 9106) · X25519 (RFC 7748).
