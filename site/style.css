@@ -18,6 +18,13 @@
   --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
   --shell:clamp(24px,6vw,88px);
   --beat:clamp(140px,18vh,240px);
+  /* Vertical space the fixed .sitemark occupies: its top offset + its height + breathing room.
+     Hero copy is centred inside inset:0, so on shorter viewports it rode up underneath the
+     logo. Anything that must clear the mark offsets by this rather than guessing a number. */
+  --mark-safe:calc(clamp(20px,3vw,34px) + clamp(52px,6.5vw,96px) + 42px);
+  /* Same idea at the foot of the film: the scroll cue is absolutely positioned, so centred
+     copy has to stop short of it or the lede lands on top of "SCROLL". */
+  --cue-safe:calc(clamp(28px,5vw,52px) + 74px);
 }
 
 *,*::before,*::after{ box-sizing:border-box; }
@@ -59,7 +66,8 @@ body{
 }
 .film__copy{ position:absolute; inset:0; z-index:2; }
 .film__line{
-  position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center;
+  position:absolute; inset:var(--mark-safe) 0 var(--cue-safe) 0;
+  display:flex; flex-direction:column; justify-content:center;
   padding:0 var(--shell); max-width:1560px; margin:0 auto;
   will-change:opacity, transform;
 }
@@ -619,9 +627,18 @@ textarea{ resize:vertical; min-height:84px; }
 
 /* Waitlist form in the closing section — the only signup on the page since the
    early-access band was removed. Centred to match .actions above it. */
-.close__form{ max-width:420px; margin:clamp(36px,4vw,56px) auto 0; align-items:center; }
+/* align-items:center on a column flex container stops children stretching, so the input
+   collapsed to its intrinsic ~20-character width and a real address ran out of room. Stretch
+   the field, centre only the button. 16px type also stops iOS zooming the page on focus. */
+/* width:100% is load-bearing. `.close` is a column flex with align-items:center, so this form
+   is a flex ITEM and sizes to its content — max-width alone never widened it, which is why the
+   field sat at its intrinsic ~20-character width and a real address ran out of room. */
+.close__form{ width:100%; max-width:520px; margin:clamp(36px,4vw,56px) auto 0; align-items:stretch; }
 .close__form .btn{ align-self:center; }
-.close__form input[type="email"]{ text-align:center; }
+.close__form .signup__msg{ text-align:center; }
+.close__form input[type="email"]{
+  width:100%; text-align:center; font-size:16px; padding:17px 20px;
+}
 .close .actions{ margin-top:clamp(28px,3vw,40px); }
 
 /* Donation rows inside the modal: narrower than the page, so the full 42-char address
