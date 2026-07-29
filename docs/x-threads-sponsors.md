@@ -80,15 +80,15 @@ but that judge sees text derived from your private message.
 it can't be anywhere that keeps logs.
 
 **4/**
-we write every message a few different ways, locally.
+we write every message a few ways, locally.
 
-@0G sealed compute picks the one that reads most human. and keeps nothing.
+@0G sealed compute picks the one that reads most human. keeps nothing.
 
 the encoder stays on your machine.
 
 hosted inference isn't deterministic, and determinism is what makes a message decodable.
 
-0G chain also settles DM payments.
+0G chain settles DM payments.
 
 **5/**
 thank you @0G 🙏
