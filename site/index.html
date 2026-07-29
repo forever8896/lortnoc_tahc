@@ -191,11 +191,6 @@
         <code class="donate__val" id="donate-ens"></code>
         <button class="donate__copy" type="button" data-copy="donate-ens">Copy</button>
       </div>
-      <div class="donate__row">
-        <span class="donate__label">Address</span>
-        <code class="donate__val donate__val--addr" id="donate-addr"></code>
-        <button class="donate__copy" type="button" data-copy="donate-addr">Copy</button>
-      </div>
     </div>
     <p class="modal__why">Ethereum mainnet and EVM L2s. Resolve the name yourself before sending. We will never DM you an address.</p>
   </dialog>
@@ -610,12 +605,13 @@
 
   // Donation identity. Verified on mainnet 2026-07-29: addr, controller and registrant on
   // lortnoctahc.eth all resolve to ADDRESS. Re-verify all three before changing either value.
+  // Only the name is shown — senders resolve it themselves. The address is
+  // kept here as the value all three records must still resolve to.
   var ENS = 'lortnoctahc.eth';
   var ADDRESS = '0x08d1384214f15866F849BE148b8E8aB4a814D19E';
   var dm = document.getElementById('donate-modal');
   if (dm) {
     document.getElementById('donate-ens').textContent = ENS;
-    document.getElementById('donate-addr').textContent = ADDRESS;
     Array.prototype.forEach.call(document.querySelectorAll('[data-donate-open]'), function (el) {
       el.addEventListener('click', function (e) {
         e.preventDefault();

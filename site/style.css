@@ -427,7 +427,6 @@ textarea{ resize:vertical; min-height:84px; }
 .donate__val{ font-family:var(--mono); font-size:14px; color:var(--signal); flex:1 1 240px; word-break:break-all; }
 /* The hex is shown in full, never truncated: a shortened address cannot be checked
    against the repo, and "verify, don't trust" is the whole point of publishing both. */
-.donate__val--addr{ font-size:12.5px; }
 .donate__copy{
   background:none; border:1px solid var(--rule); color:var(--muted);
   font-family:var(--mono); font-size:11px; padding:6px 11px; cursor:pointer;
@@ -631,6 +630,5 @@ textarea{ resize:vertical; min-height:84px; }
 .modal .donate{ margin-top:18px; }
 .modal .donate__label{ flex:0 0 52px; font-size:10px; }
 .modal .donate__val{ font-size:13px; }
-.modal .donate__val--addr{ font-size:11px; }
 .modal .donate__row{ gap:10px; padding:13px 14px; flex-wrap:nowrap; }
 .modal .donate__copy{ flex:0 0 auto; }
