@@ -656,3 +656,31 @@ textarea{ resize:vertical; min-height:84px; }
    a privacy tool asking for a handle has to answer "what will you do with it" at the point of
    asking, not in a policy nobody opens. */
 .signup__note{ margin:4px 0 0; font-size:12.5px; line-height:1.6; color:var(--muted); text-align:center; }
+
+/* ── modal: small screens ───────────────────────────────────── */
+/* The alpha dialog is tall — disclaimer, consent, two fields and a textarea. Without an
+   explicit max-height it can exceed the viewport on a phone, putting the submit button below
+   the fold with nothing to scroll. dvh rather than vh because mobile browser chrome eats
+   height that vh does not account for. */
+.modal{ max-height:min(88dvh,88vh); overflow-y:auto; overscroll-behavior:contain; }
+
+@media (max-width:560px){
+  .modal{ width:calc(100vw - 20px); padding:22px 18px; max-height:min(92dvh,92vh); }
+  .modal h3{ font-size:23px; }
+  .modal__lede{ font-size:14px; }
+  .modal__terms{ margin-top:16px; padding-left:16px; }
+  .modal__terms li{ margin-top:9px; font-size:13.5px; }
+  .modal form{ margin-top:18px; }
+  .modal textarea{ min-height:62px; }
+  /* Sticky, full width. The alpha form is long — disclaimer, consent, two fields, a textarea
+     — so on a phone the submit button lands well below the fold and reads as missing. Pinning
+     it to the bottom of the dialog's scrollport keeps the action in view while the content
+     scrolls under it. The button is already opaque (.btn has a solid background), so nothing
+     shows through. */
+  .modal .btn{
+    position:sticky; bottom:0; z-index:2;
+    align-self:stretch; width:100%; justify-content:center;
+    padding:17px 20px; margin-top:16px;
+  }
+  .modal__x{ margin:-4px -4px 0 0; }
+}
