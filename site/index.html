@@ -159,22 +159,22 @@
   <dialog class="modal" id="alpha-modal" aria-labelledby="alpha-title">
     <form method="dialog" class="modal__x"><button aria-label="Close">&times;</button></form>
     <h3 id="alpha-title">Become an alpha tester</h3>
+    <p class="modal__lede">Lortnoc Tahc is an open-source project, and our team is in the process of productionizing it. By becoming an alpha tester you acknowledge that you're using an unaudited browser plugin, for testing purposes. We appreciate any feedback, bug reports, and other commentary as we proceed with our build.</p>
     <ul class="modal__terms">
-      <li>It's early. Messages may fail to send or decode. It fails closed, so nothing leaks &mdash; but it does break.</li>
+      <li>Messages may fail to send or decode. It fails closed, so nothing leaks &mdash; but it does break.</li>
       <li>You'll reinstall by hand. Dev-mode extensions don't auto-update, and we ship often.</li>
-      <li>Don't use it for anything that matters yet. Unaudited.</li>
     </ul>
     <form id="alpha-form" novalidate>
       <label class="modal__agree">
         <input type="checkbox" id="alpha-agree" required>
-        <span>Understood. I want in.</span>
+        <span>Understood. I consent to communications about alpha testing.</span>
       </label>
       <label for="alpha-telegram">Telegram handle</label>
       <input id="alpha-telegram" name="telegram" type="text" placeholder="@yourhandle" required
              autocomplete="off" spellcheck="false" maxlength="40">
       <p class="modal__why">It's a Telegram overlay &mdash; that's how we reach you. Nothing else asked, deleted once you're in.</p>
       <label for="alpha-message">Anything to add <span class="modal__opt">(optional)</span></label>
-      <textarea id="alpha-message" name="message" rows="2" maxlength="500" placeholder="What would you break first?"></textarea>
+      <textarea id="alpha-message" name="message" rows="2" maxlength="500" placeholder="Why do you want to be a beta tester?"></textarea>
       <input class="hp" type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">
       <button class="btn" type="submit">Sign me up</button>
       <p class="signup__msg" role="status" aria-live="polite"></p>
