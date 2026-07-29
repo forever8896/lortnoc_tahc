@@ -1,0 +1,96 @@
+<!doctype html>
+<!--
+  A Telegram Web K (morethanwords/tweb) DOM fixture.
+
+  Only the structure `selectors.ts` actually reaches for is reproduced — the class names, the
+  nesting, and the two details that have historically broken things:
+
+    * `.time` lives INSIDE `.message`, so bubble text extraction has to strip it or every
+      decode attempt is fed the timestamp too;
+    * there are TWO `.bubbles` containers and TWO compose boxes (Telegram keeps the previous
+      chat's pane in the DOM), only one of which is visible — which is why `activeCompose` and
+      the inbound scan filter on `offsetParent !== null` rather than taking the first match.
+
+  A fixture cannot prove our selectors match the REAL Telegram build — only a live page can do
+  that, and Telegram ships markup without notice. What it proves is that the logic layered on
+  top of those selectors is correct, which is the part we own and the part that regresses.
+-->
+<meta charset="utf-8" />
+<title>Telegram Web K — DOM fixture</title>
+<style>
+  /* Layout matters: offsetParent is null for display:none, which is how the fixture models
+     the hidden chat pane. Keep this simple and explicit. */
+  .hidden-pane { display: none; }
+  .bubbles { overflow-y: auto; height: 300px; }
+  .bubble { padding: 4px; }
+  .message { display: block; }
+  .time { color: #999; font-size: 11px; margin-left: 6px; }
+  .input-message-input { border: 1px solid #ccc; min-height: 24px; padding: 4px; }
+  .btn-send { padding: 4px 8px; }
+</style>
+
+<!-- The stale, hidden chat pane Telegram leaves behind. Nothing here must ever be touched. -->
+<div class="chat hidden-pane" id="stale-pane">
+  <div class="bubbles" id="stale-bubbles">
+    <div class="bubble" data-mid="900">
+      <div class="message">a message from the previously open chat<span class="time">09:00</span></div>
+    </div>
+  </div>
+  <div class="input-message-input" contenteditable="true" id="stale-compose"></div>
+  <button class="btn-send" id="stale-send">send</button>
+</div>
+
+<!-- The active chat pane. -->
+<div class="chat" id="active-pane">
+  <div class="bubbles" id="bubbles"></div>
+  <div class="input-message-input" contenteditable="true" id="compose"></div>
+  <button class="btn-send" id="send">send</button>
+</div>
+
+<script>
+  // Test harness: append bubbles the way Telegram does, so the MutationObserver in
+  // inbound.ts sees the same shape of mutation it sees in production.
+  window.__tg = {
+    /** Append a message bubble. `outgoing` marks our own, which the selectors match too. */
+    addBubble(mid, text, { outgoing = false, time = '12:00' } = {}) {
+      const bubble = document.createElement('div')
+      bubble.className = 'bubble' + (outgoing ? ' is-out' : ' is-in')
+      bubble.setAttribute('data-mid', String(mid))
+      const msg = document.createElement('div')
+      msg.className = 'message'
+      msg.append(document.createTextNode(text))
+      const t = document.createElement('span')
+      t.className = 'time'
+      t.textContent = time
+      msg.append(t)
+      bubble.append(msg)
+      document.getElementById('bubbles').append(bubble)
+      return bubble
+    },
+    /** What the user visibly reads in a bubble, timestamp excluded. */
+    renderedText(mid) {
+      const b = document.querySelector(`.bubble[data-mid="${mid}"] .message`)
+      if (!b) return null
+      const clone = b.cloneNode(true)
+      clone.querySelectorAll('.time').forEach((n) => n.remove())
+      return clone.textContent.trim()
+    },
+    decodedSpan(mid) {
+      const el = document.querySelector(`.bubble[data-mid="${mid}"] .lortnoc-decoded`)
+      return el ? el.textContent.trim() : null
+    },
+    /** Messages that were actually "sent" — the fixture's stand-in for Telegram's send. */
+    sent: [],
+  }
+
+  // The send button appends whatever is in the compose box, then clears it — close enough to
+  // Telegram's behaviour for the interceptor tests, and it lets us assert that plaintext
+  // never reaches it.
+  document.getElementById('send').addEventListener('click', () => {
+    const input = document.getElementById('compose')
+    const text = input.innerText.trim()
+    if (!text) return
+    window.__tg.sent.push(text)
+    input.innerHTML = ''
+  })
+</script>

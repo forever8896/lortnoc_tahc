@@ -45,3 +45,13 @@ lortnoc-tahc-extension-v1/
 
 # Paired-test browser profiles (contain a logged-in Telegram session)
 extension/.dev-profiles/
+
+# Built extension artifacts. Releases are built by CI from a tag and published on GitHub with a
+# SHA-256 + provenance attestation (.github/workflows/release.yml) — that is the ONLY artifact
+# anyone should trust. Unpacked trees and zips sitting in the working tree are indistinguishable
+# candidates of unclear provenance, which undercuts exactly the claim the release workflow makes.
+lortnoc-tahc-extension-*/
+lortnoc-tahc-extension-*.zip
+
+# Browser binaries for the Playwright test tier (npx playwright install chromium).
+/node_modules/

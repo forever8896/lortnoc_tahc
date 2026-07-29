@@ -1,0 +1,19 @@
+{
+  "name": "lortnoc-tahc",
+  "private": true,
+  "description": "Root test orchestration only. Each workspace (extension/, app/, codec/, contracts/, relayer/, scripts/, shared/) keeps its own manifest and lockfile; the only dependency here is Playwright, used by the browser tier.",
+  "scripts": {
+    "test": "node test/run.mjs",
+    "test:unit": "node test/run.mjs unit",
+    "test:invariants": "node test/run.mjs invariants",
+    "test:codec": "node test/run.mjs codec",
+    "test:contracts": "node test/run.mjs contracts",
+    "test:browser": "node test/run.mjs browser",
+    "test:integration": "node test/run.mjs integration",
+    "test:watch": "node --import ./test/lib/resolve-ts.mjs --test --watch test/unit/*.test.mjs",
+    "codec": "cd codec && python3 server.py"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.0"
+  }
+}
