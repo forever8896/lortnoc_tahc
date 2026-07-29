@@ -336,17 +336,28 @@ This is the same failure as the 2026-07-27 Sepolia resolution bug, where `_claim
 reporting `addr = 0x0`. Same class of mistake, second occurrence — and this time it is real money
 rather than a rendering problem.
 
-**Checklist, in order:**
+**Roles as they stand (checked 2026-07-29):** classic **unwrapped** name, and a single address
+holds both roles — registrant *and* controller are `0xe35D…6b50`. So both have to move.
 
-1. Transfer the **registrant** to the hardware wallet.
-2. Transfer the **manager / controller** too. If the old key keeps manager rights it can repoint
-   `addr` at any time — that is a live redirect on your donation address, not a theoretical one.
-3. **Set `addr` to the hardware wallet address.** Do not skip because the transfer "worked".
-4. **Re-resolve the name and confirm `addr` equals the hardware wallet** before it goes on the
-   site. Verify, don't trust — it is the project's own slogan.
-5. Consider extending the registration past 2027-07-25 now. If the name lapses, the donation
-   address becomes whoever renews it. For a published donation identity that is not routine
-   housekeeping.
+**Order matters. Set the record BEFORE moving ownership:**
+
+1. **Set `addr` → hardware wallet**, signed from `0xe35D…6b50` while it still holds controller.
+2. **Verify it resolves** to the hardware wallet. This is the money-critical check; everything
+   else is bookkeeping.
+3. **Transfer the controller** to the hardware wallet.
+4. **Transfer the registrant** to the hardware wallet.
+5. **Extend the registration** past 2027-07-25 while you are in there.
+6. Re-verify resolution once more at the end.
+
+Why this order and not the intuitive one: if you transfer ownership first and set `addr` last,
+there is a window where the name is owned by the hardware wallet but still *resolves* to the old
+address — donations arriving in that window go to the wallet you are moving away from. Setting the
+record first means the name never points anywhere you do not want it to, and the hardware wallet
+only has to *receive* during the migration rather than sign.
+
+Note also that step 3 is not optional housekeeping: while `0xe35D…6b50` retains controller it can
+repoint `addr` at any time. That is a live redirect on the donation address, not a theoretical one.
+And on step 5 — if the name lapses, the donation address becomes whoever renews it.
 
 ### 6.3 Publish the name and the resolved address together
 
