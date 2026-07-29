@@ -29,7 +29,7 @@ v1 couldn't do it. control there is all-or-nothing: whoever can write, can write
 **4/**
 we run our own registry under lortnoc.eth, built on v2's UserRegistry.
 
-every user gets their own resolver. our gateway can write exactly one text record and is reverted on every other. on-chain. every time.
+every user gets their own resolver. our gateway can write exactly one text record and is reverted on every other. every time.
 
 claims are relayed, so the payer and the owner are never the same address.
 
@@ -54,14 +54,14 @@ lortnoctahc dm — our own fully private messenger
 **3/**
 in the plugin: cover text only works if it reads like a person wrote it.
 
-a grammatical sentence nobody would ever actually send is itself a flag.
+a sentence nobody would ever really send is itself a flag.
 
 so something has to judge how natural it sounds — and that judge sees text derived from your private message. it can't be anywhere that logs.
 
 **4/**
-we write each message several ways locally. @0G confidential compute scores which one reads most human, and keeps nothing.
+we write each message several ways locally. @0G sealed compute scores which reads most human, and keeps nothing.
 
-the encoder stays local — hosted inference isn't deterministic, and determinism is what makes a message decodable at all.
+the encoder stays local — hosted inference isn't deterministic, and determinism is what makes a message decodable.
 
 0G chain settles dm payments behind a nullifier.
 
