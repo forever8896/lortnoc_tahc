@@ -11,12 +11,24 @@
 //     salted hash with a short window, and the rows are purged.
 //   * The alpha table holds Telegram handles of people who publicly expressed interest in evading
 //     chat surveillance. Treat it as sensitive: collect the minimum, delete on onboarding.
-import { sql } from '@vercel/postgres'
+import { neon } from '@neondatabase/serverless'
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { promises as dns } from 'node:dns'
 
 /** Bumped whenever the alpha disclaimer text changes, so a record says what was agreed to. */
 export const DISCLAIMER_VERSION = '2026-07-29.1'
+
+/**
+ * The one database handle, exported so the endpoints never build their own.
+ *
+ * Neon's driver, not `@vercel/postgres` — the latter is deprecated, and the store Vercel
+ * provisions today IS Neon (it injects DATABASE_URL / POSTGRES_URL and a NEON_PROJECT_ID).
+ *
+ * ⚠️ Difference that will bite when editing: this tagged template resolves to the ROWS ARRAY
+ * directly, where `@vercel/postgres` resolved to `{ rows }`. Destructuring `{ rows }` off it
+ * yields undefined rather than an error.
+ */
+export const sql = neon(process.env.DATABASE_URL || process.env.POSTGRES_URL)
 
 let ready = null
 
@@ -70,7 +82,7 @@ function bucketOf(req, scope) {
 /** True if this caller is over the limit. Window is fixed, not sliding — good enough here. */
 export async function rateLimited(req, scope, max = 5, windowMinutes = 10) {
   const bucket = bucketOf(req, scope)
-  const { rows } = await sql`
+  const rows = await sql`
     INSERT INTO rate_limit (bucket, count, window_start)
     VALUES (${bucket}, 1, now())
     ON CONFLICT (bucket) DO UPDATE SET

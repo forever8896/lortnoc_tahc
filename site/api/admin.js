@@ -8,8 +8,7 @@
 //
 // One route rather than four files: the surface is small, and fewer entry points to a sensitive
 // dataset is easier to reason about than a tidy REST tree.
-import { init, authorised, json, readBody } from './_lib/db.js'
-import { sql } from '@vercel/postgres'
+import { init, authorised, json, readBody, sql } from './_lib/db.js'
 
 export const config = { runtime: 'nodejs' }
 
@@ -35,7 +34,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const which = String(req.query?.export || '')
       if (which === 'waitlist' || which === 'alpha') {
-        const { rows } = which === 'waitlist'
+        const rows = which === 'waitlist'
           ? await sql`SELECT email, source, created_at FROM waitlist ORDER BY created_at DESC`
           : await sql`SELECT telegram, status, message, agreed_at, disclaimer, source, created_at
                       FROM alpha ORDER BY created_at DESC`
@@ -45,20 +44,20 @@ export default async function handler(req, res) {
         return res.end(csv(rows))
       }
 
-      const [w, a] = await Promise.all([
+      const [waitlist, alpha] = await Promise.all([
         sql`SELECT id, email, source, created_at FROM waitlist ORDER BY created_at DESC LIMIT 1000`,
         sql`SELECT id, telegram, status, message, agreed_at, disclaimer, source, created_at
             FROM alpha ORDER BY created_at DESC LIMIT 1000`,
       ])
       return json(res, 200, {
-        waitlist: w.rows,
-        alpha: a.rows,
+        waitlist,
+        alpha,
         counts: {
-          waitlist: w.rows.length,
-          alpha: a.rows.length,
-          new: a.rows.filter((r) => r.status === 'new').length,
-          invited: a.rows.filter((r) => r.status === 'invited').length,
-          onboarded: a.rows.filter((r) => r.status === 'onboarded').length,
+          waitlist: waitlist.length,
+          alpha: alpha.length,
+          new: alpha.filter((r) => r.status === 'new').length,
+          invited: alpha.filter((r) => r.status === 'invited').length,
+          onboarded: alpha.filter((r) => r.status === 'onboarded').length,
         },
       })
     }

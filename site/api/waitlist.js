@@ -2,8 +2,7 @@
 //
 // Single opt-in by decision (docs/LAUNCH-PLAN.md §3.4): no confirmation step, no friction. The
 // MX check in validEmail is the mitigation that keeps the list mailable.
-import { init, rateLimited, validEmail, json, readBody, isBot } from './_lib/db.js'
-import { sql } from '@vercel/postgres'
+import { init, rateLimited, validEmail, json, readBody, isBot, sql } from './_lib/db.js'
 
 export const config = { runtime: 'nodejs' } // needs dns for the MX lookup
 

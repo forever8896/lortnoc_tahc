@@ -6,8 +6,7 @@
 // This table is the sensitive one. It is a list of people who publicly expressed interest in
 // evading chat surveillance, indexed by an identifier that resolves to a real person, in the
 // jurisdiction that produced Chat Control. Collect the minimum and delete on onboarding.
-import { init, rateLimited, normaliseTelegram, json, readBody, isBot, DISCLAIMER_VERSION } from './_lib/db.js'
-import { sql } from '@vercel/postgres'
+import { init, rateLimited, normaliseTelegram, json, readBody, isBot, DISCLAIMER_VERSION, sql } from './_lib/db.js'
 
 export const config = { runtime: 'nodejs' }
 
