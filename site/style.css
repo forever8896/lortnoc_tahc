@@ -617,3 +617,20 @@ textarea{ resize:vertical; min-height:84px; }
 }
 .note b, .note strong{ color:var(--ink); font-weight:400; }
 .note code{ font-size:0.92em; }
+
+/* Waitlist form in the closing section — the only signup on the page since the
+   early-access band was removed. Centred to match .actions above it. */
+.close__form{ max-width:420px; margin:clamp(36px,4vw,56px) auto 0; align-items:center; }
+.close__form .btn{ align-self:center; }
+.close__form input[type="email"]{ text-align:center; }
+.close .actions{ margin-top:clamp(28px,3vw,40px); }
+
+/* Donation rows inside the modal: narrower than the page, so the full 42-char address
+   pushed the Copy button onto its own line. Shrink the label and the hex rather than
+   truncate the address — a shortened address can't be checked against the repo. */
+.modal .donate{ margin-top:18px; }
+.modal .donate__label{ flex:0 0 52px; font-size:10px; }
+.modal .donate__val{ font-size:13px; }
+.modal .donate__val--addr{ font-size:11px; }
+.modal .donate__row{ gap:10px; padding:13px 14px; flex-wrap:nowrap; }
+.modal .donate__copy{ flex:0 0 auto; }
