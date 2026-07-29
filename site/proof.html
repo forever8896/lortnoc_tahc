@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ENS v2 — Live On-Chain Proof | Lortnoc Tahc</title>
+<style>
+  :root{ --bg:#08080A; --ink:#EDEAE4; --signal:#12C4BE; --signal-rgb:18,196,190;
+    --muted:rgba(237,234,228,0.55); --faint:rgba(237,234,228,0.35); --rule:rgba(237,234,228,0.13);
+    --panel:#0e0e12; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--ink); padding:clamp(20px,5vw,64px);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.6; }
+  a{ color:var(--signal); }
+  .wrap{ max-width:1000px; margin:0 auto; }
+  h1{ font-size:clamp(28px,5vw,46px); letter-spacing:-0.03em; margin:0 0 6px; font-weight:600; }
+  .sub{ color:var(--muted); font-size:15px; margin:0 0 26px; }
+  .eyebrow{ font-family:var(--mono); font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--signal); }
+  .note{ border:1px solid var(--rule); background:var(--panel); padding:16px 18px; margin:22px 0; border-left:2px solid var(--signal); }
+  .note b{ color:var(--ink); }
+  .bar{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:22px 0; }
+  select,button,input{ font:inherit; }
+  select,input{ background:var(--bg); color:var(--ink); border:1px solid var(--rule); padding:9px 12px; font-family:var(--mono); font-size:13px; }
+  input{ min-width:280px; flex:1; }
+  button{ background:var(--signal); color:#06100f; border:0; padding:10px 18px; font-weight:600; cursor:pointer; }
+  button:hover{ background:var(--ink); }
+  .card{ border:1px solid var(--rule); background:var(--panel); margin:18px 0; }
+  .card__h{ display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap;
+    padding:16px 20px; border-bottom:1px solid var(--rule); }
+  .card__h b{ font-size:19px; font-family:var(--mono); letter-spacing:-.01em; }
+  .card__h .pill{ font-family:var(--mono); font-size:11px; color:var(--faint); }
+  .card__b{ padding:8px 20px 18px; }
+  .step{ padding:14px 0; border-bottom:1px solid var(--rule); }
+  .step:last-child{ border-bottom:0; }
+  .step__k{ font-family:var(--mono); font-size:12px; color:var(--muted); margin-bottom:8px; }
+  .step__k .fn{ color:var(--signal); }
+  .kv{ display:grid; grid-template-columns:auto 1fr; gap:4px 14px; font-family:var(--mono); font-size:12px; margin:6px 0; }
+  .kv dt{ color:var(--faint); white-space:nowrap; }
+  .kv dd{ margin:0; word-break:break-all; }
+  .val{ color:var(--signal); }
+  pre{ background:#050506; border:1px solid var(--rule); padding:11px 13px; overflow-x:auto; margin:8px 0 0;
+    font-family:var(--mono); font-size:11.5px; color:var(--muted); white-space:pre-wrap; word-break:break-all; }
+  pre b{ color:var(--ink); font-weight:600; }
+  .ok{ color:#7fe0a0; } .err{ color:#f0806a; }
+  .links a{ font-family:var(--mono); font-size:12px; margin-right:16px; display:inline-block; }
+  details{ margin-top:8px; } summary{ cursor:pointer; font-family:var(--mono); font-size:12px; color:var(--faint); }
+  .foot{ color:var(--faint); font-size:13px; margin-top:36px; border-top:1px solid var(--rule); padding-top:20px; }
+  code{ font-family:var(--mono); color:var(--signal); background:rgba(var(--signal-rgb),.08); padding:1px 5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="eyebrow">Lortnoc Tahc &middot; verify, don't trust</span>
+  <h1>ENS v2 &mdash; live on-chain proof</h1>
+  <p class="sub">This page reads our ENS v2 records straight from Sepolia in your browser, right now, and shows every raw JSON-RPC call it makes. Nothing is stored here; point it at any Sepolia RPC you trust.</p>
+
+  <div class="note">
+    <b>Why our names don't show on app.ens.domains.</b> We use <b>ENS v2</b> &mdash; the new, experimental Sepolia deployment (<code>ensdomains/contracts-v2</code>, snapshot 2026-06-29). The consumer ENS app and most explorers only index ENS <b>v1</b>, so <code>kilian.lortnoctahc.eth</code> won't appear there. That's expected for v2, not a sign it isn't real. The records are on-chain; this page reads them at the contract level, the same way any ENS v2 client will.
+  </div>
+
+  <div class="note">
+    <b>How resolution works here (two live calls per handle).</b>
+    <div class="kv" style="margin-top:10px">
+      <dt>1.</dt><dd><span class="val">LortnocRegistry.getResolver(label)</span> &rarr; the handle's <em>own</em> resolver contract. Our registry is a real ENS v2 <code>IRegistry</code> slotted under <code>lortnoctahc.eth</code>.</dd>
+      <dt>2.</dt><dd><span class="val">resolver.text(namehash, key)</span> &rarr; the record value written on-chain (messaging key, Sui pointer, knock challenge&hellip;).</dd>
+    </div>
+    Both are plain <code>eth_call</code> reads &mdash; no wallet, no trust in us. Two handles returning two <em>different</em> resolver addresses is the proof that every handle gets its own resolver, not a shared row.
+  </div>
+
+  <div class="bar">
+    <label class="pill" style="font-family:var(--mono);font-size:12px;color:var(--muted)">Sepolia RPC:</label>
+    <input id="rpc" value="https://sepolia.drpc.org" spellcheck="false">
+    <button id="run">Resolve live &rarr;</button>
+    <span id="status" style="font-family:var(--mono);font-size:12px;color:var(--faint)"></span>
+  </div>
+
+  <div class="card">
+    <div class="card__h"><b>Contracts (Sepolia)</b><span class="pill">our own deployment</span></div>
+    <div class="card__b">
+      <div class="kv">
+        <dt>LortnocRegistry</dt><dd><a target="_blank" id="regLink">0x2D95c86bd9a850d95897c604c8EB00131a9C62a5</a></dd>
+        <dt>LortnocRegistrar</dt><dd><a target="_blank" id="rarLink">0x794ec3b1fb8ad0d23f3f654c20993ba4ff762c19</a></dd>
+      </div>
+    </div>
+  </div>
+
+  <div id="handles"></div>
+
+  <p class="foot">
+    Independent checks that need nothing from us:
+    <br>&bull; <b>Foundry:</b> <code style="white-space:normal">cast call &lt;resolver&gt; "text(bytes32,string)(string)" &lt;namehash&gt; "eth.lortnoc.pubkey" --rpc-url https://sepolia.drpc.org</code>
+    <br>&bull; <b>Etherscan:</b> open the resolver address &rarr; Read Contract &rarr; <code>text(node, key)</code>.
+    <br>&bull; <b>Raw:</b> the exact <code>eth_call</code> request/response for every read is shown above under &ldquo;raw call&rdquo;.
+  </p>
+</div>
+
+<script>
+const REGISTRY = "0x2D95c86bd9a850d95897c604c8EB00131a9C62a5";
+const REGISTRAR = "0x794ec3b1fb8ad0d23f3f654c20993ba4ff762c19";
+const SEL_TEXT = "0x59d1d43c";        // text(bytes32,string)
+const SEL_GETRESOLVER = "0xe4ae7d77"; // getResolver(string)
+const SCAN = "https://sepolia.etherscan.io/address/";
+
+// Namehashes precomputed per the ENS spec (verify with `cast namehash <name>`).
+const HANDLES = [
+  { name:"kilian.lortnoctahc.eth", label:"kilian",
+    node:"0xf2eaa4ff37c6f2e305d4179fa63a8b97cbea8d613851ed6d4cda317eb428ca9b" },
+  { name:"lortnoc.lortnoctahc.eth", label:"lortnoc",
+    node:"0xdadd39cb1dfa3ab21966fb0806aec338eac0afa4739e33e734b6c4f5890717dc" },
+];
+const KEYS = ["eth.lortnoc.pubkey","eth.lortnoc.sui","eth.lortnoc.knock","eth.lortnoc.inbox","eth.lortnoc.discoverable"];
+
+const enc = new TextEncoder();
+const toHex = b => [...b].map(x=>x.toString(16).padStart(2,"0")).join("");
+const word = n => n.toString(16).padStart(64,"0");
+const padR = h => h.length%64 ? h + "0".repeat(64-h.length%64) : h;
+function encString(s){ const b = enc.encode(s); return word(b.length) + padR(toHex(b)); }
+function encText(node, key){ return SEL_TEXT + node.slice(2) + word(0x40) + encString(key); }
+function encGetResolver(label){ return SEL_GETRESOLVER + word(0x20) + encString(label); }
+function decString(ret){
+  const h = ret.slice(2); if (h.length < 128) return "";
+  const off = parseInt(h.slice(0,64),16)*2;
+  const len = parseInt(h.slice(off,off+64),16)*2;
+  const data = h.slice(off+64, off+64+len);
+  return new TextDecoder().decode(new Uint8Array((data.match(/.{2}/g)||[]).map(x=>parseInt(x,16))));
+}
+function decAddr(ret){ return "0x" + ret.slice(2).slice(24,64); }
+const isZero = a => /^0x0{40}$/i.test(a);
+
+async function ethCall(rpc, to, data){
+  const req = { jsonrpc:"2.0", id:1, method:"eth_call", params:[{to, data}, "latest"] };
+  const res = await fetch(rpc, { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(req) });
+  const json = await res.json();
+  return { req, json };
+}
+function rawBlock(req, json){
+  return `<b>request</b>  POST ${document.getElementById("rpc").value}\n` +
+         JSON.stringify(req) + `\n\n<b>response</b>\n` + JSON.stringify(json);
+}
+const esc = s => (s||"").replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+async function resolveHandle(rpc, H){
+  const el = document.getElementById("h-"+H.label);
+  let out = "";
+  // Step 1 — registry.getResolver(label)
+  try {
+    const { req, json } = await ethCall(rpc, REGISTRY, encGetResolver(H.label));
+    const resolver = json.result ? decAddr(json.result) : null;
+    out += `<div class="step"><div class="step__k">step 1 &middot; <span class="fn">LortnocRegistry.getResolver("${H.label}")</span></div>`;
+    if (!resolver || isZero(resolver)) {
+      out += `<div class="kv"><dt>resolver</dt><dd class="err">0x0 &mdash; not claimed on this registry</dd></div>`;
+      out += `<details><summary>raw call</summary><pre>${esc(rawBlock(req,json))}</pre></details></div>`;
+      el.innerHTML = out; return;
+    }
+    out += `<div class="kv"><dt>own resolver</dt><dd><a target="_blank" href="${SCAN}${resolver}#readContract" class="val">${resolver}</a></dd></div>`;
+    out += `<details><summary>raw call</summary><pre>${esc(rawBlock(req,json))}</pre></details></div>`;
+
+    // Step 2 — resolver.text(node, key) for each record
+    for (const key of KEYS){
+      const r = await ethCall(rpc, resolver, encText(H.node, key));
+      const v = r.json.result ? decString(r.json.result) : "";
+      if (!v) continue;
+      out += `<div class="step"><div class="step__k">step 2 &middot; <span class="fn">resolver.text(node, "${key}")</span></div>`;
+      out += `<div class="kv"><dt>${key}</dt><dd class="val ok">${esc(v)}</dd></div>`;
+      out += `<details><summary>raw call</summary><pre>${esc(rawBlock(r.req, r.json))}</pre></details></div>`;
+    }
+  } catch(e){
+    out += `<div class="step"><div class="err" style="font-family:var(--mono);font-size:12px">RPC error: ${esc(String(e.message||e))} &mdash; try a different Sepolia RPC above (some block browser CORS).</div></div>`;
+  }
+  el.innerHTML = out;
+}
+
+function render(){
+  document.getElementById("regLink").href = SCAN + REGISTRY;
+  document.getElementById("rarLink").href = SCAN + REGISTRAR + "#events";
+  const host = document.getElementById("handles");
+  host.innerHTML = HANDLES.map(H => `
+    <div class="card">
+      <div class="card__h"><b>${H.name}</b><span class="pill">namehash ${H.node.slice(0,14)}…</span></div>
+      <div class="card__b" id="h-${H.label}"><div class="step__k">resolving…</div></div>
+    </div>`).join("");
+}
+async function runAll(){
+  const rpc = document.getElementById("rpc").value.trim();
+  const s = document.getElementById("status");
+  s.textContent = "reading Sepolia…";
+  render();
+  await Promise.all(HANDLES.map(H => resolveHandle(rpc, H)));
+  s.innerHTML = '<span class="ok">done — read live from ' + esc(rpc) + '</span>';
+}
+document.getElementById("run").addEventListener("click", runAll);
+runAll();
+</script>
+</body>
+</html>

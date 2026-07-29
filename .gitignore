@@ -56,3 +56,16 @@ lortnoc-tahc-extension-*.zip.sha256
 
 # Browser binaries for the Playwright test tier (npx playwright install chromium).
 /node_modules/
+
+# Internal working documents. Kept on disk, out of the public repo: they are
+# planning and status material, and some of it names where operational secrets
+# live. The public technical story is README.md + docs/ARCHITECTURE.md.
+/CLAUDE.md
+/CHECKLIST.md
+/PLAN.md
+/.env.example
+/docs/LAUNCH-PLAN.md
+/docs/PRD-*.md
+/docs/landing-prompt.md
+/docs/x-threads*.md
+/docs/check-threads.mjs

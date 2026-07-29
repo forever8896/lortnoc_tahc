@@ -9,7 +9,11 @@ Then there's the second half: a messenger you can walk away with. Your handle is
 own, your messages live in a vault you control, and the membership that pays for it can't be
 linked to the handle it bought.
 
-Built at **ETHGlobal Lisbon 2026**.
+> **Status: closed alpha. The hosted codec is paused.**
+> Too many people arrived at once for a build still being fixed, so the download is closed and
+> the hosted service returns a 503 rather than failing in your hands. The code is unaffected —
+> [run your own codec](#run-your-own-codec) and the whole thing works end to end, with no part of
+> it touching us. Early access: [lortnoctahc.com](https://lortnoctahc.com).
 
 ![Landing page](docs/screenshots/site-hero.jpg)
 
@@ -24,10 +28,10 @@ Everything below is deployed and was exercised with real transactions, not mocke
 
 | Layer | Where | Address / id |
 |---|---|---|
-| Handles | Ethereum Sepolia | `lortnoctahc.eth` · registry `0x2D95c86b…62a5` · registrar `0x794ec3b1…2c19` |
+| Handles | Ethereum Sepolia | `lortnoctahc.eth` · registry `0x2D95c86b…62a5` · registrar `0x49bba8ce…f24ae` |
 | Membership | **0G mainnet** (16661) | `LortnocMembership` `0xe9031484…e3d6` — real money, $1 |
 | Storage | Sui testnet + Walrus | package `0xb214da01…4faf` |
-| Codec | fly.io | `lortnoc-codec.fly.dev` |
+| Codec | fly.io | `lortnoc-codec.fly.dev` — **paused during the alpha** |
 | Sealed inference | fly.io + 0G Compute | `lortnoc-zerog.fly.dev` |
 | Relayer | fly.io | `lortnoc-relayer.fly.dev` |
 
@@ -411,6 +415,25 @@ curl -s https://lortnoc-relayer.fly.dev/health
 Reproducing the deployment (a fresh chain, a rotated pin) is documented in
 [`app/docs/LIVE-SETUP.md`](app/docs/LIVE-SETUP.md).
 
+## Run your own codec
+
+The hosted codec is paused during the alpha, and it was never required. Nothing about running your
+own is a degraded path — it is the same service, and it means no part of your traffic touches us.
+
+```bash
+cd codec
+pip install -r requirements.txt
+CODEC_BACKEND=markov python3 server.py      # real stego, no torch needed
+# or: CODEC_BACKEND=gpt2 python3 server.py  # the shipped model, slower, needs torch
+```
+
+Then open the extension popup and point the codec URL at `http://localhost:8080`.
+
+The service only ever sees ciphertext — encryption happens in the page, before anything is sent —
+so self-hosting changes who runs the process, not what it can read. `GET /health` reports which
+backend actually loaded, because the dispatcher falls back `gpt2 → markov → wordmap` and `wordmap`
+is a byte→word placeholder rather than steganography.
+
 ## Build it yourself
 
 The extension is distributed as a zip on [GitHub Releases](https://github.com/forever8896/lortnoc_tahc/releases/latest) —
@@ -445,8 +468,8 @@ We'd rather write these down than have you find them.
 - **Quilt batching isn't implemented.** Storage cost is ~650× worse than it should be.
 - **`ConversationHead` stores participant handles in cleartext**, so who-talks-to-whom is public on
   Sui. Cheap to fix, not yet fixed.
-- **The treasury is a hot key.** Membership fees land in a wallet whose key lives in a container
-  env. Two transactions to move it; not yet moved.
+- **The treasury is not yet on cold storage.** Membership fees land in a wallet that also
+  deployed the contracts. Moving it is two transactions and is on the list.
 - **The contracts are unaudited** and were written in a weekend. Exposure is bounded — the
   membership contract can't withdraw from users, can't touch the member set, and holds no balance.
 - **Storage is recurring.** Walrus blobs expire; a mainnet epoch is two weeks. "A vault you can
@@ -462,14 +485,24 @@ We'd rather write these down than have you find them.
 
 ---
 
-## Prize tracks
+## Donations
 
-**0G** — anonymous membership settled on 0G mainnet with a deployed Semaphore stack, plus sealed
-inference in the live send path. **ENS** — per-user Permissioned Resolvers with per-record write
-delegation, one-transaction claim, and `verifyContract` handle proofs on ENS v2. **Sui** — Walrus
-storage behind a real `seal_approve` policy with a `ConversationHead` object.
+`lortnoctahc.eth` → `0x08d1384214f15866F849BE148b8E8aB4a814D19E`
 
-## Licence & credits
+A hardware wallet used for nothing else. Resolve the name yourself and check it matches before
+sending — the pair is published in two places (here and
+[lortnoctahc.com/donate](https://lortnoctahc.com/donate.html)) precisely so they can be checked
+against each other. **We will never DM you an address.**
 
-Codec approach informed by `nethical6/conversation-steganography`. Built on ENS v2, Semaphore v4,
-Sui/Walrus/Seal, 0G, and LI.FI.
+Donations buy nothing: no handle, no account, no place in the alpha queue. They pay for the codec
+server. Bug reports are worth more.
+
+## Licence
+
+[MIT](LICENSE).
+
+## Credits
+
+The codec approach was informed by [`nethical6/conversation-steganography`](https://github.com/nethical6/conversation-steganography),
+though no code from it is used here — the block coder in `codec/` is our own, which is also why
+its GPL does not reach this project. Built on ENS v2, Semaphore v4, Sui/Walrus/Seal, 0G and LI.FI.
