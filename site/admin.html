@@ -155,10 +155,11 @@
           '</tr>';
         }).join('') + '</table>';
     } else {
-      html = '<table class="data"><tr><th>Email</th><th>Source</th><th>Signed up</th><th></th></tr>' +
+      html = '<table class="data"><tr><th>Email</th><th>Telegram</th><th>Source</th><th>Signed up</th><th></th></tr>' +
         rows.map(function (r) {
           return '<tr>' +
             '<td class="mono">' + esc(r.email) + '</td>' +
+            '<td class="mono">' + (r.telegram ? '@' + esc(r.telegram) : '') + '</td>' +
             '<td class="mono">' + esc(r.source || '') + '</td>' +
             '<td class="mono">' + esc(String(r.created_at || '').slice(0, 10)) + '</td>' +
             '<td><button class="del" data-del="waitlist" data-id="' + r.id + '">Delete</button></td>' +

@@ -649,3 +649,8 @@ textarea{ resize:vertical; min-height:84px; }
 .modal .donate__val{ font-size:13px; }
 .modal .donate__row{ gap:10px; padding:13px 14px; flex-wrap:nowrap; }
 .modal .donate__copy{ flex:0 0 auto; }
+
+/* Reassurance under the signup fields. Small, muted, and directly beneath what it is about —
+   a privacy tool asking for a handle has to answer "what will you do with it" at the point of
+   asking, not in a policy nobody opens. */
+.signup__note{ margin:4px 0 0; font-size:12.5px; line-height:1.6; color:var(--muted); text-align:center; }

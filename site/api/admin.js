@@ -35,7 +35,7 @@ export default async function handler(req, res) {
       const which = String(req.query?.export || '')
       if (which === 'waitlist' || which === 'alpha') {
         const rows = which === 'waitlist'
-          ? await sql`SELECT email, source, created_at FROM waitlist ORDER BY created_at DESC`
+          ? await sql`SELECT email, telegram, source, created_at FROM waitlist ORDER BY created_at DESC`
           : await sql`SELECT telegram, status, message, agreed_at, disclaimer, source, created_at
                       FROM alpha ORDER BY created_at DESC`
         res.status(200)
@@ -45,7 +45,7 @@ export default async function handler(req, res) {
       }
 
       const [waitlist, alpha] = await Promise.all([
-        sql`SELECT id, email, source, created_at FROM waitlist ORDER BY created_at DESC LIMIT 1000`,
+        sql`SELECT id, email, telegram, source, created_at FROM waitlist ORDER BY created_at DESC LIMIT 1000`,
         sql`SELECT id, telegram, status, message, agreed_at, disclaimer, source, created_at
             FROM alpha ORDER BY created_at DESC LIMIT 1000`,
       ])

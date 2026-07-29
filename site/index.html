@@ -205,9 +205,13 @@
       <label class="sr-only" for="waitlist-email">Email address</label>
       <input id="waitlist-email" name="email" type="email" inputmode="email" autocomplete="email"
              placeholder="you@example.com" required spellcheck="false">
+      <label class="sr-only" for="waitlist-telegram">Telegram handle</label>
+      <input id="waitlist-telegram" name="telegram" type="text" placeholder="@yourhandle"
+             autocomplete="off" spellcheck="false" maxlength="40">
       <!-- Honeypot: real people never fill this. -->
       <input class="hp" type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">
       <button class="btn" type="submit">Join the waitlist</button>
+      <p class="signup__note">We will only reach out to you about Lortnoc Tahc. We will never share your handle.</p>
       <p class="signup__msg" role="status" aria-live="polite"></p>
     </form>
 
@@ -672,13 +676,18 @@
   }
 
   wire('waitlist-form', '/api/waitlist', function (form) {
-    var email = (form.querySelector('#waitlist-email') || {}).value || '';
-    email = email.trim();
+    var email = ((form.querySelector('#waitlist-email') || {}).value || '').trim();
     // Loose on purpose: real addresses are stranger than most regexes allow. The
     // server does the authoritative check, including MX.
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: 'That does not look like an email address.' };
-    return { data: { email: email, company: (form.querySelector('.hp') || {}).value || '' } };
-  }, 'You are on the list. One email when it opens — nothing else.');
+    // Telegram is OPTIONAL here. The waitlist is the wide net, and a second required field
+    // costs signups; validated only when someone actually typed one.
+    var tg = ((form.querySelector('#waitlist-telegram') || {}).value || '').trim().replace(/^@+/, '');
+    if (tg && !/^[a-zA-Z0-9_]{4,32}$/.test(tg)) {
+      return { error: 'Telegram handles are 5–32 characters: letters, numbers and underscores.' };
+    }
+    return { data: { email: email, telegram: tg, company: (form.querySelector('.hp') || {}).value || '' } };
+  }, 'You are on the list. We will only contact you about Lortnoc Tahc.');
 
   wire('alpha-form', '/api/alpha', function (form) {
     var agreed = (document.getElementById('alpha-agree') || {}).checked;

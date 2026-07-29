@@ -39,9 +39,13 @@ export async function init() {
     await sql`CREATE TABLE IF NOT EXISTS waitlist (
       id          SERIAL PRIMARY KEY,
       email       TEXT NOT NULL UNIQUE,
+      telegram    TEXT,
       source      TEXT,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     )`
+    // The table shipped before the handle was collected, so CREATE TABLE IF NOT EXISTS alone
+    // would leave existing deployments without the column.
+    await sql`ALTER TABLE waitlist ADD COLUMN IF NOT EXISTS telegram TEXT`
     await sql`CREATE TABLE IF NOT EXISTS alpha (
       id           SERIAL PRIMARY KEY,
       telegram     TEXT NOT NULL UNIQUE,
