@@ -1,0 +1,86 @@
+name: test
+
+# The repo had a release workflow but no test gate: tagged builds were packaged, attested and
+# published without a single test having run. This is the gate.
+#
+# The codec tier boots the service with the dependency-free `wordmap`/`markov` backends, so CI
+# needs no torch, no GPU and no model download.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24 # native TypeScript type-stripping; no build step for tests
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The test suite imports product source, which imports @noble/* and viem. Only the
+      # workspaces the tests reach need installing.
+      - name: Install workspace dependencies
+        run: |
+          npm ci --prefix extension
+          npm ci --prefix app
+          npm ci --prefix shared
+          npm install --no-audit --no-fund
+
+      - name: Unit + invariants
+        run: node test/run.mjs unit invariants
+
+      - name: Codec (python)
+        run: node test/run.mjs codec
+
+      # The DOM layer — selectors.ts, compose interception, inbound scanning — in real Chromium
+      # against a Telegram Web K fixture. Skips itself if the browser is missing, so install it.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser (DOM layer)
+        run: node test/run.mjs browser
+
+      # A real stego backend, so reversibility is proven against arithmetic coding rather
+      # than the byte->word placeholder. Started in the background and health-checked.
+      - name: Start the codec (markov backend)
+        run: |
+          cd codec
+          CODEC_BACKEND=markov PORT=8080 python3 server.py &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8080/health && break
+            sleep 1
+          done
+
+      - name: Integration
+        run: node test/run.mjs integration
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: npm ci --prefix extension && npm run --prefix extension typecheck
+      - run: npm ci --prefix app && npm run --prefix app typecheck
+
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: foundry-rs/foundry-toolchain@v1
+      # Semaphore + poseidon come from npm, not lib/ — install before compiling.
+      - run: npm ci --prefix contracts
+      - run: forge build --root contracts
+      - run: forge test --root contracts -vv
