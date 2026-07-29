@@ -301,16 +301,61 @@ pauses, at which point they get the `/health` message from §1.3. That is the in
 
 ## Phase 6 — Donation page
 
-### 6.1 The address must be cold, and it must not be the deploy key
+### 6.1 Decided: `lortnoctahc.eth` on mainnet, moved to a hardware wallet
 
-This is the same finding as Phase 0 arriving from a second direction. `0x61eE…1Bb8` is currently
-the deployer, the treasury, and a key sitting in a fly container env. **Do not put that address on
-a donation page.** Publishing it hands anyone who is curious a single address that is
-simultaneously hot, custodial of membership revenue, and now advertised as holding donations.
+Good choice, and better than a raw address for a reason worth naming: **a lookalike hex address is
+trivial to produce, a lookalike ENS name is not.** It also solves cold storage and key separation
+in one move. `0x61eE…1Bb8` — deployer, treasury, key in a fly container env — must never appear on
+a donation page, and this avoids that entirely.
 
-Generate a **fresh address for donations**, held in a hardware or otherwise cold wallet, used for
-nothing else. It should not be the treasury either — separate concerns means one compromise is not
-total, and it makes the accounting legible later.
+**Current mainnet state, checked 2026-07-29:**
+
+| | |
+|---|---|
+| `lortnoctahc.eth` registrant | `0xe35D8aDd8A16A5d4CdA2E91F473a778950aC6b50` |
+| `lortnoctahc.eth` addr record | `0xe35D8aDd8A16A5d4CdA2E91F473a778950aC6b50` |
+| expires | **2027-07-25** (~1 year) |
+| `lortnoc.eth` | **not registered on mainnet** — the §5.2 claim about it is Sepolia-scoped |
+
+Good news up front: the mainnet name is already clear of the hot deploy key.
+
+### 6.2 Moving the name does NOT move the donations
+
+**This is the one that will bite.** Transferring the name to a hardware wallet and pointing
+donations at it are two separate operations:
+
+- **Ownership** (the registrant NFT, plus the manager/controller role) — who may change records.
+- **The `addr` record** — where funds actually land when someone sends to `lortnoctahc.eth`.
+
+Transfer the NFT and leave `addr` alone, and **every donation still goes to
+`0xe35D…6b50`**, not to the hardware wallet. The name will look correctly moved in every UI while
+quietly routing money to the old address.
+
+This is the same failure as the 2026-07-27 Sepolia resolution bug, where `_claim` wrote
+`eth.lortnoc.pubkey` and never wrote `addr`, so ten handles resolved a text record perfectly while
+reporting `addr = 0x0`. Same class of mistake, second occurrence — and this time it is real money
+rather than a rendering problem.
+
+**Checklist, in order:**
+
+1. Transfer the **registrant** to the hardware wallet.
+2. Transfer the **manager / controller** too. If the old key keeps manager rights it can repoint
+   `addr` at any time — that is a live redirect on your donation address, not a theoretical one.
+3. **Set `addr` to the hardware wallet address.** Do not skip because the transfer "worked".
+4. **Re-resolve the name and confirm `addr` equals the hardware wallet** before it goes on the
+   site. Verify, don't trust — it is the project's own slogan.
+5. Consider extending the registration past 2027-07-25 now. If the name lapses, the donation
+   address becomes whoever renews it. For a published donation identity that is not routine
+   housekeeping.
+
+### 6.3 Publish the name and the resolved address together
+
+Many wallets do not resolve ENS at all, and those that do resolve at send time — so a reader who
+cannot verify what the name points to has to trust the page. Show both:
+
+> `lortnoctahc.eth` → `0x…` *(resolve it yourself before sending)*
+
+That also makes tampering detectable: if either value is altered anywhere, the pair stops matching.
 
 ### 6.2 Donations must buy nothing
 
