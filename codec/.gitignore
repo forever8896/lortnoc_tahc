@@ -1,0 +1,5 @@
+
+# Archived assets from the four GitHub releases deleted on 2026-07-29 while the
+# extension is off the market. Kept locally so the artifacts and their checksums
+# are recoverable; not for the public repo.
+/.release-archive/

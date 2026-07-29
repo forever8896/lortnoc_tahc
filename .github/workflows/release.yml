@@ -5,9 +5,19 @@ name: release-extension
 # publishes it as a Release. The landing site links here — so the download comes from GitHub
 # (not our server), and anyone can rebuild the tag and diff. Trust nothing, verify everything.
 
+# Tag-triggered publishing is DISABLED for the closed alpha.
+#
+# The four public releases were deleted deliberately — the extension is off the market while it
+# stabilises. This workflow fires on `push: tags: ['v*']`, so leaving that trigger in place meant
+# the next version tag would silently republish the download we just removed and put the site and
+# the repo back into disagreement.
+#
+# Restore the two commented lines when the alpha opens. Everything else here still works; it is
+# only the automatic trigger that is off, so a release can still be cut deliberately from the
+# Actions tab.
 on:
-  push:
-    tags: ['v*']
+  # push:
+  #   tags: ['v*']
   workflow_dispatch:
     inputs:
       tag:
