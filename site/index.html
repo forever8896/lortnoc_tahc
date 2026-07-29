@@ -163,7 +163,7 @@
       <p data-reveal="2">Tomorrow, you don&rsquo;t need their platform</p>
     </div>
     <div class="horse__body" data-reveal="1">
-      <p class="lede">Every person who installs the extension can claim a handle on <strong>Lortnoc DM</strong> &mdash; our own private protocol, where there is nothing to scan, nothing to subpoena, and nobody to ask.</p>
+      <p class="lede">Every person who runs the extension can claim a handle on <strong>Lortnoc DM</strong> &mdash; our own private protocol, where there is nothing to scan, nothing to subpoena, and nobody to ask.</p>
       <p class="lede">The extension is how you get out. Lortnoc DM is where you land.</p>
     </div>
   </section>
@@ -281,34 +281,82 @@
   </section>
 
 
-  <!-- 07 ─ the close -->
-  <section class="wrap install" id="get" aria-label="Install the extension">
+  <!-- 07 ─ early access -->
+  <section class="wrap install" id="get" aria-label="Get early access">
     <div class="integrations__intro" data-reveal="1">
-      <p class="eyebrow">Install &middot; verify, don&rsquo;t trust</p>
-      <h2>Don&rsquo;t take our word for it. Read the code, then run it.</h2>
-      <p class="lede">A privacy tool you can&rsquo;t inspect is just another promise. So there&rsquo;s no store gatekeeper and no black box: the extension is built in the open by public CI, published straight to GitHub, and you can rebuild it from the tag and check it yourself before it ever touches your browser.</p>
+      <p class="eyebrow">Closed alpha &middot; hosted service paused</p>
+      <h2>We took it off the shelf so we could get it right.</h2>
+      <p class="lede">More people found this in a week than we built it for. So rather than hand out a build we are still fixing and let it fail in your hands, we have paused the hosted codec and closed the download. A privacy tool gets exactly one first impression.</p>
+      <p class="lede">The code did not go anywhere. It is open, it always was, and you can still run the whole thing yourself today &mdash; nothing in it needs us.</p>
     </div>
 
-    <ol class="steps" data-reveal="2">
-      <li><b>Download</b> the latest build from GitHub Releases &mdash; served by GitHub, not by us &mdash; and check its <b>SHA-256</b> against the value on the release page.</li>
-      <li><b>Unzip it</b>, open <code>chrome://extensions</code>, and turn on <b>Developer mode</b> (top-right). Chrome will note it&rsquo;s a developer extension on each launch &mdash; expected, and the price of not hiding behind a store.</li>
-      <li>Click <b>Load unpacked</b>, choose the unzipped folder, open Telegram Web, and toggle <b>PrivacyMaxxing</b> on. You&rsquo;re hidden.</li>
-    </ol>
+    <div class="signup" data-reveal="2">
+      <div class="signup__card">
+        <p class="eyebrow">Waitlist</p>
+        <h3>Tell me when it&rsquo;s ready</h3>
+        <p>One email when the alpha opens to everyone. Nothing else, ever.</p>
+        <form class="signup__form" id="waitlist-form" novalidate>
+          <label class="sr-only" for="waitlist-email">Email address</label>
+          <input id="waitlist-email" name="email" type="email" inputmode="email" autocomplete="email"
+                 placeholder="you@example.com" required spellcheck="false">
+          <!-- Honeypot: real people never fill this. Kills most bots for free. -->
+          <input class="hp" type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <button class="btn" type="submit">Join the waitlist</button>
+          <p class="signup__msg" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+
+      <div class="signup__card signup__card--alt">
+        <p class="eyebrow eyebrow--signal">Alpha</p>
+        <h3>Break it with us</h3>
+        <p>Get in now, on the condition that you know what you are getting. It is rough, and we will ask you to reinstall by hand as we ship.</p>
+        <button class="btn" type="button" id="alpha-open">Become an alpha tester</button>
+      </div>
+    </div>
 
     <div class="actions" data-reveal="3">
-      <a class="btn" href="https://github.com/forever8896/lortnoc_tahc/releases/latest" target="_blank" rel="noopener">Download the extension</a>
       <a class="btn btn--ghost" href="https://github.com/forever8896/lortnoc_tahc" target="_blank" rel="noopener">Read the source</a>
-      <a class="btn btn--ghost" href="https://github.com/forever8896/lortnoc_tahc#build-it-yourself" target="_blank" rel="noopener">Rebuild &amp; verify</a>
+      <a class="btn btn--ghost" href="https://github.com/forever8896/lortnoc_tahc#run-your-own-codec" target="_blank" rel="noopener">Run your own codec</a>
+      <a class="btn btn--ghost" href="donate.html">Support the work</a>
     </div>
-    <p class="eyebrow install__note" data-reveal="3">Prefer one click? A Chrome Web Store listing is on the way &mdash; but the verifiable path above will always be here.</p>
+    <p class="eyebrow install__note" data-reveal="3">The hosted codec is paused, not gone. <code>git clone</code>, <code>cd codec</code>, <code>python3 server.py</code> &mdash; point the extension at <code>localhost:8080</code> and every part of it works, with none of it touching us.</p>
   </section>
+
+  <!-- Alpha tester dialog. Native <dialog>: focus trapping, Esc and backdrop come free. -->
+  <dialog class="modal" id="alpha-modal" aria-labelledby="alpha-title">
+    <form method="dialog" class="modal__x"><button aria-label="Close">&times;</button></form>
+    <h3 id="alpha-title">Before you say yes</h3>
+    <p class="modal__lede">This is an early build of a privacy tool. Read this properly &mdash; it is the whole reason we are gating it.</p>
+    <ul class="modal__terms">
+      <li><b>It is experimental and it will break.</b> Messages may fail to send or fail to decode. We fail closed, so a failure never sends your plaintext &mdash; but it does mean the message does not arrive.</li>
+      <li><b>You will reinstall by hand.</b> Developer-mode extensions do not auto-update. Every new version is a manual download and reload, and we ship often.</li>
+      <li><b>The service will move under you.</b> We restart and change the hosted codec without notice during the alpha.</li>
+      <li><b>Do not use it for anything that matters yet.</b> Not for anything you would be harmed by losing, and not for anything you would be harmed by having exposed. It has not been independently audited.</li>
+    </ul>
+    <form id="alpha-form" novalidate>
+      <label class="modal__agree">
+        <input type="checkbox" id="alpha-agree" required>
+        <span>I have read the above and I want in anyway.</span>
+      </label>
+      <label for="alpha-telegram">Your Telegram handle</label>
+      <input id="alpha-telegram" name="telegram" type="text" placeholder="@yourhandle" required
+             autocomplete="off" spellcheck="false" maxlength="40">
+      <p class="modal__why">It is a Telegram overlay, so this is how we reach you to let you in. We ask for nothing else &mdash; no email, no wallet, no name. It never touches your messages, your keys, or your handle on Lortnoc DM, and we delete it once you are onboarded or whenever you ask.</p>
+      <label for="alpha-message">Anything you want to tell us <span class="modal__opt">(optional)</span></label>
+      <textarea id="alpha-message" name="message" rows="3" maxlength="500" placeholder="What are you hoping to use it for? What would you break first?"></textarea>
+      <input class="hp" type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <button class="btn" type="submit">Sign me up</button>
+      <p class="signup__msg" role="status" aria-live="polite"></p>
+    </form>
+  </dialog>
 
   <section class="wrap close" aria-label="Get Lortnoc Tahc">
     <div class="wordmark" data-reveal="1">Lortnoc Tahc</div>
     <p class="close__claim" data-reveal="2">Solving a real problem. With a real solution. And a real business model.</p>
     <div class="actions" data-reveal="3">
-      <a class="btn" href="#get">Get the extension</a>
-      <a class="btn btn--ghost" href="#handle">Claim your handle</a>
+      <a class="btn" href="#get">Join the waitlist</a>
+      <a class="btn btn--ghost" href="#get" data-alpha-open>Become an alpha tester</a>
+      <a class="btn btn--ghost" href="donate.html">Support the work</a>
     </div>
     <p class="eyebrow signoff">Lortnoc Tahc. That&rsquo;s Chat Control spelled backwards.</p>
   </section>
@@ -675,6 +723,94 @@
     requestAnimationFrame(loop);
   })(performance.now());
 
+})();
+</script>
+
+<!-- Early-access forms. Deliberately separate from the scroll engine above: if the film
+     rig throws on an old browser, signing up still works. -->
+<script>
+(function () {
+  var modal = document.getElementById('alpha-modal');
+
+  function openAlpha() {
+    if (!modal) return;
+    if (typeof modal.showModal === 'function') modal.showModal();
+    else modal.setAttribute('open', '');       // very old browsers: inline fallback
+    var f = document.getElementById('alpha-telegram');
+    if (f) setTimeout(function () { f.focus(); }, 50);
+  }
+
+  var openBtn = document.getElementById('alpha-open');
+  if (openBtn) openBtn.addEventListener('click', openAlpha);
+  Array.prototype.forEach.call(document.querySelectorAll('[data-alpha-open]'), function (el) {
+    el.addEventListener('click', function (e) { e.preventDefault(); openAlpha(); });
+  });
+
+  function say(form, text, ok) {
+    var el = form.querySelector('.signup__msg');
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'signup__msg ' + (ok ? 'signup__msg--ok' : 'signup__msg--err');
+  }
+
+  /** POST a form to an endpoint. Buttons disable while in flight so a double-tap
+   *  cannot double-submit, and the button label is restored on failure. */
+  function wire(formId, endpoint, build, done) {
+    var form = document.getElementById(formId);
+    if (!form) return;
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var payload = build(form);
+      if (payload.error) return say(form, payload.error, false);
+
+      var btn = form.querySelector('button[type="submit"]');
+      var label = btn ? btn.textContent : '';
+      if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+      say(form, '', true);
+
+      fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload.data)
+      }).then(function (r) {
+        if (!r.ok && r.status !== 204) throw new Error('http ' + r.status);
+        form.reset();
+        say(form, done, true);
+        if (btn) btn.textContent = label;
+      }).catch(function () {
+        say(form, 'Could not reach us just now — try again in a moment.', false);
+        if (btn) btn.textContent = label;
+      }).then(function () {
+        if (btn) btn.disabled = false;
+      });
+    });
+  }
+
+  wire('waitlist-form', '/api/waitlist', function (form) {
+    var email = (form.querySelector('#waitlist-email') || {}).value || '';
+    email = email.trim();
+    // Loose on purpose: real addresses are stranger than most regexes allow. The
+    // server does the authoritative check, including MX.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: 'That does not look like an email address.' };
+    return { data: { email: email, company: (form.querySelector('.hp') || {}).value || '' } };
+  }, 'You are on the list. One email when it opens — nothing else.');
+
+  wire('alpha-form', '/api/alpha', function (form) {
+    var agreed = (document.getElementById('alpha-agree') || {}).checked;
+    if (!agreed) return { error: 'Please confirm you have read the terms above.' };
+    var handle = ((document.getElementById('alpha-telegram') || {}).value || '').trim().replace(/^@+/, '');
+    if (!/^[a-zA-Z0-9_]{4,32}$/.test(handle)) {
+      return { error: 'Telegram handles are 5–32 characters: letters, numbers and underscores.' };
+    }
+    return {
+      data: {
+        telegram: handle,
+        message: ((document.getElementById('alpha-message') || {}).value || '').trim(),
+        agreedAt: new Date().toISOString(),
+        company: (form.querySelector('.hp') || {}).value || ''
+      }
+    };
+  }, 'You are in the queue. We will message you on Telegram when your slot opens.');
 })();
 </script>
 

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support the work | Lortnoc Tahc</title>
+<meta name="description" content="Fund the codec server and the people writing Lortnoc Tahc. Donations buy nothing — no handle, no access, no place in the alpha queue.">
+<meta name="theme-color" content="#08080A">
+<link rel="preload" href="fonts/jost/jost-300.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a class="topbar__home topbar__back" href="index.html" aria-label="Back to Lortnoc Tahc"><span aria-hidden="true">&larr;</span><img src="logos/lortnoctahc.png" alt="Lortnoc Tahc"></a>
+  <a class="topbar__brand" href="index.html"><span class="topbar__mark">Support</span></a>
+</header>
+
+<main class="doc">
+
+  <div class="doc__hero">
+    <h1>Support the work.</h1>
+    <p class="lede">One server, a codec, and the people keeping both honest.</p>
+  </div>
+
+  <section>
+    <h2>What this pays for</h2>
+    <p>Natural Language Encryption runs on one warm machine, because reversibility needs both ends on identical distributions. That machine is the cost. It does not scale per message and it does not bill more under load &mdash; it queues, and it slows.</p>
+    <p>Everything else here is time: the extension, the contracts, the audit, the tests that stop us shipping something that quietly fails in your hands.</p>
+
+    <p class="note"><b>This buys nothing.</b> It does not move you up the alpha queue, it is not a pre-order, and it grants no handle, no account and no access of any kind. If you want in, <a href="index.html#get">the alpha form</a> is free and always will be. We would rather have your bug reports than your money.</p>
+  </section>
+
+  <section>
+    <h2>Where to send it</h2>
+
+    <!-- The address is intentionally rendered from ONE constant, below. It is the only
+         place it appears on the whole site, so it cannot drift between hero and footer. -->
+    <div class="donate" id="donate-box" hidden>
+      <div class="donate__row">
+        <span class="donate__label">ENS</span>
+        <code class="donate__val" id="donate-ens"></code>
+        <button class="donate__copy" type="button" data-copy="donate-ens">Copy</button>
+      </div>
+      <div class="donate__row">
+        <span class="donate__label">Address</span>
+        <code class="donate__val donate__val--addr" id="donate-addr"></code>
+        <button class="donate__copy" type="button" data-copy="donate-addr">Copy</button>
+      </div>
+      <p class="donate__chain">Ethereum mainnet and any EVM L2 that shares the address. A hardware wallet, used for nothing else.</p>
+    </div>
+
+    <!-- Shown until the ENS migration is confirmed. Better an honest placeholder than an
+         address that resolves somewhere we no longer intend. -->
+    <div class="note" id="donate-soon">
+      <b>Not live yet.</b> The donation address is being moved to a hardware wallet. It will appear
+      here once the move is complete and the name resolves to it &mdash; publishing it a moment
+      early is exactly the sort of thing this project exists not to do.
+    </div>
+
+    <p class="note"><b>Verify before you send, and do not take our word for it.</b> Resolve
+    <code>lortnoctahc.eth</code> yourself and confirm it matches the address above. The two are
+    published together precisely so they can be checked against each other &mdash; if either has
+    been altered anywhere, they stop matching. The same pair appears in the
+    <a href="https://github.com/forever8896/lortnoc_tahc#donations" target="_blank" rel="noopener">repository README</a>,
+    so you have a second independent source.</p>
+
+    <p class="note"><b>We will never DM you an address.</b> Not on Telegram, not on X, not
+    anywhere. Any message claiming to be us with a wallet address is not us. There is one address,
+    it is on this page, and it is mirrored in the repo.</p>
+  </section>
+
+  <section>
+    <h2>Other ways, which we value more</h2>
+    <div class="spec-wrap">
+      <table class="spec">
+        <tr><th>Read the code</th><td>Tell us what is wrong with it. <a href="https://github.com/forever8896/lortnoc_tahc" target="_blank" rel="noopener">github.com/forever8896/lortnoc_tahc</a></td></tr>
+        <tr><th>Break the alpha</th><td>Bug reports from real use are worth more than the server bill. <a href="index.html#get">Sign up</a>.</td></tr>
+        <tr><th>Run your own codec</th><td>Every self-hosted instance is one less request we pay for, and one more person who does not have to trust us.</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <nav class="docnav">
+    <div class="docnav__grid">
+      <a href="index.html#get"><span>Early access</span><b>Join the waitlist or the alpha</b></a>
+      <a href="business.html"><span>Business model</span><b>How this pays for itself</b></a>
+      <a href="index.html"><span>Back</span><b>Lortnoc Tahc</b></a>
+    </div>
+  </nav>
+
+</main>
+
+<script>
+(function () {
+  // ── The one place the donation identity is defined ─────────────────────────
+  // LIVE stays false until `lortnoctahc.eth` actually resolves to ADDRESS on mainnet.
+  // Ownership and the addr record are separate: moving the name does NOT move the money,
+  // so this flag flips only after resolution has been re-verified against chain.
+  var ENS     = 'lortnoctahc.eth';
+  var ADDRESS = '0x08d1384214f15866F849BE148b8E8aB4a814D19E';
+  var LIVE    = false;
+
+  if (LIVE) {
+    document.getElementById('donate-ens').textContent = ENS;
+    document.getElementById('donate-addr').textContent = ADDRESS;
+    document.getElementById('donate-box').hidden = false;
+    document.getElementById('donate-soon').hidden = true;
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.donate__copy'), function (btn) {
+    btn.addEventListener('click', function () {
+      var el = document.getElementById(btn.getAttribute('data-copy'));
+      if (!el || !navigator.clipboard) return;
+      navigator.clipboard.writeText(el.textContent).then(function () {
+        var was = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(function () { btn.textContent = was; }, 1600);
+      });
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
