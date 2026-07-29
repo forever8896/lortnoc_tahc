@@ -18,9 +18,12 @@ export default defineConfig({
     // shared/ carries its own node_modules (plain-node callers need it), so without deduping the
     // bundle would ship two copies of viem and instanceof checks would start failing.
     //
-    // Deliberately viem ONLY: the app is on @noble/curves v2 while Semaphore's tree still imports
-    // the v1 `@noble/curves/ed25519` path, and forcing those onto one version breaks the build.
-    // They are pure functions, so two copies are harmless.
+    // Deliberately viem ONLY. Adding @noble/* here was tried and MEASURED to fail: the app is on
+    // @noble v2 while Semaphore's tree still imports v1 deep paths, so deduping breaks the build
+    // with `Missing "./sha3" specifier in "@noble/hashes"` (and the same for curves' `/ed25519`).
+    // shared/keys.mjs therefore resolves @noble from shared/node_modules and the bundle carries a
+    // second copy. They are pure functions with no instanceof checks across the boundary, so two
+    // copies are harmless — unlike viem, where duplicate classes break instanceof.
     dedupe: ['viem'],
   },
   // snarkjs, reached through @semaphore-protocol/proof, expects a Node-ish global.

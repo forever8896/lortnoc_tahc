@@ -7,6 +7,7 @@
 // The artifacts (~3.3 MB of wasm + zkey) are fetched from PSE's CDN on first use and cached by
 // the browser thereafter, so the first proof of a session is the slow one.
 import { ticketMessage, claimScope } from '../../../../shared/ticket.mjs'
+import { deriveSemaphoreSecret } from '../../../../shared/keys.mjs'
 
 /** A Semaphore proof, shaped for `LortnocMembership.spendTicket` and for JSON transport. */
 export type Ticket = {
@@ -21,14 +22,11 @@ export type Ticket = {
 export type ProofStage = 'deriving' | 'loading-artifacts' | 'proving'
 
 /** id_sem (§5.1) → Semaphore identity. Must match membership.ts::commitmentFrom exactly, or the
- *  proof would be generated against a commitment that was never paid for. */
+ *  proof would be generated against a commitment that was never paid for — which is why the
+ *  derivation is no longer written out here. Both call the same shared/keys.mjs function. */
 async function identityFrom(ms: Uint8Array) {
   const { Identity } = await import('@semaphore-protocol/identity')
-  const { hkdf } = await import('@noble/hashes/hkdf.js')
-  const { sha256 } = await import('@noble/hashes/sha2.js')
-  const sem = hkdf(sha256, ms, new TextEncoder().encode('lortnoc/semaphore/v1'), new TextEncoder().encode('sem'), 32)
-  const hex = Array.from(sem, (b) => b.toString(16).padStart(2, '0')).join('')
-  return new Identity(hex)
+  return new Identity(deriveSemaphoreSecret(ms))
 }
 
 export async function commitmentOf(ms: Uint8Array): Promise<bigint> {
