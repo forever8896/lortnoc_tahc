@@ -195,12 +195,41 @@
     <p class="modal__why">Ethereum mainnet and EVM L2s. Resolve the name yourself before sending. We will never DM you an address.</p>
   </dialog>
 
+  <!-- 07 ─ install.
+       Restored 2026-08-20 alongside the waitlist rather than in place of it. This section was
+       removed when the extension came off the market (ae79e5e) and the hosted codec was paused;
+       the codec is live again, so the download is real again. The waitlist below stays: someone
+       who does not want to load an unpacked extension today can still leave an address, and the
+       signups collected since 29 July keep their meaning. Install now OR get told when it is
+       easier — two doors, not a replacement. -->
+  <section class="wrap install" id="get" aria-label="Install the extension">
+    <div class="integrations__intro" data-reveal="1">
+      <p class="eyebrow">Install &middot; verify, don&rsquo;t trust</p>
+      <h2>Don&rsquo;t take our word for it. Read the code, then run it.</h2>
+      <p class="lede">A privacy tool you can&rsquo;t inspect is just another promise. So there&rsquo;s no store gatekeeper and no black box: the extension is built in the open by public CI, published straight to GitHub, and you can rebuild it from the tag and check it yourself before it ever touches your browser.</p>
+    </div>
+
+    <ol class="steps" data-reveal="2">
+      <li><b>Download</b> the latest build from GitHub Releases &mdash; served by GitHub, not by us &mdash; and check its <b>SHA-256</b> against the value on the release page.</li>
+      <li><b>Unzip it</b>, open <code>chrome://extensions</code>, and turn on <b>Developer mode</b> (top-right). Chrome will note it&rsquo;s a developer extension on each launch &mdash; expected, and the price of not hiding behind a store.</li>
+      <li>Click <b>Load unpacked</b>, choose the unzipped folder, open Telegram Web, and toggle <b>PrivacyMaxxing</b> on. You&rsquo;re hidden.</li>
+    </ol>
+
+    <div class="actions" data-reveal="3">
+      <a class="btn" href="https://github.com/forever8896/lortnoc_tahc/releases/latest" target="_blank" rel="noopener">Download the extension</a>
+      <a class="btn btn--ghost" href="https://github.com/forever8896/lortnoc_tahc" target="_blank" rel="noopener">Read the source</a>
+      <a class="btn btn--ghost" href="https://github.com/forever8896/lortnoc_tahc#build-it-yourself" target="_blank" rel="noopener">Rebuild &amp; verify</a>
+    </div>
+    <p class="eyebrow install__note" data-reveal="3">It&rsquo;s an unaudited alpha and it loads unpacked, so it won&rsquo;t auto-update &mdash; we ship often, so check back. A Chrome Web Store listing is on the way; the verifiable path above will always be here.</p>
+  </section>
+
   <section class="wrap close" aria-label="Get Lortnoc Tahc">
     <div class="wordmark" data-reveal="1">Lortnoc Tahc</div>
     <p class="close__claim" data-reveal="2">Hide in plain sight with natural language encryption on unencrypted platforms.</p>
 
-    <!-- The only signup on the page now. Both buttons open dialogs rather than jumping to a
-         section, since the sections they used to target are gone. -->
+    <!-- Not the only path any more — the Install section above is the immediate one. This is for
+         people who would rather be told when it is easier, so the copy asks for that rather than
+         implying there is nothing to use yet. -->
     <form class="signup__form close__form" id="waitlist-form" data-reveal="3" novalidate>
       <label class="sr-only" for="waitlist-email">Email address</label>
       <input id="waitlist-email" name="email" type="email" inputmode="email" autocomplete="email"

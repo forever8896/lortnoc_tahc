@@ -5,19 +5,16 @@ name: release-extension
 # publishes it as a Release. The landing site links here — so the download comes from GitHub
 # (not our server), and anyone can rebuild the tag and diff. Trust nothing, verify everything.
 
-# Tag-triggered publishing is DISABLED for the closed alpha.
+# Tag-triggered publishing is ON again (restored 2026-08-20, as ae79e5e said to do when the alpha
+# opened). The hosted codec is unpaused and the site links to Releases again, so a version tag
+# should publish a download rather than leave the site pointing at nothing.
 #
-# The four public releases were deleted deliberately — the extension is off the market while it
-# stabilises. This workflow fires on `push: tags: ['v*']`, so leaving that trigger in place meant
-# the next version tag would silently republish the download we just removed and put the site and
-# the repo back into disagreement.
-#
-# Restore the two commented lines when the alpha opens. Everything else here still works; it is
-# only the automatic trigger that is off, so a release can still be cut deliberately from the
-# Actions tab.
+# The rule that made this worth disabling still applies in reverse: the site and the repo must
+# agree. If the extension ever comes off the market again, comment these two lines back out in the
+# same change that removes the site's Install section — not after it.
 on:
-  # push:
-  #   tags: ['v*']
+  push:
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       tag:
