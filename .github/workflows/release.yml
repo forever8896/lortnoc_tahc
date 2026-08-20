@@ -38,11 +38,20 @@ jobs:
           cache: npm
           cache-dependency-path: extension/package-lock.json
 
+      # shared/ is a separate workspace with its own lockfile, and extension/src imports it by
+      # relative path (`../../shared/keys.mjs`). Rollup resolves @noble out of shared/node_modules,
+      # so skipping this install fails the build with "failed to resolve @noble/ciphers/aes.js".
+      # test.yml has always installed it; this workflow predates the refactor that made it
+      # necessary (e3b5774) and had its trigger disabled hours later, so it never once ran against
+      # the tree that needs it.
+      - name: Install workspaces
+        run: |
+          npm ci --prefix shared
+          npm ci --prefix extension
+
       - name: Build the extension
         working-directory: extension
-        run: |
-          npm ci
-          npm run build
+        run: npm run build
 
       - name: Resolve tag
         id: v
@@ -83,7 +92,8 @@ jobs:
           ## Verify it yourself
           \`\`\`
           git checkout ${{ steps.v.outputs.tag }}
-          cd extension && npm ci && npm run build
+          npm ci --prefix shared          # extension/src imports ../../shared by relative path
+          npm ci --prefix extension && npm run --prefix extension build
           \`\`\`
           Read the source, rebuild from the tag, and compare. This artifact also carries a GitHub
           build-provenance attestation (\`gh attestation verify ${{ steps.pkg.outputs.zip }} -R \${{ github.repository }}\`).
