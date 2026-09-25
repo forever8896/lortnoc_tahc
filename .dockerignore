@@ -1,0 +1,50 @@
+# The relayer's Dockerfile takes the REPO ROOT as its build context — it needs shared/ and two
+# deployment JSONs from app/ — so without this file `fly deploy` uploads all ~2 GB of the tree,
+# node_modules and .git included. Measured 2026-08-20: the upload was crawling at roughly 50 KB/s
+# and would not have finished inside a working day, which is what a deploy that "hangs" actually
+# was. The image needs about 200 KB of source.
+#
+# Keep this list ALLOW-anything/DENY-the-heavy-things rather than a whitelist: the Dockerfile
+# copies specific paths, so anything unlisted here is simply never used, and a whitelist would
+# silently break the next file the relayer starts reading.
+
+**/node_modules
+.git
+**/dist
+**/.vercel
+**/__pycache__
+**/*.pyc
+**/.venv
+**/venv
+
+# Build artefacts and releases — tens of MB of zips that no image layer touches.
+*.zip
+*.zip.sha256
+**/*.wasm
+**/tsconfig.tsbuildinfo
+
+# Big binaries and captures that live in the repo for the site and the docs.
+assets
+docs/screenshots
+site
+**/*.mp4
+**/*.mov
+
+# Nothing in the image ever reads these.
+extension
+extension-x
+contracts
+codec
+test
+bench
+**/.env
+**/.env.*
+!**/.env.example
+
+# Local tooling and scratch state that is not source at all — each of these alone was bigger than
+# the image: a 38 MB cloudflared binary, Chrome dev profiles, model caches, agent worktrees.
+.tools
+.claude
+**/.dev-profiles
+**/.cache
+**/*.pkl

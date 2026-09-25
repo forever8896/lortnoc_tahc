@@ -16,7 +16,7 @@
 // wallet submitted `spendTicket` itself, an observer would see "X paid" and "X burned nullifier N"
 // and the anonymity set would collapse to one, however large the crowd.
 import { createHmac } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import express from 'express'
@@ -432,6 +432,51 @@ const KNOCK_RATE_PER_MIN = 6
 const knocks = new Map() // handle -> [{ id, sealed, ts }]
 const knockHits = new Map() // ip|handle -> [timestamps]
 
+// A knock the recipient has not opened yet exists in exactly one place: here. That made a plain
+// in-memory Map a data-loss bug wearing a 7-day TTL — every restart silently dropped pending
+// knocks, and the sender was told "sent" while the recipient would never see anything. Nobody
+// would ever find out, because a knock is unreadable and unattributable by design.
+//
+// So: persist the blobs. They stay opaque — this file holds exactly what the endpoint already
+// serves to anyone who asks (§6.8: pending knocks are public precisely because they are
+// unreadable without the answer), so writing it down leaks nothing new.
+//
+// /data is a mounted volume when one exists and survives a deploy; /tmp survives only a process
+// restart. Both beat losing them on every crash. Set KNOCK_STORE to override.
+const KNOCK_STORE =
+  process.env.KNOCK_STORE ?? (existsSync('/data') ? '/data/knocks.json' : '/tmp/lortnoc-knocks.json')
+
+function loadKnocks() {
+  try {
+    if (!existsSync(KNOCK_STORE)) return
+    const now = Date.now()
+    let kept = 0
+    for (const [handle, list] of Object.entries(JSON.parse(readFileSync(KNOCK_STORE, 'utf8')))) {
+      const live = list.filter((k) => now - k.ts < KNOCK_TTL_MS)
+      if (live.length) {
+        knocks.set(handle, live)
+        kept += live.length
+      }
+    }
+    log(`knock store: ${kept} pending restored from ${KNOCK_STORE}`)
+  } catch (e) {
+    // A corrupt store must not stop the relayer from doing its real job (claims). Losing knocks
+    // is bad; refusing to issue handles is worse.
+    log(`knock store: could not restore (${e.message}) — starting empty`)
+  }
+}
+
+/** Write via a temp file + rename so a crash mid-write cannot leave a truncated store behind. */
+function persistKnocks() {
+  try {
+    const tmp = `${KNOCK_STORE}.tmp`
+    writeFileSync(tmp, JSON.stringify(Object.fromEntries(knocks)))
+    renameSync(tmp, KNOCK_STORE)
+  } catch (e) {
+    log(`knock store: write failed (${e.message}) — knocks are memory-only until this clears`)
+  }
+}
+
 function rateLimited(bucket) {
   const now = Date.now()
   const hits = (knockHits.get(bucket) ?? []).filter((t) => now - t < 60_000)
@@ -457,6 +502,7 @@ app.post('/knock', (req, res) => {
   list.push({ id: `${now}-${Math.round(now % 1e6)}-${list.length}`, sealed, ts: now })
   // Oldest-out, so a flood cannot bury real knocks indefinitely.
   knocks.set(toHandle, list.slice(-KNOCK_MAX_PER_HANDLE))
+  persistKnocks()
   log(`knock -> ${toHandle} (${list.length} pending)`)
   res.json({ ok: true, pending: Math.min(list.length, KNOCK_MAX_PER_HANDLE) })
 })
@@ -465,13 +511,22 @@ app.post('/knock', (req, res) => {
  *  without the answer, and gating this would mean knowing who is allowed to look. */
 app.get('/knocks/:handle', (req, res) => {
   const now = Date.now()
+  const before = knocks.get(req.params.handle)?.length ?? 0
   const list = (knocks.get(req.params.handle) ?? []).filter((k) => now - k.ts < KNOCK_TTL_MS)
   knocks.set(req.params.handle, list)
+  if (before !== list.length) persistKnocks() // expiry is a state change worth keeping
+  // Logged WITHOUT the caller's IP (§8 Layer 4: the gateway must not be able to correlate people)
+  // and only when something is actually waiting. This one line is what turns "the recipient sees
+  // nothing" from a guess into a fact: it says whether their client is polling at all.
+  if (list.length) log(`knocks? ${req.params.handle} -> ${list.length} served`)
   res.json({ knocks: list })
 })
 
+loadKnocks()
+
 app.listen(PORT, '0.0.0.0', () => {
   log(`lortnoc relayer on :${PORT}`)
+  log(`  knocks   ${KNOCK_STORE}`)
   log(`  relayer  ${account.address}`)
   log(`  sui      ${suiSigner?.toSuiAddress() ?? '(not configured)'}`)
   log(`  0G       ${MEMBERSHIP}`)

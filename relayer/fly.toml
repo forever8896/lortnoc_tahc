@@ -9,6 +9,13 @@ primary_region = "cdg"
 [build]
   dockerfile = "Dockerfile"
 
+# ONE machine, deliberately. Two would break this service in two ways that both look like
+# flakiness rather than a bug:
+#   * Pending knocks live in the process (and its local store), so a knock POSTed to machine A is
+#     invisible to a GET served by machine B — the recipient sees it or does not, at random.
+#   * Both machines hold the SAME funded relayer key, so two concurrent claims race on the Sepolia
+#     nonce.
+# Scale up only behind shared state (a volume is per-machine and does not fix either problem).
 [http_service]
   internal_port = 8080
   force_https = true
