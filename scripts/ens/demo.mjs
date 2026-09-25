@@ -1,47 +1,52 @@
 #!/usr/bin/env node
-// The ENS v2 flagship walkthrough, asserted end to end (CLAUDE.md §6.5 creative use #1).
+// The ENS v2 flagship walkthrough, asserted end to end (CLAUDE.md §6.5 creative use #1), on the
+// 09-15 PermissionedResolver API.
 //
-// Delegate ONE text record to a gateway, prove the gateway can write that record and ONLY that
-// record, then revoke in a single transaction and prove the write dies with it. Run it against
-// the live chain before demoing — it fails loudly if any leg is wrong.
+// Delegate ONE text key to a delegate with `grantSetterRoles`, prove the delegate can write that
+// key and ONLY that key, then `revokeRoles` in a single transaction and prove the write dies with
+// it. Run it against a TEST handle the signer owns — never a user's handle.
 //
-//   PRIVATE_KEY=0x... node scripts/ens/demo.mjs alice
-//   PRIVATE_KEY=0x... node scripts/ens/demo.mjs alice --gateway 0x…
+//   node scripts/ens/demo.mjs boothdemo                          (PRIVATE_KEY from .env.local)
+//   node scripts/ens/demo.mjs boothdemo --delegate 0x…
+//   node scripts/ens/demo.mjs boothdemo --key eth.lortnoc.audience.friends
 //
-// Permission checks are `eth_call` simulations from the gateway address: they exercise the real
-// on-chain authorization logic without the gateway needing gas. Pass --execute to additionally
-// send the allowed write for real (requires GATEWAY_PRIVATE_KEY).
-import { keccak256, stringToHex, encodeAbiParameters } from 'viem'
+// Permission checks are `eth_call` simulations from the delegate address: they exercise the real
+// on-chain authorization logic without the delegate needing gas. Pass --execute to additionally
+// send the allowed write for real (requires DELEGATE_PRIVATE_KEY, a funded second wallet).
+//
+// 09-15 semantics worth saying on stage: the grant is scoped per RESOLVER and per KEY
+// (resource = keccak256(key)), not per name. With one resolver per handle that is the same thing.
+import { encodeFunctionData, isAddressEqual } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import {
   ENS, PARENT_NAME, REC, ROLE_SET_TEXT,
   registryAbi, resolverAbi, factoryAbi,
-  clients, readDeployment, send, dnsEncode, subnode, log,
+  clients, readDeployment, send, dnsEncode, log, textResource,
 } from './lib/ens.mjs'
 
 const args = process.argv.slice(2)
-const label = args.find((a) => !a.startsWith('--')) ?? 'alice'
-const gwIdx = args.indexOf('--gateway')
+const opt = (k, d) => (args.indexOf(k) === -1 ? d : args[args.indexOf(k) + 1])
+const label = args.find((a, i) => !a.startsWith('--') && !args[i - 1]?.startsWith('--')) ?? 'boothdemo'
+const KEY = opt('--key', 'eth.lortnoc.audience.friends')
 const EXECUTE = args.includes('--execute')
 
 const { publicClient, walletClient, account } = clients()
 const D = readDeployment()
 const REGISTRY = D.lortnoc.registry
-if (!REGISTRY) throw new Error('day-0 setup not done — run scripts/ens/deploy.mjs first')
+if (!REGISTRY) throw new Error('setup not done — run scripts/ens/deploy.mjs first')
 
-const gatewayKey = process.env.GATEWAY_PRIVATE_KEY
-const gateway =
-  gwIdx !== -1
-    ? args[gwIdx + 1]
-    : gatewayKey
-      ? privateKeyToAccount(gatewayKey).address
-      // A deterministic stand-in so the demo runs with no extra setup. It holds no funds; the
-      // permission checks are simulations, so it never needs any.
-      : '0x000000000000000000000000000000000000dEaD'
+const delegateKey = process.env.DELEGATE_PRIVATE_KEY
+const delegate =
+  opt('--delegate', null) ??
+  (delegateKey
+    ? privateKeyToAccount(delegateKey).address
+    // A throwaway stand-in so the demo runs with no extra setup. Nobody holds its key; the
+    // permission checks are simulations, so it never needs gas.
+    : '0x000000000000000000000000000000000000dEaD')
 
 const handle = `${label}.${PARENT_NAME}`
-const node = subnode(PARENT_NAME, label)
-const dnsName = dnsEncode(handle)
+const name = dnsEncode(handle)
+const resource = textResource(KEY)
 
 const results = []
 const check = (pass, what) => {
@@ -50,115 +55,98 @@ const check = (pass, what) => {
   return pass
 }
 
-/** Can `who` write `key` on the resolver right now? Runs the real authorization path. */
-async function canWrite(resolver, who, key, value = 'probe') {
+/** Can `who` call `fn(args)` on the resolver right now? Runs the real authorization path. */
+async function can(resolver, who, functionName, fnArgs) {
   try {
-    await publicClient.simulateContract({
-      account: who, address: resolver, abi: resolverAbi, functionName: 'setText',
-      args: [node, key, value],
-    })
+    await publicClient.simulateContract({ account: who, address: resolver, abi: resolverAbi, functionName, args: fnArgs })
     return true
   } catch {
     return false
   }
 }
+const canText = (res, who, key) => can(res, who, 'setText', [name, key, 'probe'])
 
-console.log(`\n\x1b[1mENS v2 — per-record write delegation\x1b[0m`)
-console.log(`  handle   ${handle}`)
-console.log(`  owner    ${account.address}`)
-console.log(`  gateway  ${gateway}`)
+console.log(`\n\x1b[1mENS v2 (09-15) — per-key write delegation\x1b[0m`)
+console.log(`  handle    ${handle}`)
+console.log(`  owner     ${account.address}`)
+console.log(`  delegate  ${delegate}`)
+console.log(`  key       ${KEY}`)
 
 // ---- 0. the handle exists and is ours ----------------------------------------------------------
 log.step('Handle')
-const resolver = await publicClient.readContract({
-  address: REGISTRY, abi: registryAbi, functionName: 'getResolver', args: [label],
-})
-if (resolver === '0x0000000000000000000000000000000000000000') {
+const resolver = await publicClient.readContract({ address: REGISTRY, abi: registryAbi, functionName: 'getResolver', args: [label] })
+if (isAddressEqual(resolver, '0x0000000000000000000000000000000000000000')) {
   throw new Error(`${handle} has no resolver — claim it first: node scripts/ens/claim.mjs ${label}`)
 }
-const owner = await publicClient.readContract({
-  address: REGISTRY, abi: registryAbi, functionName: 'findOwner', args: [label],
-})
+const owner = await publicClient.readContract({ address: REGISTRY, abi: registryAbi, functionName: 'findOwner', args: [label] })
 log.info(`resolver ${resolver}`)
-check(owner.toLowerCase() === account.address.toLowerCase(), 'you own the handle')
-
-const impl = await publicClient.readContract({
-  address: ENS.verifiableFactory, abi: factoryAbi, functionName: 'verifyContract', args: [resolver],
-})
-check(
-  impl.toLowerCase() === ENS.permissionedResolverImpl.toLowerCase(),
-  'verifyContract(resolver) → canonical PermissionedResolverImpl (trustless handle proof)',
-)
+if (!check(isAddressEqual(owner, account.address), 'the signer owns this handle')) {
+  throw new Error('refusing to run the delegation demo on a handle the signer does not own')
+}
+const impl = await publicClient.readContract({ address: ENS.verifiableFactory, abi: factoryAbi, functionName: 'verifyContract', args: [resolver] })
+check(isAddressEqual(impl, ENS.permissionedResolverImpl), 'verifyContract(resolver) → canonical PermissionedResolverImpl')
+const pubkeyBefore = await publicClient.getEnsText({ name: handle, key: REC.pubkey })
+const addrBefore = await publicClient.getEnsAddress({ name: handle })
 
 // ---- 1. before delegation ----------------------------------------------------------------------
 log.step('Before delegation')
-check(await canWrite(resolver, account.address, REC.pubkey), 'owner can write pubkey')
-check(!(await canWrite(resolver, gateway, REC.inbox)), 'gateway CANNOT write inbox')
-check(!(await canWrite(resolver, gateway, REC.pubkey)), 'gateway CANNOT write pubkey')
+check(await canText(resolver, account.address, REC.pubkey), 'owner can write pubkey')
+check(!(await canText(resolver, delegate, KEY)), `delegate CANNOT write ${KEY}`)
+check(!(await canText(resolver, delegate, REC.pubkey)), 'delegate CANNOT write pubkey')
 
-// ---- 2. delegate exactly one record ------------------------------------------------------------
-log.step(`Delegate ${REC.inbox} → gateway (authorizeTextRoles, one tx)`)
+// ---- 2. delegate exactly one key ---------------------------------------------------------------
+log.step(`grantSetterRoles(setText(name, "${KEY}", ""), delegate) — one tx`)
+const setter = encodeFunctionData({ abi: resolverAbi, functionName: 'setText', args: [name, KEY, ''] })
 {
   const { request } = await publicClient.simulateContract({
-    account, address: resolver, abi: resolverAbi, functionName: 'authorizeTextRoles',
-    args: [dnsName, REC.inbox, gateway, true],
+    account, address: resolver, abi: resolverAbi, functionName: 'grantSetterRoles', args: [setter, delegate],
   })
-  await send(publicClient, walletClient, request, 'authorizeTextRoles(grant)')
+  await send(publicClient, walletClient, request, 'grantSetterRoles')
 }
-// The grant landed on `resource(node, keccak256(key))` — a per-record EAC resource, not the name.
-const inboxResource = BigInt(
-  keccak256(encodeAbiParameters([{ type: 'bytes32' }, { type: 'bytes32' }], [node, keccak256(stringToHex(REC.inbox))])),
-)
 check(
-  await publicClient.readContract({
-    address: resolver, abi: resolverAbi, functionName: 'hasRoles',
-    args: [inboxResource, ROLE_SET_TEXT, gateway],
-  }),
-  'ROLE_SET_TEXT granted on the per-record resource keccak(node, keccak(key))',
+  await publicClient.readContract({ address: resolver, abi: resolverAbi, functionName: 'hasRoles', args: [resource, ROLE_SET_TEXT, delegate] }),
+  'ROLE_SET_TEXT granted on resource keccak256(key)',
 )
-check(await canWrite(resolver, gateway, REC.inbox), 'gateway CAN now write inbox')
-check(!(await canWrite(resolver, gateway, REC.pubkey)), 'gateway still CANNOT write pubkey')
-check(!(await canWrite(resolver, gateway, REC.walrus)), 'gateway still CANNOT write walrus')
-check(await canWrite(resolver, account.address, REC.pubkey), 'owner still controls everything')
+check(await canText(resolver, delegate, KEY), `delegate CAN now write ${KEY}`)
+check(!(await canText(resolver, delegate, REC.pubkey)), 'delegate still CANNOT write pubkey (reverts)')
+check(!(await canText(resolver, delegate, 'eth.lortnoc.audience.work')), 'delegate still CANNOT write a different audience key')
+check(!(await can(resolver, delegate, 'setAddress', [name, 60n, delegate])), 'delegate still CANNOT write addr')
+check(!(await can(resolver, delegate, 'grantSetterRoles', [setter, '0x000000000000000000000000000000000000bEEF'])), 'delegate CANNOT sub-delegate')
 
 if (EXECUTE) {
-  if (!gatewayKey) throw new Error('--execute needs GATEWAY_PRIVATE_KEY (a funded second wallet)')
-  log.step('Gateway rotates the inbox pointer for real')
-  const gwAccount = privateKeyToAccount(gatewayKey)
+  if (!delegateKey) throw new Error('--execute needs DELEGATE_PRIVATE_KEY (a funded second wallet)')
+  log.step('Delegate writes the key for real')
   const { createWalletClient, http } = await import('viem')
   const { sepolia } = await import('viem/chains')
-  const gwWallet = createWalletClient({
-    account: gwAccount, chain: sepolia, transport: http(process.env.RPC_URL || undefined),
-  })
-  const value = `relay://lortnoc/${label}/${Date.now()}`
-  const { request } = await publicClient.simulateContract({
-    account: gwAccount, address: resolver, abi: resolverAbi, functionName: 'setText',
-    args: [node, REC.inbox, value],
-  })
-  await send(publicClient, gwWallet, request, 'gateway setText(inbox)')
-  const read = await publicClient.readContract({
-    address: resolver, abi: resolverAbi, functionName: 'text', args: [node, REC.inbox],
-  })
-  check(read === value, `inbox now reads "${read}" — written by the gateway, not the owner`)
+  const dAccount = privateKeyToAccount(delegateKey)
+  const dWallet = createWalletClient({ account: dAccount, chain: sepolia, transport: http(process.env.RPC_URL || undefined) })
+  const value = JSON.stringify([`member.${PARENT_NAME}`])
+  const { request } = await publicClient.simulateContract({ account: dAccount, address: resolver, abi: resolverAbi, functionName: 'setText', args: [name, KEY, value] })
+  await send(publicClient, dWallet, request, 'delegate setText')
+  check((await publicClient.getEnsText({ name: handle, key: KEY })) === value, 'getEnsText returns the delegate-written value')
 }
 
 // ---- 3. revoke ---------------------------------------------------------------------------------
-log.step('Revoke in one tx (grant = false)')
+log.step('revokeRoles(keccak256(key), ROLE_SET_TEXT, delegate) — one tx')
 {
   const { request } = await publicClient.simulateContract({
-    account, address: resolver, abi: resolverAbi, functionName: 'authorizeTextRoles',
-    args: [dnsName, REC.inbox, gateway, false],
+    account, address: resolver, abi: resolverAbi, functionName: 'revokeRoles', args: [resource, ROLE_SET_TEXT, delegate],
   })
-  await send(publicClient, walletClient, request, 'authorizeTextRoles(revoke)')
+  await send(publicClient, walletClient, request, 'revokeRoles')
 }
-check(!(await canWrite(resolver, gateway, REC.inbox)), 'gateway can no longer write inbox')
-check(await canWrite(resolver, account.address, REC.inbox), 'owner unaffected')
+check(!(await canText(resolver, delegate, KEY)), `delegate can no longer write ${KEY}`)
+check(await canText(resolver, account.address, KEY), 'owner unaffected')
+check(
+  (await publicClient.getEnsText({ name: handle, key: REC.pubkey })) === pubkeyBefore &&
+    isAddressEqual((await publicClient.getEnsAddress({ name: handle })) ?? '0x0000000000000000000000000000000000000000', addrBefore ?? '0x0000000000000000000000000000000000000000'),
+  'pubkey + addr unchanged after the whole cycle (canonical UR)',
+)
 
 // ---- summary -----------------------------------------------------------------------------------
 const failed = results.filter(([p]) => !p).length
 console.log(
   `\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${results.length - failed}/${results.length} checks passed\x1b[0m` +
-    `\n\nThe gateway could rotate ${REC.inbox} and nothing else, and lost it in one transaction.` +
-    `\nRoles gate writes only — every record stays world-readable (read-gating is the offchain gateway's job).\n`,
+    `\n\nThe delegate could write ${KEY} and nothing else, and lost it in one transaction.` +
+    `\nRoles gate writes only — every record stays world-readable.\n`,
 )
 process.exit(failed === 0 ? 0 : 1)
