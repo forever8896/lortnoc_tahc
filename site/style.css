@@ -684,3 +684,27 @@ textarea{ resize:vertical; min-height:84px; }
   }
   .modal__x{ margin:-4px -4px 0 0; }
 }
+
+/* ETHGlobal raffle ticker (index.html) — signal teal, black type, fixed to the foot. */
+body:has(> .raffle){ padding-bottom:var(--raffle-h); }
+:root{ --raffle-h:clamp(64px,8vw,96px); }
+.raffle{
+  position:fixed; left:0; right:0; bottom:0; z-index:30;
+  height:var(--raffle-h); overflow:hidden; display:flex; align-items:center;
+  background:var(--signal); color:#000; text-decoration:none;
+  box-shadow:0 -8px 30px rgba(0,0,0,0.45);
+}
+.raffle__track{ display:flex; width:max-content; animation:raffle-slide 28s linear infinite; }
+.raffle:hover .raffle__track,.raffle:focus-visible .raffle__track{ animation-play-state:paused; }
+.raffle__half{ display:flex; }
+.raffle__item{
+  white-space:nowrap; padding:0 clamp(28px,4vw,56px);
+  font-size:clamp(26px,3.6vw,48px); font-weight:500; letter-spacing:-0.01em; line-height:1;
+}
+.raffle__item b{ font-weight:500; text-decoration:underline; text-underline-offset:0.14em; text-decoration-thickness:0.08em; }
+.raffle:focus-visible{ outline:3px solid #000; outline-offset:-6px; }
+@keyframes raffle-slide{ from{ transform:translateX(0); } to{ transform:translateX(-50%); } }
+@media (prefers-reduced-motion: reduce){
+  .raffle__track{ animation:none; }
+  .raffle__half + .raffle__half{ display:none; }
+}
