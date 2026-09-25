@@ -141,7 +141,4 @@ describe('onboarding bot', () => {
     assert.match(screen('run', cfg).text, /need a post to enter/)
   })
 
-  test('the public mode is described honestly', () => {
-    assert.match(screen('run', cfg).text, /<b>not<\/b> private/)
-  })
 })

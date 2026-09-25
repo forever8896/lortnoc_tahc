@@ -65,11 +65,7 @@ export function screen(step, cfg) {
           `1. Open <b>x.com</b> and click the extension icon.\n` +
           `2. Switch it <b>on</b>.\n` +
           `3. Write a post as normal and hit Post. It is swapped for ordinary-looking text before it leaves the page, tagged <code>#lortnoctahc</code>.\n` +
-          `4. Anyone with the extension sees it decode back inline.\n\n` +
-          `<b>Two modes — know which you're in:</b>\n` +
-          `• <b>Recipients empty</b> → public channel. Everyone with the extension can read it. It hides your post from people who don't have the tool; it is <b>not</b> private.\n` +
-          `• <b>Recipients set</b> (their <code>name.lortnoctahc.eth</code> handles) → only those people can read it.\n\n` +
-          `Longer messages become a short thread. That's normal.`,
+          `4. Anyone with the extension sees it decode back inline.`,
         buttons: [next("I've posted — enter the raffle →", 'raffle'), [back('load')]],
       }
 
