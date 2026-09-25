@@ -6,7 +6,8 @@
 import type { Backend } from './backend'
 import { fullHandle } from './backend'
 import type {
-  Conversation, EnsStatus, Health, Identity, Message, OpenedKnock, RecordPerm, SendStage,
+  Conversation, EnsStatus, Health, Identity, IdentityRepair, Message, OpenedKnock, RecordPerm,
+  SendStage,
 } from './types'
 import { createKnockConfig, deriveKnockKey, openKnock, parseKnockConfig, sealKnock } from './live/knock'
 import { RECORD_SPECS } from './live/config'
@@ -253,6 +254,17 @@ export class MockBackend implements Backend {
     ;(net.records ||= {})[`${this.id?.handle}|${short(key)}`] = value
     saveNet(net)
     return `demo: ${key} set locally (a real setText on ENS v2 in live mode).`
+  }
+
+  /** Nothing can drift here: demo mode derives every record from the same in-memory identity it
+   *  would publish, so there is no second copy to disagree with. Reported as `ok` rather than
+   *  faked as `repaired`, so the panel never claims to have fixed something it did not write. */
+  async repairIdentityRecords(): Promise<IdentityRepair[]> {
+    if (!this.id) throw new Error('claim a handle first')
+    return [
+      { key: 'eth.lortnoc.pubkey', label: 'pubkey', onChain: this.id.pubkeyHex, expected: this.id.pubkeyHex, status: 'ok' },
+      { key: 'eth.lortnoc.sui', label: 'sui', onChain: this.id.address, expected: this.id.address, status: 'ok' },
+    ]
   }
 
   // ---- knock (§6.8) — real crypto, localStorage instead of the relay -------------------------

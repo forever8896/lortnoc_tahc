@@ -40,3 +40,39 @@ export function Avatar({ handle, size = 38 }: { handle: string; size?: number })
 export function shortHandle(h: string): string {
   return h.replace(HANDLE_SUFFIX, '')
 }
+
+/**
+ * Render message text with http(s) links made clickable.
+ *
+ * Built by SPLITTING the string and returning React nodes — never `dangerouslySetInnerHTML`.
+ * Message bodies are attacker-controlled: anyone who can message you can put a string in here,
+ * and injecting it as HTML would hand them script execution in a page holding your keys.
+ *
+ * Only http/https are linked. `javascript:` and `data:` URLs are the reason that is a whitelist
+ * and not a blacklist, and everything unmatched stays plain text.
+ */
+export function Linkified({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s<>"']+)/g)
+  return (
+    <>
+      {parts.map((part, i) =>
+        /^https?:\/\//.test(part) ? (
+          <a
+            key={i}
+            href={part}
+            target="_blank"
+            // noreferrer implies noopener, but both are stated: this opens an attacker-supplied
+            // URL from a page that holds the user's keys, so the new tab gets no handle back.
+            rel="noreferrer noopener"
+            style={{ color: 'var(--signal)', textDecoration: 'underline', wordBreak: 'break-word' }}
+            onClick={(e) => e.stopPropagation()} // the bubble itself is a toggle
+          >
+            {part}
+          </a>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  )
+}

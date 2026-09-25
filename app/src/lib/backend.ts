@@ -4,7 +4,8 @@
 //     users chatting).
 //   - LiveBackend: real ENS v2 on Sepolia (viem, deployed contracts) + Sui/Walrus/Seal.
 import type {
-  ClaimStage, Conversation, EnsStatus, Health, Identity, Message, OpenedKnock, SendStage,
+  ClaimStage, Conversation, EnsStatus, Health, Identity, IdentityRepair, Message, OpenedKnock,
+  SendStage,
 } from './types'
 
 export interface Backend {
@@ -35,6 +36,22 @@ export interface Backend {
 
   /** Write one of your own text records. */
   setRecord(key: string, value: string): Promise<string>
+
+  /** Compare the identity records this device derives (`pubkey`, `sui`, `addr`) against what the
+   *  handle publishes, and repair whichever disagree.
+   *
+   *  The app maintains these records itself — RECORD_SPECS marks them `owned: false`, so the
+   *  identity panel offers no edit for them — and the only thing that maintains them is the
+   *  self-heal on sign-in, which is deliberately silent-only so it never interrupts sign-in with
+   *  a wallet popup. When it cannot sign locally it therefore returns without writing and without
+   *  saying so, and the handle keeps advertising a stale identity indefinitely. This is the
+   *  explicit, loud counterpart: the user asked, so a wallet prompt is expected, and a record
+   *  that cannot be written says which key would be needed instead of failing quietly. */
+  repairIdentityRecords(): Promise<IdentityRepair[]>
+
+  /** Why the last conversation scan failed, if it did — so an inbox that could not be READ is
+   *  never presented as an inbox that is EMPTY. Optional: the mock backend has no discovery. */
+  discoveryError?(): string | null
 
   /** Unlock unlimited codec use in the Telegram extension using the membership already paid for.
    *  'no-extension' means nothing was listening — not that it failed. */

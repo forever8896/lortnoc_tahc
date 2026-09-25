@@ -4,17 +4,87 @@
 @font-face { font-family:"Jost"; font-weight:400; font-display:swap; src:url("/fonts/jost/jost-400.woff2") format("woff2"); }
 @font-face { font-family:"Jost"; font-weight:500; font-display:swap; src:url("/fonts/jost/jost-500.woff2") format("woff2"); }
 
-:root {
+/* ── Themes ────────────────────────────────────────────────────────────────────────────────
+ * Four dark palettes. Each sets its own accent AND its own corner radius, because radius is
+ * what actually changes the character of a UI — a sharp teal build and a rounded violet one
+ * read as different products, where a recoloured accent alone just reads as a skin.
+ *
+ * Everything downstream reads these variables and nothing hardcodes a colour, so a theme is a
+ * dozen declarations rather than a parallel stylesheet. `--on-signal` exists because text on an
+ * accent fill has to be dark on teal and dark on amber but must still be defined per theme —
+ * it was `#08080a` inline in three places, which silently broke every non-black background.
+ *
+ * The default (`signal`) is unchanged from the original design, deliberately: it matches the
+ * marketing site, so the app and the landing page still look like one product.
+ */
+:root,
+:root[data-theme="signal"] {
   --bg: #08080A;
   --panel: #0e0e11;
   --raise: #141418;
   --ink: #edeae4;
   --signal: #12c4be;
+  --on-signal: #08080a;
+  --signal-soft: rgba(18, 196, 190, 0.07);
+  --signal-line: rgba(18, 196, 190, 0.35);
   --muted: rgba(237, 234, 228, 0.5);
   --faint: rgba(237, 234, 228, 0.32);
   --rule: rgba(237, 234, 228, 0.12);
+  --radius: 0px;
+  --radius-sm: 0px;
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   --shell: clamp(18px, 4vw, 40px);
+}
+
+/* Ember — warm charcoal, amber accent, softly rounded. */
+:root[data-theme="ember"] {
+  --bg: #0b0908;
+  --panel: #141010;
+  --raise: #1c1614;
+  --ink: #f2e9e1;
+  --signal: #ff8a4c;
+  --on-signal: #1a0d05;
+  --signal-soft: rgba(255, 138, 76, 0.08);
+  --signal-line: rgba(255, 138, 76, 0.38);
+  --muted: rgba(242, 233, 225, 0.52);
+  --faint: rgba(242, 233, 225, 0.33);
+  --rule: rgba(242, 233, 225, 0.13);
+  --radius: 8px;
+  --radius-sm: 6px;
+}
+
+/* Iris — indigo-black, violet accent, the roundest of the four. */
+:root[data-theme="iris"] {
+  --bg: #08070d;
+  --panel: #100e18;
+  --raise: #171423;
+  --ink: #eae7f2;
+  --signal: #a78bfa;
+  --on-signal: #0d0819;
+  --signal-soft: rgba(167, 139, 250, 0.10);
+  --signal-line: rgba(167, 139, 250, 0.38);
+  --muted: rgba(234, 231, 242, 0.52);
+  --faint: rgba(234, 231, 242, 0.33);
+  --rule: rgba(234, 231, 242, 0.13);
+  --radius: 14px;
+  --radius-sm: 10px;
+}
+
+/* Moss — green-black, lime accent, barely rounded. */
+:root[data-theme="moss"] {
+  --bg: #070a08;
+  --panel: #0d120e;
+  --raise: #131a14;
+  --ink: #e8efe6;
+  --signal: #7dd956;
+  --on-signal: #071204;
+  --signal-soft: rgba(125, 217, 86, 0.08);
+  --signal-line: rgba(125, 217, 86, 0.35);
+  --muted: rgba(232, 239, 230, 0.52);
+  --faint: rgba(232, 239, 230, 0.33);
+  --rule: rgba(232, 239, 230, 0.13);
+  --radius: 4px;
+  --radius-sm: 3px;
 }
 * , *::before, *::after { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
@@ -40,7 +110,8 @@ button { font-family: inherit; }
 
 /* buttons — sharp corners, signal fill, invert on hover (site parity) */
 .btn {
-  background: var(--signal); color: #08080a; border: 0; cursor: pointer;
+  background: var(--signal); color: var(--on-signal); border: 0; cursor: pointer;
+  border-radius: var(--radius);
   font-size: 15px; font-weight: 400; letter-spacing: 0.01em;
   padding: 14px 26px; min-height: 44px; display: inline-flex; align-items: center; gap: 8px;
   transition: background .25s ease, color .25s ease, opacity .2s ease;
@@ -54,19 +125,21 @@ button { font-family: inherit; }
 .input {
   width: 100%; background: var(--panel); color: var(--ink);
   border: 1px solid var(--rule); padding: 14px 16px; font: inherit; font-size: 16px;
+  border-radius: var(--radius);
 }
 .input:focus { outline: 2px solid var(--signal); outline-offset: -1px; }
 
 .chip {
   display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono);
   font-size: 11px; letter-spacing: 0.06em; padding: 4px 9px; border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
   color: var(--muted); background: transparent; /* reset UA button bg (chip is used on <button>) */
 }
 button.chip { cursor: pointer; }
 button.chip:hover { color: var(--ink); border-color: var(--ink); }
-.chip--ok { color: var(--signal); border-color: rgba(18, 196, 190, 0.35); }
+.chip--ok { color: var(--signal); border-color: var(--signal-line); }
 
-.card { background: var(--panel); border: 1px solid var(--rule); }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius); }
 .rule { height: 1px; background: var(--rule); border: 0; margin: 0; }
 .spin { animation: sp 0.8s linear infinite; display: inline-block; }
 @keyframes sp { to { transform: rotate(360deg); } }

@@ -41,6 +41,15 @@ export const SUI = {
   // NB: https://fullnode.testnet.sui.io:443 now 404s for JSON-RPC (the CLI uses another
   // transport). These public endpoints answer sui_getChainIdentifier -> 4c78adac.
   rpc: (import.meta.env.VITE_SUI_RPC as string) || 'https://sui-testnet-rpc.publicnode.com',
+  /** Sui GraphQL, used ONLY for event queries.
+   *
+   *  Public fullnodes now answer every JSON-RPC event/transaction method with "Method not found.
+   *  JSON-RPC on public fullnodes has been deprecated. Please migrate to gRPC or GraphQL" —
+   *  verified 2026-08-21 against fullnode.testnet.sui.io and sui-testnet-rpc.publicnode.com. That
+   *  killed findHeads(), which is the only way a peer discovers a conversation somebody else
+   *  started, so a recipient's inbox came up empty. Object reads (getObject, getAllBalances) are
+   *  unaffected and still go over `rpc`. */
+  graphql: (import.meta.env.VITE_SUI_GRAPHQL as string) || 'https://graphql.testnet.sui.io/graphql',
   // Set after `sui client publish` of contracts/move (ConversationHead + seal_approve).
   packageId:
     (import.meta.env.VITE_SUI_PACKAGE as string) ||

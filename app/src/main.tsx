@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './styles.css'
 import { BackendProvider } from './lib/ctx'
 import { App } from './app'
+import { initTheme } from './lib/theme'
 
 // A tab held open across a deploy is holding an index.html that names chunks the new build no
 // longer has, so the next lazy import 404s and the click does nothing — "Failed to fetch
@@ -22,6 +23,22 @@ window.addEventListener('vite:preloadError', (e) => {
   sessionStorage.setItem(RELOAD_KEY, String(Date.now()))
   window.location.reload()
 })
+
+// Register the notification-only service worker (app/public/sw.js — it has no fetch handler, so
+// it cannot cache a stale chunk into the problem above). Android Chrome will not show a
+// notification without a registration, so this has to exist before the first arrival, not at the
+// moment we want to notify. Failure is silent and non-fatal: the tab-title badge still works.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((e) => {
+      console.warn('[lortnoc] service worker did not register — notifications fall back to the title badge:', e)
+    })
+  })
+}
+
+// Before the first paint, not in an effect — a theme applied after mount flashes the
+// default palette for a frame, which looks exactly like a bug.
+initTheme()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

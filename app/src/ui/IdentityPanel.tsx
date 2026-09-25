@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useBackend } from '../lib/ctx'
-import type { EnsStatus, OpenedKnock, RecordPerm } from '../lib/types'
+import type { EnsStatus, IdentityRepair, OpenedKnock, RecordPerm } from '../lib/types'
 import { RECORD_SPECS } from '../lib/live/config'
 import { Eyebrow, Spinner, shortHandle } from './atoms'
+import { THEMES, applyTheme, currentTheme, type ThemeId } from '../lib/theme'
 
 /**
  * Your identity, and the records that make it up.
@@ -92,6 +93,10 @@ export function IdentityPanel({ onClose }: { onClose: () => void }) {
 
         <hr className="rule" />
 
+        <Appearance />
+
+        <hr className="rule" />
+
         <Records status={status} busy={busy} live={live} run={run} gateway={status?.gateway ?? ''} />
 
         <hr className="rule" />
@@ -143,6 +148,68 @@ type RunFn = (label: string, fn: () => Promise<string>) => Promise<void>
  * commands, so the most important claim on the screen — that permissions are per-record and
  * enforced by the chain — was the least legible thing on it.
  */
+/**
+ * Appearance — the four dark palettes.
+ *
+ * Each theme carries its own corner radius as well as its own accent, so the swatch previews both:
+ * the tile is drawn with that theme's background, accent and radius rather than a generic dot. A
+ * picker whose options all look like the current theme is not a picker, it is a list of names.
+ *
+ * The choice applies instantly (one attribute on <html>) and is stored per device, so it never
+ * travels with the identity.
+ */
+function Appearance() {
+  const [theme, setTheme] = useState<ThemeId>(currentTheme())
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Eyebrow>Appearance</Eyebrow>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
+        {THEMES.map((t) => {
+          const on = t.id === theme
+          const [bg, accent] = t.swatch
+          return (
+            <button
+              key={t.id}
+              onClick={() => {
+                applyTheme(t.id)
+                setTheme(t.id)
+              }}
+              aria-pressed={on}
+              style={{
+                display: 'flex', gap: 10, alignItems: 'center', textAlign: 'left', cursor: 'pointer',
+                padding: 10, background: 'transparent', color: 'var(--ink)', font: 'inherit',
+                border: `1px solid ${on ? 'var(--signal)' : 'var(--rule)'}`,
+                borderRadius: 'var(--radius-sm)',
+              }}
+            >
+              {/* Drawn in the theme's OWN colours and radius — the preview is the point. */}
+              <span
+                aria-hidden
+                style={{
+                  width: 30, height: 30, flex: 'none', background: bg,
+                  border: `1px solid ${accent}`,
+                  borderRadius: t.id === 'iris' ? 10 : t.id === 'ember' ? 6 : t.id === 'moss' ? 3 : 0,
+                  display: 'grid', placeItems: 'center',
+                }}
+              >
+                <span style={{ width: 12, height: 12, background: accent, borderRadius: 'inherit' }} />
+              </span>
+              <span style={{ minWidth: 0 }}>
+                <span className="mono" style={{ fontSize: 12, display: 'block' }}>
+                  {t.name}{on ? ' ·' : ''}
+                </span>
+                <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', display: 'block', marginTop: 2 }}>
+                  {t.note}
+                </span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function PermissionLine({ perm, gateway }: { perm?: RecordPerm; gateway: string }) {
   const you = perm?.ownerCanWrite ?? false
   const gw = perm?.gatewayCanWrite ?? false
@@ -177,6 +244,7 @@ function Records({
   const { backend } = useBackend()
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  const [repairs, setRepairs] = useState<IdentityRepair[] | null>(null)
 
   if (!status) return <div className="mono" style={{ fontSize: 11, color: 'var(--faint)' }}>reading chain…</div>
 
@@ -188,6 +256,60 @@ function Records({
         <Eyebrow>Records — who is allowed to write each one</Eyebrow>
         <span className="chip mono" style={{ fontSize: 10 }}>{live ? 'Sepolia · on-chain' : 'demo mode'}</span>
       </div>
+
+      {/* The records the app maintains for you (`pubkey`, `sui`, `addr`) have no edit control —
+          they are `owned: false` — and the only thing that keeps them current is the self-heal on
+          sign-in, which is silent-only so it cannot interrupt sign-in with a wallet popup. When it
+          cannot sign, it stops without a word. This button is the loud version, and the reason it
+          exists is a handle found in the field publishing a Sui address its owner had not used in
+          two months: peers addressed a dead account, and neither side saw an error. */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button
+          className="btn btn--ghost btn--sm"
+          disabled={!!busy}
+          onClick={() =>
+            // `run` owns busy/error/note and re-reads the chain afterwards, so the table below
+            // cannot disagree with what this just wrote.
+            run('repair', async () => {
+              setRepairs(null)
+              const res = await backend.repairIdentityRecords()
+              setRepairs(res)
+              const fixed = res.filter((r) => r.status === 'repaired').length
+              const stuck = res.filter((r) => r.status === 'cannot-write' || r.status === 'failed').length
+              if (stuck) return `${fixed} republished, ${stuck} could not be written — see below`
+              return fixed ? `${fixed} record${fixed === 1 ? '' : 's'} republished` : 'everything already matches'
+            })
+          }
+        >
+          {busy === 'repair' ? <Spinner /> : null}
+          check my identity records
+        </button>
+        <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>
+          compares what you publish against the keys this device derives
+        </span>
+      </div>
+
+      {repairs && (
+        <div style={{ border: '1px solid var(--rule)', padding: '8px 12px' }}>
+          {repairs.map((r) => (
+            <div key={r.key} className="mono" style={{ fontSize: 11, padding: '3px 0' }}>
+              <span style={{ minWidth: 70, display: 'inline-block' }}>{r.label}</span>
+              <span style={{ color: r.status === 'ok' || r.status === 'repaired' ? 'var(--muted)' : 'var(--bad, #c33)' }}>
+                {r.status}
+              </span>
+              {r.status !== 'ok' && (
+                // Show BOTH values. "stale" is abstract; seeing the address you no longer use
+                // sitting next to the one you do is what makes the failure legible.
+                <div style={{ color: 'var(--faint)', fontSize: 10, paddingLeft: 70 }}>
+                  <div>published: {r.onChain ?? 'unset'}</div>
+                  <div>yours: {r.expected}</div>
+                  {r.detail && <div>{r.detail}</div>}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ border: '1px solid var(--rule)' }}>
         {RECORD_SPECS.map((spec, i) => {

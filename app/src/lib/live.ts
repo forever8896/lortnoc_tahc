@@ -5,14 +5,15 @@
 import type { Backend } from './backend'
 import { fullHandle, shortName } from './backend'
 import type {
-  ClaimStage, Conversation, EnsStatus, Health, Identity, Message, OpenedKnock, RecordPerm, SendStage,
+  ClaimStage, Conversation, EnsStatus, Health, Identity, IdentityRepair, Message, OpenedKnock,
+  RecordPerm, SendStage,
 } from './types'
 import {
   deriveConvKey, deriveMasterSecret, deriveMessagingKey, deriveOwnerKey, deriveSuiKey,
   fromHex, toHex, type KeyPair,
 } from './crypto'
 import { privateKeyToAccount } from 'viem/accounts'
-import type { PrivateKeyAccount } from 'viem'
+import type { Account, Address, PrivateKeyAccount } from 'viem'
 import * as ens from './live/ens'
 import { sendMessage, readMessages, findHeads, sui } from './live/sui'
 import { GATEWAY_ADDR, LORTNOC, REC, RECORD_SPECS, ensReady } from './live/config'
@@ -29,9 +30,20 @@ const HEADS = 'lortnoc.live.heads.v1' // peer handle -> Sui ConversationHead id 
 /** sessionStorage (dies with the tab, never touches disk): MS, so a reload does not mean another
  *  wallet signature. */
 const SESSION = 'lortnoc.live.session.v1'
-/** sessionStorage: the knock key DERIVED from the answer — never the answer itself. Bound to the
+/** localStorage: the knock key DERIVED from the answer — never the answer itself. Bound to the
  *  published salt, so re-publishing a question invalidates it automatically. Without this the
- *  inbox could not show a knock until you went and retyped the answer. */
+ *  inbox could not show a knock until you went and retyped the answer.
+ *
+ *  ⚠️ This was sessionStorage, and that is what made knocks look broken: the key was written only
+ *  when you published the question or typed the answer, and sessionStorage dies with the TAB. So
+ *  the inbox was armed in exactly one tab and deaf everywhere else — and a locked inbox shows no
+ *  count by design (§6.8), so four sealed knocks sitting on the relay produced no signal at all.
+ *  Measured, not guessed: four real knocks to kirsten.lortnoctahc.eth sat unread on the relayer.
+ *
+ *  The tradeoff, stated plainly: this key now sits on disk, so someone with the device can open
+ *  knocks addressed to you until you republish the question. It is NOT the answer (nothing here
+ *  helps them answer anyone else's gate) and NOT MS — MS stays in sessionStorage, because losing
+ *  it costs one wallet signature while losing a knock costs a contact you never knew tried. */
 const KNOCK_KEY = 'lortnoc.live.knockkey.v1'
 /** Peers whose knock we opened. A conversation with no messages yet has no Sui head, so without
  *  this an accepted knock would leave no trace anywhere and "open conversation" would look like
@@ -296,6 +308,14 @@ export class LiveBackend implements Backend {
    *  state, so without this the recipient's inbox would look empty. */
   /** Last time we scanned Sui events for heads we participate in. */
   private lastDiscovery = 0
+  /** Why the last scan failed, or null. Surfaced in the empty inbox — see listConversations. */
+  private discoveryErr: string | null = null
+
+  /** Why an inbox might be empty for a reason that is not "you have no conversations".
+   *  Null when the last scan succeeded. */
+  discoveryError(): string | null {
+    return this.discoveryErr
+  }
 
   async listConversations(): Promise<Conversation[]> {
     // Discovery costs an event query plus a getObject per head found — far too heavy to repeat on
@@ -305,9 +325,15 @@ export class LiveBackend implements Backend {
       if (Date.now() - this.lastDiscovery > 30_000) {
         this.lastDiscovery = Date.now()
         await this.discoverHeads()
+        this.discoveryErr = null
       }
-    } catch {
-      /* discovery is best-effort — never block the inbox on it */
+    } catch (e) {
+      // Discovery stays best-effort — it must never block an inbox that already has local heads.
+      // But swallowing the reason entirely is how an empty inbox becomes unexplainable: the user
+      // sees "No conversations yet", which is a statement about their account, when the truth is
+      // "this device could not ask". Keep going, remember why, and let the UI say so.
+      this.discoveryErr = String((e as Error)?.message ?? e).slice(0, 200)
+      console.warn('[lortnoc] conversation discovery failed:', e)
     }
     const peers = new Set([...Object.keys(this.heads()), ...this.accepted()])
     // Per-peer failures must not take the inbox down with them: one handle that stops resolving
@@ -550,6 +576,101 @@ export class LiveBackend implements Backend {
     return `${key} updated (tx ${tx.slice(0, 12)}…)`
   }
 
+  /** Repair the records the app maintains for you — see the note on Backend.repairIdentityRecords.
+   *
+   *  Loud on purpose. The sign-in self-heal is silent-only so it cannot interrupt sign-in with a
+   *  wallet popup; the cost of that choice is that a handle can advertise an identity its owner
+   *  abandoned months ago and nobody is told. Here the user asked, so a prompt is welcome and a
+   *  refusal is reported rather than swallowed.
+   *
+   *  Permission is checked BEFORE writing rather than by attempting the write and reading the
+   *  revert: `setText` falls back to the connected wallet when the derived owner key cannot
+   *  sign, and that wallet usually holds no role either, so the naive version burns gas to
+   *  produce an unreadable `NotAuthorised`. Asking the resolver first turns that into a sentence
+   *  naming the key that WOULD work — which matters most in the case that has no fix from
+   *  inside the app: a master secret that has changed, leaving the handle owned by a key this
+   *  device can no longer derive. */
+  async repairIdentityRecords(): Promise<IdentityRepair[]> {
+    if (!this.id?.handle) throw new Error('claim a handle first')
+    const handle = this.id.handle
+    const owner = this.owner
+    const wallet = this.id.address
+
+    /** Who, if anyone, can write `key`: the MS-derived owner (silent) or the connected wallet
+     *  (prompts). Null when neither holds the role. */
+    const signerFor = async (key: string): Promise<{ account?: Account; who: string } | null> => {
+      if (owner && (await ens.canWriteText(handle, owner.address as Address, key))) {
+        return { account: owner, who: 'your derived owner key' }
+      }
+      if (wallet && (await ens.canWriteText(handle, wallet as Address, key))) {
+        return { account: undefined, who: 'your connected wallet' } // undefined ⇒ wallet signs
+      }
+      return null
+    }
+
+    const out: IdentityRepair[] = []
+    const want: { key: string; label: string; expected: string }[] = [
+      { key: REC.pubkey, label: 'pubkey', expected: this.id.pubkeyHex },
+      { key: REC.sui, label: 'sui', expected: await this.suiAddress() },
+    ]
+
+    for (const w of want) {
+      const onChain = await ens.readText(handle, w.key)
+      if (onChain === w.expected) {
+        out.push({ ...w, onChain, status: 'ok' })
+        continue
+      }
+      const signer = await signerFor(w.key)
+      if (!signer) {
+        out.push({
+          ...w,
+          onChain,
+          status: 'cannot-write',
+          // The single most useful sentence in this whole path: it separates "sign in with the
+          // right wallet" from "this handle is not recoverable from this device".
+          detail:
+            'neither your derived owner key nor your connected wallet may write this record — ' +
+            'the handle was claimed by a different master secret',
+        })
+        continue
+      }
+      try {
+        await ens.setText(handle, w.key, w.expected, signer.account)
+        out.push({ ...w, onChain, status: 'repaired', detail: `signed by ${signer.who}` })
+      } catch (e) {
+        out.push({ ...w, onChain, status: 'failed', detail: String((e as Error).message ?? e).slice(0, 160) })
+      }
+    }
+
+    // `addr` is not one of ours but explorers and wallets read it FIRST, and handles claimed
+    // before the registrar wrote it sit at 0x0 — which renders as "does not resolve" even when
+    // every text record is perfect (§6.5). Repaired here for the same reason and by the same rule.
+    const wantAddr = (owner?.address ?? wallet) as string | undefined
+    if (wantAddr) {
+      const onChain = await ens.readAddr(handle)
+      const zero = '0x0000000000000000000000000000000000000000'
+      if ((onChain ?? zero).toLowerCase() === wantAddr.toLowerCase()) {
+        out.push({ key: 'addr', label: 'addr', onChain, expected: wantAddr, status: 'ok' })
+      } else {
+        const signer = await signerFor(REC.pubkey) // ROLE_SET_ADDR travels with the root grant
+        if (!signer) {
+          out.push({
+            key: 'addr', label: 'addr', onChain, expected: wantAddr, status: 'cannot-write',
+            detail: 'no key on this device may write this handle’s records',
+          })
+        } else {
+          try {
+            await ens.setAddr(handle, wantAddr as Address, signer.account)
+            out.push({ key: 'addr', label: 'addr', onChain, expected: wantAddr, status: 'repaired', detail: `signed by ${signer.who}` })
+          } catch (e) {
+            out.push({ key: 'addr', label: 'addr', onChain, expected: wantAddr, status: 'failed', detail: String((e as Error).message ?? e).slice(0, 160) })
+          }
+        }
+      }
+    }
+    return out
+  }
+
   // ---- knock (§6.8) -------------------------------------------------------------------------
 
   /** Publish the QUESTION. The answer derives a key here and is then dropped on the floor — we
@@ -558,13 +679,22 @@ export class LiveBackend implements Backend {
   async setKnock(prompt: string, answer: string): Promise<string> {
     if (!this.id?.handle) throw new Error('claim a handle first')
     if (!answer.trim()) throw new Error('an answer is required — it never leaves this device')
-    const config = createKnockConfig(prompt)
+    // Reuse the salt we already published rather than minting a fresh one. A rotating salt buys
+    // nothing — the salt is a PUBLIC record whose job is domain separation between handles, not
+    // freshness — and it costs plenty: every sealed knock already waiting on the relay was
+    // encrypted under the old salt's key, so rotating turns them into blobs nobody can ever open,
+    // silently, at the exact moment you were editing your question. Changing the ANSWER still
+    // invalidates them, which is correct: that is you deliberately changing the lock.
+    const existing = await this.myKnockConfig()
+    const config = existing
+      ? { ...createKnockConfig(prompt), salt: existing.salt }
+      : createKnockConfig(prompt)
     const key = await deriveKnockKey(answer, config) // fail early if the answer is unusable
     const tx = await ens.setText(this.id.handle, REC.knock, JSON.stringify(config), this.owner ?? undefined)
     // Cache the derived key so the inbox can open knocks by itself. The answer is still dropped
-    // on the floor here — the key it produced is what we keep, and only for this tab.
+    // on the floor here — the key it produced is what we keep.
     this.cacheKnockKey(config.salt, key)
-    this.myKnock = { at: Date.now(), config } // new salt takes effect at once, not in 60s
+    this.myKnock = { at: Date.now(), config } // the new prompt takes effect at once, not in 60s
     return `knock published — "${config.prompt}" (tx ${tx.slice(0, 12)}…)`
   }
 
@@ -672,12 +802,12 @@ export class LiveBackend implements Backend {
   }
 
   private cacheKnockKey(salt: string, key: Uint8Array): void {
-    sessionStorage.setItem(KNOCK_KEY, JSON.stringify({ salt, key: toHex(key) }))
+    localStorage.setItem(KNOCK_KEY, JSON.stringify({ salt, key: toHex(key) }))
   }
 
   private cachedKnockKey(salt: string): Uint8Array | null {
     try {
-      const got = JSON.parse(sessionStorage.getItem(KNOCK_KEY) || 'null') as
+      const got = JSON.parse(localStorage.getItem(KNOCK_KEY) || 'null') as
         | { salt?: string; key?: string }
         | null
       // Salt mismatch = the question was re-published, so this key opens nothing. Drop it rather

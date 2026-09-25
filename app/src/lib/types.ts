@@ -95,3 +95,23 @@ export type EnsStatus = {
     ready: boolean
   }
 }
+
+/** One identity record, as this device derives it vs. as the handle actually publishes it.
+ *
+ *  This type exists because the two can silently disagree. `pubkey` and `sui` are written by the
+ *  app, not the user (RECORD_SPECS marks them `owned: false`), and the sign-in self-heal that
+ *  maintains them is silent-only — so when it cannot sign it returns without a word and the
+ *  handle goes on advertising an identity the owner stopped using. Peers then address a dead
+ *  account and every message they send is invisible to both sides, with no error anywhere.
+ *  Measured in the field: a handle publishing a Sui address last used two months earlier. */
+export type IdentityRepair = {
+  key: string
+  label: string
+  /** What the handle publishes today. */
+  onChain: string | null
+  /** What this device derives from the master secret — the value that is actually in use. */
+  expected: string
+  status: 'ok' | 'repaired' | 'cannot-write' | 'failed'
+  /** Why, when the status is not a happy one. Always says which key would be needed. */
+  detail?: string
+}

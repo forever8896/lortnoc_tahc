@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#08080A" />
     <link rel="icon" type="image/png" href="/icon.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <!-- Installability is not cosmetic: iOS shows web notifications only for a PWA added to the
+         home screen, so this manifest is what makes the receiving device notifiable at all. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Lortnoc DM — your identity, your inbox, yours</title>
     <link rel="preload" href="/fonts/questrial/questrial-400.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/jost/jost-300.woff2" as="font" type="font/woff2" crossorigin />

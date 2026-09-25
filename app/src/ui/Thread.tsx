@@ -3,7 +3,8 @@ import { useBackend } from '../lib/ctx'
 import type { Conversation, SendStage } from '../lib/types'
 import { SEND_STAGE_LABEL } from '../lib/types'
 import { fullHandle } from '../lib/backend'
-import { Avatar, shortHandle } from './atoms'
+import { Avatar, Linkified, shortHandle } from './atoms'
+import { clockTime, dayLabel, opensNewDay } from './time'
 
 export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => void; onSent: () => void }) {
   const { backend, identity } = useBackend()
@@ -15,6 +16,9 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
   // If this peer gates contact, we must knock before we can message (§6.8).
   const [knockPrompt, setKnockPrompt] = useState<string | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  /** False until this thread has painted once, so the first scroll can be instant. */
+  const settled = useRef(false)
 
   // Load errors and SEND errors are kept apart on purpose. They shared one slot, so the poll
   // clearing `err` on its next success also erased the report that a send had failed — the error
@@ -58,9 +62,21 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
     return () => { live = false }
   }, [backend, peer])
 
+  // Opening a conversation should START at the newest message, not glide there: a smooth scroll
+  // from the top of a long thread is a second of the app visibly reading itself. Animate only
+  // once we are already at the bottom and something new arrives.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [conv?.messages.length, pending?.stage])
+    if (conv === null) return
+    endRef.current?.scrollIntoView({ behavior: settled.current ? 'smooth' : 'auto' })
+    settled.current = true
+  }, [conv, conv?.messages.length, pending?.stage])
+
+  // A new conversation is a new thread: reset the first-paint jump and put the cursor in the box.
+  // Every messenger does this, and its absence is felt as a missing click on every single open.
+  useEffect(() => {
+    settled.current = false
+    inputRef.current?.focus()
+  }, [peer])
 
   async function send(e: React.FormEvent) {
     e.preventDefault()
@@ -124,16 +140,36 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
         )}
         {conv?.messages.map((m, i) => {
           const mine = m.from === identity!.handle
+          // A day separator whenever the log crosses midnight — without one, a message sent
+          // yesterday and one sent this morning read as consecutive, which is how a thread ends
+          // up feeling like an undated dump rather than a conversation.
+          const newDay = opensNewDay(m.ts, conv?.messages[i - 1]?.ts)
           return (
-            <div key={i} style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start' }}>
+            <div key={i}>
+            {newDay && (
+              <div
+                className="mono"
+                style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '10px 0 14px', color: 'var(--faint)', fontSize: 10 }}
+              >
+                <span style={{ flex: 1, height: 1, background: 'var(--rule)' }} />
+                {dayLabel(m.ts)}
+                <span style={{ flex: 1, height: 1, background: 'var(--rule)' }} />
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start' }}>
               <button
                 onClick={() => setReveal(reveal === i ? null : i)}
                 style={{
                   maxWidth: 'min(78%, 560px)',
                   textAlign: 'left',
                   padding: '10px 14px',
-                  background: mine ? 'rgba(18, 196, 190,0.12)' : 'var(--panel)',
-                  border: `1px solid ${mine ? 'rgba(18, 196, 190,0.3)' : 'var(--rule)'}`,
+                  background: mine ? 'var(--signal-soft)' : 'var(--panel)',
+                  border: `1px solid ${mine ? 'var(--signal-line)' : 'var(--rule)'}`,
+                  borderRadius: 'var(--radius)',
+                  // A message you cannot select is a message you cannot quote, forward or copy an
+                  // address out of. The bubble stays a button for the reveal, but its text behaves
+                  // like text.
+                  userSelect: 'text',
                   color: 'var(--ink)',
                   cursor: 'pointer',
                   font: 'inherit',
@@ -142,14 +178,24 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
                 }}
                 title="what's actually stored"
               >
-                {m.body}
+                <Linkified text={m.body} />
+                {/* The time is part of the message now, not a reward for clicking. Reading a
+                    thread means knowing when things were said; hiding that behind a tap made the
+                    app feel like a demo of encryption rather than somewhere you talk. */}
+                <div
+                  className="mono"
+                  style={{ fontSize: 10, color: 'var(--faint)', marginTop: 5, textAlign: mine ? 'right' : 'left' }}
+                >
+                  {clockTime(m.ts)}
+                </div>
                 {reveal === i && (
                   <div className="mono" style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--rule)', fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
                     stored Seal-encrypted on Walrus · only your key decrypts it ·{' '}
-                    {new Date(m.ts).toLocaleTimeString()}
+                    {new Date(m.ts).toLocaleString()}
                   </div>
                 )}
               </button>
+            </div>
             </div>
           )
         })}
@@ -178,6 +224,7 @@ export function Thread({ peer, onBack, onSent }: { peer: string; onBack: () => v
       ) : (
       <form onSubmit={send} style={{ display: 'flex', gap: 10, padding: 'var(--shell)', borderTop: '1px solid var(--rule)' }}>
         <input
+          ref={inputRef}
           className="input"
           placeholder={`message ${shortHandle(peerH)}…`}
           value={body}

@@ -47,16 +47,64 @@ async function walrusWrite(bytes: Uint8Array, signer: Signer): Promise<string> {
  * allow-origin: *`, so they work from the page. The SDK stays as the last resort, since it is the
  * trust-minimised path: an aggregator is someone else reconstructing the blob for us.
  */
+/** Blobs every aggregator has reported missing, and how many times running.
+ *
+ *  A blob that is GONE is not a blob that is slow. Walrus storage is bought for a fixed number of
+ *  epochs (`SUI.epochs`), and a testnet epoch is ONE DAY — so a conversation older than a few days
+ *  has blobs that no longer exist anywhere. Without this, every one of them re-ran the full read
+ *  path on every poll, forever. */
+const missed = new Map<string, number>()
+/** Consecutive all-404 rounds before a blob is written off. Not 1: an aggregator can 404 a blob
+ *  it has not finished reconstructing, and writing off a message seconds after it was sent would
+ *  lose it permanently from this device's view. */
+const MISS_LIMIT = 3
+/** Per-aggregator budget. One unreachable host must not hold the whole inbox open. */
+const READ_TIMEOUT_MS = 8_000
+
+class BlobGone extends Error {
+  constructor(id: string) {
+    super(`blob ${id} is no longer stored (storage term expired)`)
+  }
+}
+
+/**
+ * Read a blob, aggregators only — and NEVER fall through to the SDK on a 404.
+ *
+ * The SDK's readBlob reconstructs from storage nodes directly, and measured in a real browser
+ * that means ~15 sequential requests that end in 404, ERR_CERT_DATE_INVALID or
+ * ERR_CONNECTION_REFUSED. For a blob whose storage term has EXPIRED, every one of those is
+ * guaranteed to fail, and the whole walk ran per blob, per poll, ahead of the conversation list —
+ * which is why an inbox took minutes to appear and a fresh load appeared to hang. The fallback is
+ * kept for the case it was actually written for (aggregators unreachable), and skipped for the
+ * case it can only lose to (the blob is gone).
+ */
 async function walrusRead(blobId: string): Promise<Uint8Array> {
+  if ((missed.get(blobId) ?? 0) >= MISS_LIMIT) throw new BlobGone(blobId)
+
+  let notFound = 0
   for (const host of SUI.aggregators) {
     try {
-      const res = await fetch(`${host}/v1/blobs/${blobId}`)
-      if (!res.ok) continue
-      return new Uint8Array(await res.arrayBuffer())
+      const res = await fetch(`${host}/v1/blobs/${blobId}`, {
+        signal: AbortSignal.timeout(READ_TIMEOUT_MS),
+      })
+      if (res.ok) {
+        missed.delete(blobId) // it came back — an earlier miss was reconstruction lag
+        return new Uint8Array(await res.arrayBuffer())
+      }
+      if (res.status === 404) notFound++
     } catch {
-      /* try the next aggregator */
+      /* unreachable or timed out — not evidence the blob is gone */
     }
   }
+
+  // Every aggregator that ANSWERED said 404, and none was merely unreachable: the blob is not
+  // there to be found, so the storage-node walk cannot help and only costs minutes.
+  if (notFound === SUI.aggregators.length) {
+    const n = (missed.get(blobId) ?? 0) + 1
+    missed.set(blobId, n)
+    throw new BlobGone(blobId)
+  }
+
   const client = await walrus()
   return client.readBlob({ blobId })
 }
@@ -229,39 +277,47 @@ export async function readMessages(
   const fields = content && content.dataType === 'moveObject'
     ? (content.fields as { blobs?: string[] })
     : undefined
-  const out: Message[] = []
-  for (const id of fields?.blobs ?? []) {
+  // Blobs are fetched CONCURRENTLY. They were read one after another, so a conversation cost the
+  // sum of its messages — and any single slow or missing blob stalled every message behind it,
+  // including ones already sitting in cache further down the list. They are independent reads
+  // against independent hosts; the only ordering that matters is the sort at the end, by `ts`.
+  const settled = await Promise.all((fields?.blobs ?? []).map(async (id): Promise<Message | null> => {
     // The head of a Seal conversation is created empty, because the identity has to be namespaced
     // to an object that does not exist yet. That placeholder is not a blob.
-    if (!id) continue
+    if (!id) return null
     // Two very different failures used to share one silent catch, which is how a stored message
     // could vanish without a trace: a blob we cannot FETCH is transient and self-heals on the
     // next poll, while a blob that will not DECRYPT is simply not ours and never will be.
     const ck = cacheKey(id, convKey)
     const hit = blobCache.get(ck)
-    if (hit !== undefined) {
-      if (hit) out.push(hit)
-      continue
-    }
+    if (hit !== undefined) return hit
     let bytes: Uint8Array
     try {
       bytes = await walrusRead(id)
     } catch (e) {
+      if (e instanceof BlobGone) {
+        // Its storage term ran out — it is not coming back, so stop asking on every poll. This is
+        // real data loss, and `SUI.epochs` is what decides when it happens (a testnet epoch is a
+        // DAY, so `epochs: 3` gives a conversation three days of life).
+        console.warn('[lortnoc] message dropped — its Walrus storage term expired:', id)
+        blobCache.set(ck, null)
+        return null
+      }
       console.warn('[lortnoc] blob unavailable, will retry next poll:', id, e)
-      continue // NOT cached — transient
+      return null // NOT cached — transient
     }
     // Seal object → ask the key servers (they dry-run seal_approve and refuse if we are not a
     // participant). Anything else is a pre-Seal blob under our own AES-SIV, and must keep
     // opening: the conversations written before this existed are still real messages.
     let pt: string | null = null
     if (isSealObject(bytes)) {
-      if (!signer) continue // no storage key in hand — undecided, retry when there is one
+      if (!signer) return null // no storage key in hand — undecided, retry when there is one
       try {
         pt = new TextDecoder().decode(await sealDecrypt(headId, bytes, signer))
       } catch (e) {
         console.debug('[lortnoc] Seal refused or could not open this blob:', id, e)
         blobCache.set(ck, null)
-        continue
+        return null
       }
     } else {
       pt = tryDecrypt(convKey, bytes)
@@ -269,39 +325,61 @@ export async function readMessages(
     if (!pt) {
       console.debug('[lortnoc] blob did not decrypt (not ours / wrong key):', id)
       blobCache.set(ck, null) // this key will never open this blob
-      continue
+      return null
     }
     try {
       const msg = JSON.parse(pt) as Message
       blobCache.set(ck, msg)
-      out.push(msg)
+      return msg
     } catch {
       console.warn('[lortnoc] decrypted but unparseable:', id)
       blobCache.set(ck, null)
+      return null
     }
-  }
-  return out.sort((a, b) => a.ts - b.ts)
+  }))
+  return settled.filter((m): m is Message => m !== null).sort((a, b) => a.ts - b.ts)
 }
 
 /** Find conversation heads this address participates in, so a second device (or the peer)
  *  discovers threads without a local index. */
 export async function findHeads(address: string): Promise<string[]> {
   assertSuiSetup()
-  const events = await sui.queryEvents({
-    query: { MoveEventType: `${SUI.packageId}::conversation::ConversationCreated` },
-    limit: 50,
-    order: 'descending',
+  // Events come from GraphQL, not JSON-RPC: sui.queryEvents() is deprecated on public fullnodes
+  // and now throws "Method not found", which silently emptied every recipient's inbox. See the
+  // note on SUI.graphql in config.ts. Object reads below still use the JSON-RPC client.
+  const query = `{ events(filter: {type: "${SUI.packageId}::conversation::ConversationCreated"}, last: 50) { nodes { contents { json } } } }`
+  const res = await fetch(SUI.graphql, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
   })
-  const ids = events.data.map((e) => (e.parsedJson as { head?: string })?.head).filter(Boolean) as string[]
-  const mine: string[] = []
-  for (const id of ids) {
-    const o = await sui.getObject({ id, options: { showContent: true } })
-    const c = o.data?.content
-    if (c?.dataType !== 'moveObject') continue
-    const members = (c.fields as { members?: string[] }).members ?? []
-    if (members.some((m) => m.toLowerCase() === address.toLowerCase())) mine.push(id)
+  if (!res.ok) throw new Error(`sui graphql ${res.status}`)
+  const body = (await res.json()) as {
+    data?: { events?: { nodes?: { contents?: { json?: { head?: string } } }[] } }
+    errors?: unknown
   }
-  return mine
+  if (body.errors) throw new Error(`sui graphql: ${JSON.stringify(body.errors).slice(0, 200)}`)
+  const ids = (body.data?.events?.nodes ?? [])
+    .map((n) => n.contents?.json?.head)
+    .filter(Boolean) as string[]
+  // One getObject PER EVENT, and they used to run one after another — so discovery cost grew with
+  // everyone's conversations, not yours, and ran ahead of the inbox on a cold load. They are
+  // independent reads; fetch them together and keep only the heads you are a member of.
+  const checked = await Promise.all(
+    ids.map(async (id) => {
+      try {
+        const o = await sui.getObject({ id, options: { showContent: true } })
+        const c = o.data?.content
+        if (c?.dataType !== 'moveObject') return null
+        const members = (c.fields as { members?: string[] }).members ?? []
+        return members.some((m) => m.toLowerCase() === address.toLowerCase()) ? id : null
+      } catch {
+        // One unreadable head must not abort discovery for every other conversation.
+        return null
+      }
+    }),
+  )
+  return checked.filter((id): id is string => id !== null)
 }
 
 // SEAL (the differentiator, §6.4): the Move module already ships `seal_approve`, which gates a
