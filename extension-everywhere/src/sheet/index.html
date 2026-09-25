@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>lortnoc tahc — write</title>
+  <link rel="stylesheet" href="../shared/ui.css">
+</head>
+<body>
+  <div class="card">
+    <div class="hdr">
+      <div class="title">lortnoc <b>tahc</b> — write hidden</div>
+      <button class="x" id="close" title="Close (Esc)">×</button>
+    </div>
+
+    <textarea id="msg" placeholder="What you really want to say…" autofocus></textarea>
+    <div class="small muted" id="nofield" hidden>No text box was focused — you'll get a Copy button instead.</div>
+
+    <div class="eyebrow">Who can read it</div>
+    <div class="small muted" style="margin:-2px 0 6px">Readers need <b>all</b> of these groups. Inside a group, <b>any one</b> works.</div>
+    <div id="groups"></div>
+    <button class="btn btn-ghost btn-small" id="addGroup">+ add requirement</button>
+
+    <div class="chips" id="honesty"></div>
+
+    <label class="toggle"><input type="checkbox" id="marker" checked> Tag with #lortnoctahc so readers' extensions find it <span class="muted">(turn off in high-risk places)</span></label>
+
+    <div class="row end" style="margin-top:10px">
+      <button class="btn" id="go">Hide it &amp; insert</button>
+    </div>
+    <div class="status" id="status"></div>
+    <div id="result" hidden>
+      <div class="eyebrow">What the page gets</div>
+      <div class="cover" id="cover"></div>
+      <div class="row end" style="margin-top:8px"><button class="btn btn-ghost btn-small" id="copy">Copy</button></div>
+    </div>
+  </div>
+  <script type="module" src="./sheet.ts"></script>
+</body>
+</html>

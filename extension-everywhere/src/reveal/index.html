@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>lortnoc tahc — reveal</title>
+  <link rel="stylesheet" href="../shared/ui.css">
+</head>
+<body>
+  <div class="card">
+    <div class="hdr">
+      <div class="title">lortnoc <b>tahc</b> — reveal</div>
+      <button class="x" id="close" title="Close (Esc)">×</button>
+    </div>
+    <div class="status" id="status">Reading…</div>
+    <div id="needs" hidden>
+      <div class="eyebrow">This post asks for</div>
+      <div class="chips" id="checks"></div>
+      <div id="pass" hidden>
+        <div class="row">
+          <input type="password" id="pw" placeholder="Passphrase" autocomplete="off">
+          <button class="btn btn-small" id="try">Open</button>
+        </div>
+      </div>
+      <div class="small muted" id="identity" hidden>Named-people posts open with your lortnoc identity — coming with the identity update.</div>
+    </div>
+    <div id="out" hidden>
+      <div class="plain" id="plain"></div>
+      <div class="small muted" id="note" style="margin-top:8px"></div>
+    </div>
+  </div>
+  <script type="module" src="./reveal.ts"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>lortnoc tahc — everywhere</title>
+  <link rel="stylesheet" href="../shared/ui.css">
+  <style>body { width: 320px; background: #08080a; } .card { border: 0; border-radius: 0; }</style>
+</head>
+<body>
+  <div class="card">
+    <div class="hdr"><div class="title">lortnoc <b>tahc</b> — everywhere</div><span class="chip" id="health">codec …</span></div>
+    <div class="small muted">Write everywhere; only the people you choose can read it. Everyone else sees chatter.</div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" id="compose">Write hidden</button>
+      <button class="btn btn-ghost" id="scan">Reveal on this page</button>
+    </div>
+    <div class="small muted" style="margin-top:8px">Shortcut: <b id="key">Ctrl+Shift+L</b> in any text box · right-click a post → <b>Reveal</b></div>
+    <div class="status" id="status"></div>
+    <div class="eyebrow">Codec</div>
+    <div class="row"><input type="text" id="codec" spellcheck="false"><button class="btn btn-ghost btn-small" id="save">Save</button></div>
+  </div>
+  <script type="module" src="./popup.ts"></script>
+</body>
+</html>

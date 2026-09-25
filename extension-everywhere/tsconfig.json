@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["chrome"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "allowJs": true,
+    "noEmit": true
+  },
+  // ../shared is outside this workspace but is imported by relative path (the repo convention —
+  // see CLAUDE.md §11 "Cross-workspace sharing is by relative import into shared/"). It must be
+  // in `include` or tsc will not typecheck what the bundle actually ships.
+  "include": ["src", "manifest.config.ts", "vite.config.ts", "../shared/*.mjs", "../shared/*.d.mts"]
+}
