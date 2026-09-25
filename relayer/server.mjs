@@ -42,6 +42,8 @@ const MEMBERSHIP = ZG.contracts.membership
 const SEMAPHORE = ZG.contracts.semaphore
 const GROUP_ID = BigInt(ZG.groupId ?? 0)
 const REGISTRAR = ENS_D.lortnoc.registrar
+const REGISTRY = ENS_D.lortnoc.registry
+const UNIVERSAL_HELPER = ENS_D.ens.universalHelper
 const PARENT = ENS_D.lortnoc.parentName
 
 const PORT = Number(process.env.PORT || 8080)
@@ -124,6 +126,24 @@ const registrarAbi = parseAbi([
   'function available(string label) view returns (bool)',
   'function isRelayer(address) view returns (bool)',
 ])
+const registryAbi = parseAbi(['function findOwner(string label) view returns (address)'])
+const helperAbi = parseAbi(['function findExactOwner(bytes name) view returns (address)'])
+const dnsEncode = (name) => {
+  let o = '0x'
+  for (const p of name.split('.').filter(Boolean)) {
+    const b = new TextEncoder().encode(p)
+    o += b.length.toString(16).padStart(2, '0') + [...b].map((x) => x.toString(16).padStart(2, '0')).join('')
+  }
+  return `${o}00`
+}
+/** Sepolia fees with a floor on the tip: public RPCs sometimes suggest ~0, and a zero-tip tx can
+ *  sit unmined forever — which here would stall a claim whose ticket is already burned. */
+async function sepoliaFees() {
+  const floor = 1_000_000_000n
+  const f = await eth.estimateFeesPerGas()
+  const tip = f.maxPriorityFeePerGas > floor ? f.maxPriorityFeePerGas : floor
+  return { maxPriorityFeePerGas: tip, maxFeePerGas: f.maxFeePerGas + tip }
+}
 
 const app = express()
 app.use(express.json({ limit: '256kb' }))
@@ -278,12 +298,27 @@ app.post('/claim', async (req, res) => {
         account, address: REGISTRAR, abi: registrarAbi, functionName: 'claimFor',
         args: [label, pubkey, getAddress(evmAddr)],
       })
-      claimTx = await ethWallet.writeContract(request)
+      claimTx = await ethWallet.writeContract({ ...request, ...(await sepoliaFees()) })
       const r = await eth.waitForTransactionReceipt({ hash: claimTx })
       if (r.status !== 'success') throw new Error('claimFor reverted')
       log(`issued ${label}.${PARENT} to ${evmAddr} (${claimTx})`)
     } else {
-      log(`${label} already taken — skipping claimFor`)
+      // Idempotent retry path — but only if the label is OURS to skip. A label owned by anyone
+      // else must not be reported as a successful claim.
+      const holder = await eth.readContract({ address: REGISTRY, abi: registryAbi, functionName: 'findOwner', args: [label] })
+      if (holder.toLowerCase() !== evmAddr.toLowerCase()) {
+        log(`${label} is held by ${holder}, not the claimant — refusing to report success`)
+        return res.status(409).json({ error: 'label is owned by someone else', label, holder })
+      }
+      log(`${label} already issued to the claimant — skipping claimFor`)
+    }
+    // Confirm the way ENS's own tooling sees it (UniversalHelper from the canonical root), not by
+    // receipt alone. Logged, not fatal: the registry write above already succeeded.
+    try {
+      const exact = await eth.readContract({ address: UNIVERSAL_HELPER, abi: helperAbi, functionName: 'findExactOwner', args: [dnsEncode(`${label}.${PARENT}`)] })
+      if (exact.toLowerCase() !== evmAddr.toLowerCase()) log(`WARN ${label}.${PARENT}: findExactOwner=${exact}, expected ${evmAddr}`)
+    } catch (e) {
+      log(`findExactOwner check failed for ${label}: ${e.shortMessage ?? e.message}`)
     }
 
     // 5. Stipends. Best-effort on purpose: the handle is already issued, so a funding hiccup
