@@ -61,7 +61,7 @@ export function screen(step, cfg) {
     case 'run':
       return {
         text:
-          `<b>Step 3 of 3 — Post something</b>\n\n` +
+          `<b>Step 3 of 3 — Post something</b>\n\n<b>You need a post to enter the raffle</b> — make it one people will want to engage with.\n\n` +
           `1. Open <b>x.com</b> and click the extension icon.\n` +
           `2. Switch it <b>on</b>.\n` +
           `3. Write a post as normal and hit Post. It is swapped for ordinary-looking text before it leaves the page, tagged <code>#lortnoctahc</code>.\n` +
@@ -70,17 +70,20 @@ export function screen(step, cfg) {
           `• <b>Recipients empty</b> → public channel. Everyone with the extension can read it. It hides your post from people who don't have the tool; it is <b>not</b> private.\n` +
           `• <b>Recipients set</b> (their <code>name.lortnoctahc.eth</code> handles) → only those people can read it.\n\n` +
           `Longer messages become a short thread. That's normal.`,
-        buttons: [next('Done — enter the raffle →', 'raffle'), [back('load')]],
+        buttons: [next("I've posted — enter the raffle →", 'raffle'), [back('load')]],
       }
 
     case 'raffle':
       return {
         text:
           `<b>ETHGlobal Tokyo raffle</b>\n\n` +
-          `To enter, follow all three on X:\n` +
+          `🧥 <b>The legendary jean jacket goes to whoever's post gets the most engagement.</b>\n\n` +
+          `To enter, do all three:\n\n` +
+          `<b>1. Post something on X with the extension on.</b> It gets tagged <code>#lortnoctahc</code> automatically — that's how we find it. No post, no entry.\n\n` +
+          `<b>2. Follow all three on X:</b>\n` +
           FOLLOW.map((h) => `• <a href="https://x.com/${h}">@${h}</a>`).join('\n') +
-          `\n\nThen <b>reply here with your X handle</b> (e.g. <code>@yourname</code>). ` +
-          `We check the follows when we draw, so make sure it's the account that follows them.`,
+          `\n\n<b>3. Reply here with your X handle</b> (e.g. <code>@yourname</code>) — the account you posted from.\n\n` +
+          `We check the post and the follows before handing it over. Most likes, reposts and replies takes the jacket.`,
         buttons: [
           ...FOLLOW.map((h) => [{ text: `Follow @${h}`, url: `https://x.com/${h}` }]),
           [back('run')],
@@ -90,7 +93,7 @@ export function screen(step, cfg) {
     case 'done':
       return {
         text:
-          `<b>You're entered — good luck in Tokyo.</b>\n\n` +
+          `<b>You're entered — good luck in Tokyo.</b>\n\nKeep that post going: the most engagement wins the jacket. 🧥\n\n` +
           `Stuck, or something broke? Reply here — a human reads this.\n\n` +
           `/steps — walk through setup again\n/privacy — what this bot keeps about you\n/delete — erase it`,
         buttons: [[{ text: 'lortnoctahc.com', url: cfg.siteUrl }]],
@@ -103,7 +106,7 @@ export function screen(step, cfg) {
           `<b>Lortnoc Tahc for X</b> — hide what you post inside what you post.\n\n` +
           `You write a real post. Before it leaves the page, the extension turns it into ordinary-looking text. ` +
           `People with the extension see the real one; everyone else sees chatter.\n\n` +
-          `Setup takes about five minutes: download, load, post — then enter the <b>ETHGlobal Tokyo raffle</b>.\n\n` +
+          `Setup takes about five minutes: download, load, post — then enter the <b>ETHGlobal Tokyo raffle</b>. 🧥 The top-engagement post wins the legendary jean jacket.\n\n` +
           `<i>This bot keeps your Telegram username so we can reach alpha testers. /privacy for details, /delete to erase it.</i>`,
         buttons: [next("Let's set it up →", 'download')],
       }

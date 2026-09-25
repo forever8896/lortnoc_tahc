@@ -131,6 +131,16 @@ describe('onboarding bot', () => {
     assert.equal(h.rows.get(42).step, 'raffle', 'still waiting for a handle')
   })
 
+  test('the raffle makes posting a requirement and names the jacket prize', () => {
+    const text = screen('raffle', cfg).text
+    assert.match(text, /Post something on X/)
+    assert.match(text, /No post, no entry/)
+    assert.match(text, /jean jacket/)
+    assert.match(text, /most engagement/)
+    assert.doesNotMatch(text, /odds/, 'the jacket goes to the top post outright, not by chance')
+    assert.match(screen('run', cfg).text, /need a post to enter/)
+  })
+
   test('the public mode is described honestly', () => {
     assert.match(screen('run', cfg).text, /<b>not<\/b> private/)
   })
