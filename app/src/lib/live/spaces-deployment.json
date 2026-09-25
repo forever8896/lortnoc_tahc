@@ -1,0 +1,24 @@
+{
+  "sepolia": {
+    "address": "0xe0ef82657f1ca25c72b69e459a52635281b37592",
+    "chainId": 11155111,
+    "price": "5000000000000000",
+    "treasuryName": "lortnoctahc.eth",
+    "treasury": "0x08d1384214f15866F849BE148b8E8aB4a814D19E",
+    "owner": "0x08d1384214f15866F849BE148b8E8aB4a814D19E",
+    "deployTx": "0x9d2ba4773e995632ac56ddbc2000c3e3d74d112b50299de7b8074e9329dd4643",
+    "deployBlock": 11780206,
+    "deployedAt": "2026-09-25T15:46:27.490Z"
+  },
+  "mainnet": {
+    "address": "0x87997f3ca40693fb1e0c3c6f39f0f3fe287b8c67",
+    "chainId": 1,
+    "price": "5000000000000000",
+    "treasuryName": "lortnoctahc.eth",
+    "treasury": "0x08d1384214f15866F849BE148b8E8aB4a814D19E",
+    "owner": "0x08d1384214f15866F849BE148b8E8aB4a814D19E",
+    "deployTx": "0x7b792e5fcf62ab62af4e126dc272773d69ef5f25d502e04d452772a6dc315b19",
+    "deployBlock": 26055483,
+    "deployedAt": "2026-09-25T15:53:17.104Z"
+  }
+}
