@@ -69,3 +69,11 @@ lortnoc-tahc-extension-*.zip.sha256
 /docs/landing-prompt.md
 /docs/x-threads*.md
 /docs/check-threads.mjs
+
+# Local media, caches and scratch notes — not source
+/showcase/
+/banner/
+/cache/
+/lortnoc-tahc-extension-x-*-TESTING.md
+# DM tier's local cache of live conversation heads (test/dm/chat.mjs) — machine state
+/test/dm/heads.json
