@@ -16,7 +16,15 @@
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 /** Callback data → step. Unknown data falls back to the start, never to an error. */
-export const STEPS = ['welcome', 'download', 'verify', 'load', 'run', 'done']
+export const STEPS = ['welcome', 'download', 'load', 'run', 'raffle', 'done']
+
+/** The accounts a raffle entrant must follow on X. Follows are NOT checked by the bot — that
+ *  would need the X API, which §4 rules out — so entrants send their X handle and the team
+ *  checks follows when drawing. */
+export const FOLLOW = ['kirstenrpomales', 'KilianSolutions', 'LortnocTahc']
+
+/** An X handle: optional @, 1–15 letters, digits or underscores. */
+export const X_HANDLE = /^@?([A-Za-z0-9_]{1,15})$/
 
 export function screen(step, cfg) {
   const next = (label, to) => [{ text: label, callback_data: `go:${to}` }]
@@ -26,52 +34,34 @@ export function screen(step, cfg) {
     case 'download':
       return {
         text:
-          `<b>Step 1 of 4 — Download</b>\n\n` +
+          `<b>Step 1 of 3 — Download</b>\n\n` +
           `Get the X extension from GitHub Releases. It is built by public CI from the tagged commit, ` +
           `so the file comes from GitHub, not from us.\n\n` +
-          `Download the <code>.zip</code> — and note the <b>SHA-256</b> shown on that page. You will check it next.`,
+          `Download the <code>.zip</code> file.`,
         buttons: [
           [{ text: '⬇️ Open the release', url: cfg.releaseUrl }],
-          next("I've downloaded it →", 'verify'),
+          next("I've downloaded it →", 'load'),
           [back('welcome')],
-        ],
-      }
-
-    case 'verify':
-      return {
-        text:
-          `<b>Step 2 of 4 — Verify it</b>\n\n` +
-          `A privacy tool you can't inspect is just a promise. Check the file matches what CI built:\n\n` +
-          `<b>macOS / Linux</b>\n<code>shasum -a 256 lortnoc-tahc-x-*.zip</code>\n\n` +
-          `<b>Windows (PowerShell)</b>\n<code>Get-FileHash lortnoc-tahc-x-*.zip</code>\n\n` +
-          `The output must equal the SHA-256 on the release page. If it doesn't, stop and tell us.\n\n` +
-          `<b>Going further</b> — prove GitHub built it from public source:\n` +
-          `<code>gh attestation verify lortnoc-tahc-x-*.zip -R forever8896/lortnoc_tahc</code>\n\n` +
-          `Or read the source and build it yourself from the same tag.`,
-        buttons: [
-          [{ text: '📖 Read the source', url: `${cfg.repoUrl}/tree/main/extension-x` }],
-          next('It matches →', 'load'),
-          [back('download')],
         ],
       }
 
     case 'load':
       return {
         text:
-          `<b>Step 3 of 4 — Unpack and load</b>\n\n` +
+          `<b>Step 2 of 3 — Unpack and load</b>\n\n` +
           `1. <b>Unzip</b> it somewhere permanent. Chrome keeps reading from that folder — if it gets deleted, so does the extension.\n` +
           `2. Open <code>chrome://extensions</code> (Brave, Edge and Arc work too).\n` +
           `3. Turn on <b>Developer mode</b>, top-right.\n` +
           `4. Click <b>Load unpacked</b> and pick the unzipped folder.\n` +
           `5. Pin <b>lortnoc tahc for X</b> to your toolbar.\n\n` +
           `Chrome will remind you it's a developer extension on each launch. Expected — that's the price of not going through a store.`,
-        buttons: [next("It's loaded →", 'run'), [back('verify')]],
+        buttons: [next("It's loaded →", 'run'), [back('download')]],
       }
 
     case 'run':
       return {
         text:
-          `<b>Step 4 of 4 — Post something</b>\n\n` +
+          `<b>Step 3 of 3 — Post something</b>\n\n` +
           `1. Open <b>x.com</b> and click the extension icon.\n` +
           `2. Switch it <b>on</b>.\n` +
           `3. Write a post as normal and hit Post. It is swapped for ordinary-looking text before it leaves the page, tagged <code>#lortnoctahc</code>.\n` +
@@ -80,13 +70,27 @@ export function screen(step, cfg) {
           `• <b>Recipients empty</b> → public channel. Everyone with the extension can read it. It hides your post from people who don't have the tool; it is <b>not</b> private.\n` +
           `• <b>Recipients set</b> (their <code>name.lortnoctahc.eth</code> handles) → only those people can read it.\n\n` +
           `Longer messages become a short thread. That's normal.`,
-        buttons: [next('Done ✓', 'done'), [back('load')]],
+        buttons: [next('Done — enter the raffle →', 'raffle'), [back('load')]],
+      }
+
+    case 'raffle':
+      return {
+        text:
+          `<b>ETHGlobal Tokyo raffle</b>\n\n` +
+          `To enter, follow all three on X:\n` +
+          FOLLOW.map((h) => `• <a href="https://x.com/${h}">@${h}</a>`).join('\n') +
+          `\n\nThen <b>reply here with your X handle</b> (e.g. <code>@yourname</code>). ` +
+          `We check the follows when we draw, so make sure it's the account that follows them.`,
+        buttons: [
+          ...FOLLOW.map((h) => [{ text: `Follow @${h}`, url: `https://x.com/${h}` }]),
+          [back('run')],
+        ],
       }
 
     case 'done':
       return {
         text:
-          `<b>You're set.</b>\n\n` +
+          `<b>You're entered — good luck in Tokyo.</b>\n\n` +
           `Stuck, or something broke? Reply here — a human reads this.\n\n` +
           `/steps — walk through setup again\n/privacy — what this bot keeps about you\n/delete — erase it`,
         buttons: [[{ text: 'lortnoctahc.com', url: cfg.siteUrl }]],
@@ -99,7 +103,7 @@ export function screen(step, cfg) {
           `<b>Lortnoc Tahc for X</b> — hide what you post inside what you post.\n\n` +
           `You write a real post. Before it leaves the page, the extension turns it into ordinary-looking text. ` +
           `People with the extension see the real one; everyone else sees chatter.\n\n` +
-          `Setup takes about five minutes: download, verify, load, post.\n\n` +
+          `Setup takes about five minutes: download, load, post — then enter the <b>ETHGlobal Tokyo raffle</b>.\n\n` +
           `<i>This bot keeps your Telegram username so we can reach alpha testers. /privacy for details, /delete to erase it.</i>`,
         buttons: [next("Let's set it up →", 'download')],
       }
@@ -108,8 +112,8 @@ export function screen(step, cfg) {
 
 const PRIVACY =
   `<b>What this bot keeps</b>\n\n` +
-  `Your Telegram user ID and username, when you first started it, how far through setup you got, and where you came from (e.g. the website). Nothing else — not your messages, not your contacts.\n\n` +
-  `It's used only to contact alpha testers about Lortnoc Tahc. /delete removes it immediately.`
+  `Your Telegram user ID and username, your X handle if you entered the raffle, when you first started it, how far through setup you got, and where you came from (e.g. the website). Nothing else — not your messages, not your contacts.\n\n` +
+  `It's used only to contact alpha testers and run the raffle. /delete removes it immediately.`
 
 const keyboard = (buttons) => ({ inline_keyboard: buttons })
 
@@ -177,6 +181,17 @@ export async function handleUpdate(update, { api, store, cfg }) {
   if (command === 'help') {
     const s = screen('done', cfg)
     return send(`Reply here with what went wrong and a human will get back to you.\n\n/steps — setup from the top\n/privacy — what's kept\n/delete — erase it`, s.buttons)
+  }
+
+  // On the raffle step, a message that looks like an X handle IS the entry.
+  if (text && !command) {
+    const h = text.match(X_HANDLE)
+    if (h && (await store.stepOf?.(m.from.id)) === 'raffle') {
+      await store.enter(m.from.id, h[1])
+      await store.step(m.from.id, 'done')
+      const s = screen('done', cfg)
+      return send(`Entered as <b>@${esc(h[1])}</b>.\n\n` + s.text, s.buttons)
+    }
   }
 
   // Anything else is a person asking for help. Acknowledge it; the admin view shows the user.

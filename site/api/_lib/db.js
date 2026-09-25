@@ -68,6 +68,10 @@ export async function init() {
       started_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
       last_seen     TIMESTAMPTZ NOT NULL DEFAULT now()
     )`
+    // ETHGlobal Tokyo raffle entry. Added after the table shipped, so ALTER rather than relying on
+    // CREATE TABLE IF NOT EXISTS, which would leave the live table without them.
+    await sql`ALTER TABLE bot_users ADD COLUMN IF NOT EXISTS x_handle TEXT`
+    await sql`ALTER TABLE bot_users ADD COLUMN IF NOT EXISTS raffle_at TIMESTAMPTZ`
     await sql`CREATE TABLE IF NOT EXISTS rate_limit (
       bucket       TEXT PRIMARY KEY,
       count        INT NOT NULL DEFAULT 1,

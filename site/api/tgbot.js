@@ -57,6 +57,13 @@ const store = {
   async step(id, step) {
     await sql`UPDATE bot_users SET step = ${step} WHERE tg_id = ${id}`
   },
+  async stepOf(id) {
+    const rows = await sql`SELECT step FROM bot_users WHERE tg_id = ${id}`
+    return rows[0]?.step ?? null
+  },
+  async enter(id, xHandle) {
+    await sql`UPDATE bot_users SET x_handle = ${xHandle}, raffle_at = now() WHERE tg_id = ${id}`
+  },
   async forget(id) {
     await sql`DELETE FROM bot_users WHERE tg_id = ${id}`
   },

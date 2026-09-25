@@ -2,7 +2,7 @@
 // fake store. Imports the real module — never a copy (test/README.md).
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { handleUpdate, screen, STEPS } from '../../site/api/_lib/bot.js'
+import { handleUpdate, screen, STEPS, FOLLOW } from '../../site/api/_lib/bot.js'
 
 const cfg = { releaseUrl: 'https://example.test/release', repoUrl: 'https://example.test/repo', siteUrl: 'https://example.test' }
 
@@ -16,6 +16,8 @@ function harness() {
       rows.set(u.id, { ...r, username: u.username || null, source: r.source ?? source })
     },
     async step(id, step) { const r = rows.get(id); if (r) r.step = step },
+    async stepOf(id) { return rows.get(id)?.step ?? null },
+    async enter(id, x) { rows.get(id).x = x },
     async forget(id) { rows.delete(id) },
     async note(id, text) { rows.get(id).last = text },
   }
@@ -51,7 +53,7 @@ describe('onboarding bot', () => {
   test('buttons walk every step in order and record progress', async () => {
     const h = harness()
     await handleUpdate(msg('/start'), h.deps)
-    for (const step of ['download', 'verify', 'load', 'run', 'done']) {
+    for (const step of ['download', 'load', 'run', 'raffle']) {
       await handleUpdate(tap(`go:${step}`), h.deps)
       assert.equal(h.rows.get(42).step, step)
       const edit = h.calls.findLast((c) => c.method === 'editMessageText')
@@ -88,8 +90,45 @@ describe('onboarding bot', () => {
 
   test('every screen links the right places and uses the X extension, not the Telegram one', () => {
     assert.ok(screen('download', cfg).buttons.flat().some((b) => b.url === cfg.releaseUrl))
-    assert.ok(screen('verify', cfg).buttons.flat().some((b) => b.url?.endsWith('/extension-x')))
     for (const s of STEPS) assert.doesNotMatch(screen(s, cfg).text, /PrivacyMaxxing|Telegram Web/)
+  })
+
+  test('there is no verification step any more', () => {
+    assert.ok(!STEPS.includes('verify'))
+    for (const st of STEPS) assert.doesNotMatch(screen(st, cfg).text, /SHA-256|attestation|shasum/)
+  })
+
+  test('the raffle step links all three accounts to follow', () => {
+    const urls = screen('raffle', cfg).buttons.flat().map((b) => b.url).filter(Boolean)
+    for (const h of FOLLOW) assert.ok(urls.includes(`https://x.com/${h}`), `missing follow link for @${h}`)
+    assert.deepEqual(FOLLOW, ['kirstenrpomales', 'KilianSolutions', 'LortnocTahc'])
+  })
+
+  test('replying with an X handle on the raffle step enters them and finishes', async () => {
+    const h = harness()
+    await handleUpdate(msg('/start'), h.deps)
+    await handleUpdate(tap('go:raffle'), h.deps)
+    await handleUpdate(msg('@kirsten_x'), h.deps)
+    assert.equal(h.rows.get(42).x, 'kirsten_x', 'stored without the @')
+    assert.equal(h.rows.get(42).step, 'done')
+    assert.match(h.calls.at(-1).params.text, /Entered as <b>@kirsten_x<\/b>/)
+  })
+
+  test('a handle-looking message NOT on the raffle step is a help request, not an entry', async () => {
+    const h = harness()
+    await handleUpdate(msg('/start'), h.deps)
+    await handleUpdate(msg('broken'), h.deps)
+    assert.equal(h.rows.get(42).x, undefined)
+    assert.equal(h.rows.get(42).last, 'broken')
+  })
+
+  test('a sentence on the raffle step is not mistaken for a handle', async () => {
+    const h = harness()
+    await handleUpdate(msg('/start'), h.deps)
+    await handleUpdate(tap('go:raffle'), h.deps)
+    await handleUpdate(msg('how do I follow them'), h.deps)
+    assert.equal(h.rows.get(42).x, undefined)
+    assert.equal(h.rows.get(42).step, 'raffle', 'still waiting for a handle')
   })
 
   test('the public mode is described honestly', () => {

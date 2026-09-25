@@ -38,7 +38,7 @@ export default async function handler(req, res) {
         const rows = which === 'waitlist'
           ? await sql`SELECT email, telegram, source, created_at FROM waitlist ORDER BY created_at DESC`
           : which === 'bot'
-          ? await sql`SELECT username, tg_id, step, source, last_message, started_at, last_seen
+          ? await sql`SELECT username, x_handle, raffle_at, tg_id, step, source, last_message, started_at, last_seen
                       FROM bot_users ORDER BY started_at DESC`
           : await sql`SELECT telegram, status, message, agreed_at, disclaimer, source, created_at
                       FROM alpha ORDER BY created_at DESC`
@@ -52,7 +52,7 @@ export default async function handler(req, res) {
         sql`SELECT id, email, telegram, source, created_at FROM waitlist ORDER BY created_at DESC LIMIT 1000`,
         sql`SELECT id, telegram, status, message, agreed_at, disclaimer, source, created_at
             FROM alpha ORDER BY created_at DESC LIMIT 1000`,
-        sql`SELECT tg_id, username, step, source, last_message, started_at, last_seen
+        sql`SELECT tg_id, username, x_handle, raffle_at, step, source, last_message, started_at, last_seen
             FROM bot_users ORDER BY started_at DESC LIMIT 1000`,
       ])
       return json(res, 200, {
@@ -62,6 +62,7 @@ export default async function handler(req, res) {
         counts: {
           bot: bot.length,
           botCompleted: bot.filter((r) => r.step === 'done').length,
+          raffle: bot.filter((r) => r.raffle_at).length,
           waitlist: waitlist.length,
           alpha: alpha.length,
           new: alpha.filter((r) => r.status === 'new').length,
