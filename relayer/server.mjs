@@ -30,7 +30,7 @@ import { Transaction } from '@mysten/sui/transactions'
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519'
 import { decodeSuiPrivateKey } from '@mysten/sui/cryptography'
 import { verifyMessage } from 'viem'
-import { ticketMessage } from '../shared/ticket.mjs'
+import { ticketMessage, claimScope } from '../shared/ticket.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
@@ -220,6 +220,14 @@ app.post('/claim', async (req, res) => {
         error: 'ticket message does not match this claim',
         detail: 'the proof binds (label, evmAddr, suiAddr, pubkey); one of them differs',
       })
+    }
+
+    // 1b. The scope check. The nullifier is hash(identity, scope), and LortnocMembership.spendTicket
+    // does NOT check the scope — so without this line one $1 membership proves under scope A, B,
+    // C… and every proof carries a fresh, unspent nullifier: unlimited handles for one payment.
+    // "One handle per membership" is only enforced by the maths if the scope is pinned HERE.
+    if (BigInt(ticket.scope) !== claimScope()) {
+      return res.status(400).json({ error: 'ticket scope is not the claim scope' })
     }
 
     const proof = {
