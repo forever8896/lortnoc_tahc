@@ -22,9 +22,18 @@ import { attachCoverCard } from './ui'
  *  so the real message was never decoded again. A symbol makes that a compile error. */
 export const RETRY: unique symbol = Symbol('lortnoc.retry')
 
-/** onDecode(coverText) → the decoded message, `null` if DEFINITELY not ours (safe to cache), or
- *  `RETRY` if it could not be decided now and should be tried again later. */
-export type DecodeFn = (coverText: string) => Promise<string | null | typeof RETRY>
+/** One post of a multi-post message. `text` is set on the part that completed the thread (null
+ *  while siblings are missing); `failed` means the thread completed but is not addressed to us. */
+export type ThreadPart = { thread: string; seq: number; total: number; text: string | null; failed?: boolean }
+
+/** onDecode(coverText) → the decoded message, a ThreadPart for one post of a thread, `null` if
+ *  DEFINITELY not ours (safe to cache), or `RETRY` if it should be tried again later. */
+export type DecodeFn = (coverText: string) => Promise<string | null | typeof RETRY | ThreadPart>
+
+/** What a post is, once decided. Cached per status id — the only id that survives recycling. */
+type Verdict =
+  | { kind: 'message'; decoded: string; cover: string }
+  | { kind: 'part'; thread: string; seq: number; total: number; cover: string }
 
 /** How many of the newest tweets a scan will consider. A feed is unbounded and each decode is a
  *  full model round trip, so this is the difference between a scan costing seconds and minutes. */
@@ -36,7 +45,7 @@ function readTweetText(article: Element): string {
   const el = article.querySelector(TWEET_TEXT)
   if (!el) return ''
   const clone = el.cloneNode(true) as HTMLElement
-  clone.querySelectorAll('.lortnoc-decoded').forEach((n) => n.remove())
+  clone.querySelectorAll('.lortnoc-decoded, .lortnoc-part').forEach((n) => n.remove())
   return clone.textContent?.trim() ?? ''
 }
 
@@ -52,13 +61,85 @@ function renderDecoded(article: Element, decoded: string, cover: string): void {
   el.dataset.lortnocRendered = '1'
 }
 
+/**
+ * A later part of a thread whose message is shown on the first post: replace its cover text with
+ * a quiet label, so the reader isn't left squinting at a paragraph of chatter under the message.
+ * The cover is still one hover away, exactly like a decoded post.
+ */
+function renderPartLabel(article: Element, label: string, cover: string): void {
+  const el = article.querySelector(TWEET_TEXT)
+  if (!(el instanceof HTMLElement)) return
+  el.textContent = ''
+  const span = document.createElement('span')
+  span.className = 'lortnoc-part'
+  span.textContent = label
+  attachCoverCard(span, cover)
+  el.appendChild(span)
+  el.dataset.lortnocRendered = '1'
+}
+
+/** A part whose siblings haven't loaded: leave the cover as posted, add a small badge above it. */
+function renderWaitingBadge(article: Element, label: string): void {
+  const el = article.querySelector(TWEET_TEXT)
+  if (!(el instanceof HTMLElement) || el.querySelector('.lortnoc-part')) return
+  const badge = document.createElement('span')
+  badge.className = 'lortnoc-part lortnoc-part--waiting'
+  badge.textContent = label
+  el.prepend(badge)
+}
+
+function clearBadge(article: Element): void {
+  article.querySelector(TWEET_TEXT)?.querySelectorAll('.lortnoc-part--waiting').forEach((n) => n.remove())
+}
+
 export function startInbound(isReady: () => boolean, onDecode: DecodeFn): { reset: () => void } {
   let scanning = false
   let dirty = false // DOM changed mid-scan → newer tweets exist; restart from the top
 
   // Decode decision cached per status id: {…} = ours, null = DEFINITELY not ours. Only a
   // definitive verdict is cached — a transient failure is NOT, so it is retried on a later scan.
-  const seen = new Map<string, { decoded: string; cover: string } | null>()
+  const seen = new Map<string, Verdict | null>()
+  // Per thread: the decoded message once every part has arrived, or 'failed' when it completed
+  // but isn't addressed to us. Absent = still waiting on parts.
+  const threadText = new Map<string, string | 'failed'>()
+
+  /**
+   * Paint one post from its verdict. Idempotent, and cheap — never touches the codec — so it runs
+   * for every cached post on every pass. That is what lets a thread's FIRST post switch from
+   * "waiting" to the message the moment its last part is decoded, whichever order they arrive in.
+   *
+   * The message goes on the first post (seq 0) because that is where people start reading. It
+   * used to land on whichever part completed the thread — usually the last — leaving the first
+   * post, the one with everyone's eyes on it, as unexplained chatter.
+   */
+  function paint(article: Element, v: Verdict): void {
+    const textEl = article.querySelector(TWEET_TEXT) as HTMLElement | null
+    if (!textEl) return
+    let want: string
+    if (v.kind === 'message') want = `m:${v.decoded}`
+    else {
+      const t = threadText.get(v.thread)
+      want = t === undefined ? 'wait' : t === 'failed' ? 'failed' : v.seq === 0 ? `m:${t}` : 'label'
+    }
+    if (textEl.dataset.lortnocState === want) return // already painted this way
+
+    if (v.kind === 'message') renderDecoded(article, v.decoded, v.cover)
+    else if (want === 'wait') renderWaitingBadge(article, `part ${v.seq + 1} of ${v.total} · waiting for the rest of the thread`)
+    else if (want === 'failed') clearBadge(article) // not for us: leave it exactly as posted
+    else if (v.seq === 0) renderDecoded(article, threadText.get(v.thread) as string, v.cover)
+    else renderPartLabel(article, `part ${v.seq + 1} of ${v.total} · the message is on the first post`, v.cover)
+    textEl.dataset.lortnocState = want
+  }
+
+  /** Repaint every cached post on screen — after a thread completes, its OTHER posts need it. */
+  function repaintVisible(): void {
+    const root = document.querySelector(TIMELINE) ?? document.body
+    for (const article of Array.from(root.querySelectorAll(TWEET))) {
+      const id = tweetId(article)
+      const v = id ? seen.get(id) : null
+      if (v) paint(article, v)
+    }
+  }
 
   async function scan(): Promise<void> {
     if (scanning || !isReady()) return
@@ -95,7 +176,7 @@ export function startInbound(isReady: () => boolean, onDecode: DecodeFn): { rese
       if (seen.has(id)) {
         const hit = seen.get(id)
         // Re-apply from cache when virtualisation recycled the node — cheap, never re-hits the codec.
-        if (hit && textEl.dataset.lortnocRendered !== '1') renderDecoded(article, hit.decoded, hit.cover)
+        if (hit) paint(article, hit)
         continue
       }
       if (textEl.dataset.lortnocRendered === '1') continue
@@ -117,8 +198,19 @@ export function startInbound(isReady: () => boolean, onDecode: DecodeFn): { rese
           // Transient: record NOTHING, so the next scan tries again. Must be tested BEFORE the
           // string branch — see RETRY.
         } else if (typeof decoded === 'string') {
-          renderDecoded(article, decoded, cover)
-          seen.set(id, { decoded, cover })
+          const v: Verdict = { kind: 'message', decoded, cover }
+          seen.set(id, v)
+          paint(article, v)
+        } else if (decoded !== null) {
+          // One post of a thread.
+          if (decoded.text !== null) threadText.set(decoded.thread, decoded.text)
+          else if (decoded.failed) threadText.set(decoded.thread, 'failed')
+          const v: Verdict = { kind: 'part', thread: decoded.thread, seq: decoded.seq, total: decoded.total, cover }
+          seen.set(id, v)
+          paint(article, v)
+          // This part may have completed the thread: its siblings — above all the FIRST post,
+          // which now carries the message — must repaint now, not on some later pass.
+          if (decoded.text !== null || decoded.failed) repaintVisible()
         } else {
           seen.set(id, null) // DEFINITELY not ours — safe to never retry
         }
@@ -147,6 +239,7 @@ export function startInbound(isReady: () => boolean, onDecode: DecodeFn): { rese
   return {
     reset() {
       seen.clear()
+      threadText.clear()
       void scan()
     },
   }

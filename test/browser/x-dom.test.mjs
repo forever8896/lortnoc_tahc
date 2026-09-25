@@ -282,6 +282,72 @@ describe('inbound — the hashtag pre-filter is what makes a feed affordable', (
   })
 })
 
+describe('inbound threads — the message reads from the top', () => {
+  /** Replace the timeline with a two-post thread and decode it with a scripted codec. `order`
+   *  decides which part completes the thread (the one that arrives last carries the text). */
+  async function thread(p, { completes, failed = false }) {
+    return p.evaluate(async ({ completes, failed }) => {
+      const col = document.querySelector('[data-testid="primaryColumn"]')
+      col.innerHTML = `
+        <article data-testid="tweet"><a href="/k/status/9000000000000000001"><time>1m</time></a>
+          <div data-testid="tweetText">first cover chatter #lortnoctahc</div></article>
+        <article data-testid="tweet"><a href="/k/status/9000000000000000002"><time>1m</time></a>
+          <div data-testid="tweetText">second cover chatter #lortnoctahc</div></article>`
+      const seqOf = (cover) => (cover.startsWith('first') ? 0 : 1)
+      window.lortnocX.inbound.startInbound(() => true, async (cover) => {
+        const seq = seqOf(cover)
+        // Arrival order: the part that "completes" is answered last.
+        if (seq !== completes) return { thread: 't:2', seq, total: 2, text: null }
+        await new Promise((r) => setTimeout(r, 300))
+        return failed
+          ? { thread: 't:2', seq, total: 2, text: null, failed: true }
+          : { thread: 't:2', seq, total: 2, text: 'longer message triggering a break' }
+      })
+      await new Promise((r) => setTimeout(r, 1500))
+      const [a, b] = [...col.querySelectorAll('[data-testid="tweetText"]')]
+      const view = (el) => ({
+        decoded: el.querySelector('.lortnoc-decoded')?.textContent ?? null,
+        label: el.querySelector('.lortnoc-part:not(.lortnoc-part--waiting)')?.textContent ?? null,
+        waiting: !!el.querySelector('.lortnoc-part--waiting'),
+        text: el.textContent.trim(),
+      })
+      return { first: view(a), second: view(b) }
+    }, { completes, failed })
+  }
+
+  test('the message appears on the FIRST post; the later part becomes a quiet label', async (t) => {
+    if (skipReason) return t.skip(skipReason)
+    const p = await page()
+    // The common case, and the one the user hit: the LAST part completes the thread.
+    const got = await thread(p, { completes: 1 })
+    assert.equal(got.first.decoded, 'longer message triggering a break', 'message must be on the first post')
+    assert.equal(got.second.decoded, null, 'the message must not also sit on the second post')
+    assert.match(got.second.label ?? '', /part 2 of 2/)
+    assert.equal(got.first.waiting, false, 'the "waiting" badge must go once the thread is complete')
+    await p.close()
+  })
+
+  test('same result when the first post happens to complete the thread', async (t) => {
+    if (skipReason) return t.skip(skipReason)
+    const p = await page()
+    const got = await thread(p, { completes: 0 })
+    assert.equal(got.first.decoded, 'longer message triggering a break')
+    assert.match(got.second.label ?? '', /part 2 of 2/)
+    await p.close()
+  })
+
+  test('a thread that is not for us is left exactly as posted', async (t) => {
+    if (skipReason) return t.skip(skipReason)
+    const p = await page()
+    const got = await thread(p, { completes: 1, failed: true })
+    assert.equal(got.first.decoded, null)
+    assert.equal(got.first.waiting, false, 'no leftover badge on someone else\'s thread')
+    assert.equal(got.first.text, 'first cover chatter #lortnoctahc')
+    assert.equal(got.second.text, 'second cover chatter #lortnoctahc')
+    await p.close()
+  })
+})
+
 describe('compose — fail closed, never post plaintext', () => {
   test('readCompose reads the Draft.js editor text', async (t) => {
     if (skipReason) return t.skip(skipReason)

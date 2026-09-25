@@ -17,7 +17,7 @@ import { onX, activeCompose } from './selectors'
 import { injectStyles, toast, type Progress } from './ui'
 import { initState, ready } from './state'
 import { installPostInterceptor } from './compose'
-import { startInbound, RETRY } from './inbound'
+import { startInbound, RETRY, type ThreadPart } from './inbound'
 import {
   encryptBytes,
   tryDecryptBytes,
@@ -227,7 +227,7 @@ async function swap(real: string, progress: Progress): Promise<string[] | null> 
  * nothing at all, ever: the ciphertext cannot be decrypted without every part, so failing closed
  * is structural rather than a check that might be forgotten (PRD §6).
  */
-async function decode(cover: string): Promise<string | null | typeof RETRY> {
+async function decode(cover: string): Promise<string | null | typeof RETRY | ThreadPart> {
   const res = await sendToCodec<DecodeData>({ type: 'DECODE', coverText: cover })
   if (!res.ok) {
     // 422 = "not codec cover text" → a definitive not-ours. Anything else (offline, 5xx) is
@@ -239,11 +239,24 @@ async function decode(cover: string): Promise<string | null | typeof RETRY> {
   if (!frame) return null // not one of ours, or a newer build's mode
   if (frame.mode !== X_MODE.PUBLIC && frame.mode !== X_MODE.RECIPIENTS) return null // mode 2 unbuilt
 
-  const cipher = threads.offer(frame)
-  if (!cipher) return null // a thread part, still waiting on its siblings
+  if (!frame.threaded) {
+    return openCipher(frame.payload, frame.mode, frame.squeezed)
+  }
 
+  // A thread part. Report WHICH part this is, so the reader can put the message on the first post
+  // — where people start reading — rather than on whichever part happened to arrive last.
+  const thread = `${frame.tid}:${frame.total}`
+  const cipher = threads.offer(frame)
+  if (!cipher) return { thread, seq: frame.seq, total: frame.total, text: null } // siblings still missing
+  const text = await openCipher(cipher, frame.mode, frame.squeezed)
+  if (text === RETRY) return RETRY
+  return { thread, seq: frame.seq, total: frame.total, text, failed: text === null }
+}
+
+/** Decrypt a complete ciphertext. null = not addressed to us; RETRY = identity locked right now. */
+async function openCipher(cipher: Uint8Array, mode: number, squeezed: boolean): Promise<string | null | typeof RETRY> {
   let plain: Uint8Array | null
-  if (frame.mode === X_MODE.RECIPIENTS) {
+  if (mode === X_MODE.RECIPIENTS) {
     // Mode 3 needs OUR private key. No identity unlocked means we simply are not a reader of this
     // post — which is indistinguishable, from here, from not being a named recipient. That is the
     // property working as intended, not an error to surface.
@@ -254,7 +267,7 @@ async function decode(cover: string): Promise<string | null | typeof RETRY> {
     plain = tryDecryptBytes(K_PUBLIC, cipher)
   }
   if (!plain) return null // tag failed: not addressed to us, someone else's post, or corrupted
-  return unsqueezeMaybe(plain, frame.squeezed)
+  return unsqueezeMaybe(plain, squeezed)
 }
 
 async function main(): Promise<void> {

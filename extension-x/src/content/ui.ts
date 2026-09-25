@@ -25,6 +25,17 @@ export function injectStyles(): void {
       padding: 0 3px;
       cursor: help;
     }
+    /* A later part of a thread whose message is on the first post, and the badge on a part whose
+       siblings haven't loaded. Deliberately quiet: a note about the message, not the message. */
+    .lortnoc-part {
+      color: rgba(231,233,234,.55);
+      font-size: .86em;
+      font-style: italic;
+      border-left: 2px solid rgba(18,196,190,.5);
+      padding-left: 7px;
+      cursor: help;
+    }
+    .lortnoc-part--waiting { display: block; margin-bottom: 6px; font-style: normal; cursor: default; }
     .lortnoc-decoding { opacity: .5; }
     .lortnoc-decoding::after {
       content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 6px;
