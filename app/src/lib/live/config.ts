@@ -23,13 +23,13 @@ export const ENS = {
 export const LORTNOC = {
   /** `lortnoctahc.eth` — handles are issued beneath it. */
   parentName: deployment.lortnoc.parentName,
-  /** `lortnoc.eth` — registered to the same owner, which is what makes the
-   *  `eth.lortnoc.*` record namespace (§5.4) a name we actually control. */
-  reservedName: deployment.lortnoc.reservedName,
   /** UserRegistry proxy slotted under the parent. Serves `<label>` → resolver. */
-  registry: deployment.lortnoc.registry as `0x${string}` | '',
+  registry: (deployment.lortnoc.registry ?? '') as `0x${string}` | '',
   /** Holds ROLE_REGISTRAR; the one-tx claim entrypoint. */
-  registrar: deployment.lortnoc.registrar as `0x${string}` | '',
+  registrar: (deployment.lortnoc.registrar ?? '') as `0x${string}` | '',
+  /** PermissionedResolver for `lortnoctahc.eth` itself (explorers resolve the parent). Its default
+   *  record (name 0x00) must NEVER be written: every unclaimed label would inherit it. */
+  parentResolver: (deployment.lortnoc.parentResolver ?? '') as `0x${string}` | '',
   /** Block the registrar was deployed in — the floor for the HandleClaimed scan that recovers
    *  "which handle is mine" from chain. Without it the scan would walk all of Sepolia. */
   registrarDeployBlock: BigInt(deployment.lortnoc.registrarDeployBlock ?? 0),

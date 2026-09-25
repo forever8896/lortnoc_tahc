@@ -1,22 +1,27 @@
-// ENS v2 client (viem, Sepolia) — the real thing, against the pinned deployment.
+// ENS v2 client (viem, Sepolia) — the real thing, against the pinned deployment
+// (`sepolia-deployment-2026-09-15`, see ens-deployment.json).
 //
-// Reads go through UniversalResolverV2 (canonical ENS resolution: RootRegistry → eth →
-// lortnoctahc → LortnocRegistry → handle → resolver), with a direct registry read as fallback so
-// a UR hiccup can't break the messenger.
+// Reads go ONLY through viem's getEnsText / getEnsAddress against the stable UniversalResolver
+// proxy (0xeeee…eeee, viem's sepolia default) — the exact path ENS's own tools take. There is no
+// "direct resolver" fallback any more: the 09-15 PermissionedResolver has no text()/addr()
+// getters at all, and a private read path is how, in July, our names worked in our code while no
+// ENS tool could resolve them.
 //
 // Writes:
 //   claim        → LortnocRegistrar.claim() — ONE tx that deploys the caller's own
-//                  PermissionedResolver proxy, writes eth.lortnoc.pubkey, hands them every role
-//                  on it, and registers the subname.
-//   delegate     → resolver.authorizeTextRoles(name, key, gateway, true/false) — per-record write
-//                  delegation, the ENS v2 flagship (§6.5 use #1). Note: authorize*Roles, NOT
-//                  grantRoles, which is `pure` on the resolver and always reverts.
+//                  PermissionedResolver proxy whose INITIALIZER writes eth.lortnoc.pubkey + addr
+//                  and grants the caller every role, then registers the subname.
+//   setters      → 09-15 setters take the DNS-encoded NAME: setText(bytes,…), setAddress(bytes,60,…).
+//   delegate     → grantSetterRoles(setText(name, key, ""), account) / revokeRoles(keccak256(key),
+//                  ROLE_SET_TEXT, account) — per-KEY write delegation, the ENS v2 flagship (§6.5
+//                  use #1). Scope is per resolver + key; with one resolver per handle that is per
+//                  handle. (authorizeTextRoles/setAlias/clearRecords no longer exist at 09-15.)
+//   owner        → UniversalHelper.findExactOwner(name) — the holder check. Never use addr for it.
 //   verify       → VerifiableFactory.verifyContract(proxy) → implementation, compared off-chain.
 import {
   createPublicClient,
   createWalletClient,
   custom,
-  encodeAbiParameters,
   encodeFunctionData,
   http,
   keccak256,
@@ -47,16 +52,15 @@ const handleClaimedEvent = {
 // ---- ABIs (only what we call) -----------------------------------------------------------------
 
 const resolverAbi = [
-  { type: 'function', name: 'text', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }, { name: 'key', type: 'string' }], outputs: [{ type: 'string' }] },
-  { type: 'function', name: 'setText', stateMutability: 'nonpayable', inputs: [{ name: 'node', type: 'bytes32' }, { name: 'key', type: 'string' }, { name: 'value', type: 'string' }], outputs: [] },
-  { type: 'function', name: 'authorizeTextRoles', stateMutability: 'nonpayable', inputs: [{ name: 'toName', type: 'bytes' }, { name: 'key', type: 'string' }, { name: 'account', type: 'address' }, { name: 'grant', type: 'bool' }], outputs: [{ type: 'bool' }] },
+  { type: 'function', name: 'setText', stateMutability: 'nonpayable', inputs: [{ name: 'name', type: 'bytes' }, { name: 'key', type: 'string' }, { name: 'value', type: 'string' }], outputs: [] },
+  { type: 'function', name: 'setAddress', stateMutability: 'nonpayable', inputs: [{ name: 'name', type: 'bytes' }, { name: 'coinType', type: 'uint256' }, { name: 'addressBytes', type: 'bytes' }], outputs: [] },
+  { type: 'function', name: 'grantSetterRoles', stateMutability: 'nonpayable', inputs: [{ name: 'setter', type: 'bytes' }, { name: 'account', type: 'address' }], outputs: [{ type: 'bool' }] },
+  { type: 'function', name: 'revokeRoles', stateMutability: 'nonpayable', inputs: [{ name: 'resource', type: 'uint256' }, { name: 'roleBitmap', type: 'uint256' }, { name: 'account', type: 'address' }], outputs: [{ type: 'bool' }] },
   { type: 'function', name: 'hasRoles', stateMutability: 'view', inputs: [{ name: 'resource', type: 'uint256' }, { name: 'roleBitmap', type: 'uint256' }, { name: 'account', type: 'address' }], outputs: [{ type: 'bool' }] },
-  { type: 'function', name: 'clearRecords', stateMutability: 'nonpayable', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [] },
-  // `addr` is the record every explorer and wallet asks for first. Handles claimed before
-  // 2026-07-27 have it unset, which made them read as "does not resolve" despite a correctly
-  // linked resolver and a perfectly good pubkey text record.
-  { type: 'function', name: 'addr', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ type: 'address' }] },
-  { type: 'function', name: 'setAddr', stateMutability: 'nonpayable', inputs: [{ name: 'node', type: 'bytes32' }, { name: 'addr', type: 'address' }], outputs: [] },
+] as const
+
+const helperAbi = [
+  { type: 'function', name: 'findExactOwner', stateMutability: 'view', inputs: [{ name: 'name', type: 'bytes' }], outputs: [{ type: 'address' }] },
 ] as const
 
 const registryAbi = [
@@ -74,9 +78,6 @@ const factoryAbi = [
   { type: 'function', name: 'verifyContract', stateMutability: 'view', inputs: [{ name: 'proxy', type: 'address' }], outputs: [{ type: 'address' }] },
 ] as const
 
-const universalResolverAbi = [
-  { type: 'function', name: 'resolve', stateMutability: 'view', inputs: [{ name: 'name', type: 'bytes' }, { name: 'data', type: 'bytes' }], outputs: [{ type: 'bytes' }, { type: 'address' }] },
-] as const
 
 const ZERO = '0x0000000000000000000000000000000000000000' as const
 
@@ -130,15 +131,11 @@ export const labelOf = (handle: string): string =>
 /** namehash, computed the way LortnocRegistrar does it. */
 export const nodeOf = (handle: string): Hex => namehash(handle)
 
-/** The per-record EAC resource a text-role grant lands on: keccak256(abi.encode(node, keccak(key))). */
-export const textResource = (node: Hex, key: string): bigint =>
-  BigInt(
-    keccak256(
-      encodeAbiParameters([{ type: 'bytes32' }, { type: 'bytes32' }], [node, keccak256(stringToHex(key))]),
-    ),
-  )
+/** The EAC resource a text-setter grant lands on at 09-15: keccak256(key) — per RESOLVER and key,
+ *  not per name (decodeSetter ignores the name). One resolver per handle keeps it per handle. */
+export const textResource = (key: string): bigint => BigInt(keccak256(stringToHex(key)))
 
-/** DNS-encode a name — the `toName` argument shape for authorize*Roles. */
+/** DNS-encode a name — the `name` argument every 09-15 resolver setter takes. */
 export function dnsEncode(name: string): Hex {
   let out = '0x'
   for (const part of name.split('.').filter(Boolean)) {
@@ -167,32 +164,27 @@ export async function resolverFor(handle: string): Promise<Address | null> {
   }
 }
 
-/** Read one text record. Canonical path first (UniversalResolverV2), direct resolver as fallback. */
+/** Read one text record through ENS's canonical path (viem default UniversalResolver). */
 export async function readText(handle: string, key: string): Promise<string | null> {
   if (!LORTNOC.registry) return null
-  const node = nodeOf(handle)
-  const call = encodeFunctionData({ abi: resolverAbi, functionName: 'text', args: [node, key] })
-
   try {
-    const [result] = await publicClient.readContract({
-      address: ENS.universalResolver as Address,
-      abi: universalResolverAbi,
-      functionName: 'resolve',
-      args: [dnsEncode(handle), call],
-    })
-    const decoded = decodeString(result)
-    if (decoded) return decoded
+    return (await publicClient.getEnsText({
+      name: handle, key, universalResolverAddress: ENS.universalResolver as Address,
+    })) || null
   } catch {
-    /* fall through to the direct read */
+    return null
   }
+}
 
-  const resolver = await resolverFor(handle)
-  if (!resolver) return null
+/** Who owns a handle, as ENS's own tooling computes it (UniversalHelper.findExactOwner from the
+ *  current root). 0x0 / null for unclaimed, expired, or nested names. "Resolves without error"
+ *  is NOT existence: an unclaimed label falls back to the parent resolver and reads empty. */
+export async function ownerOf(handle: string): Promise<Address | null> {
   try {
-    const v = await publicClient.readContract({
-      address: resolver, abi: resolverAbi, functionName: 'text', args: [node, key],
+    const o = await publicClient.readContract({
+      address: ENS.universalHelper as Address, abi: helperAbi, functionName: 'findExactOwner', args: [dnsEncode(handle)],
     })
-    return v || null
+    return o === ZERO ? null : o
   } catch {
     return null
   }
@@ -221,7 +213,7 @@ export async function canWriteText(handle: string, who: Address, key: string): P
   try {
     await publicClient.simulateContract({
       account: who, address: resolver, abi: resolverAbi, functionName: 'setText',
-      args: [nodeOf(handle), key, 'probe'],
+      args: [dnsEncode(handle), key, 'probe'],
     })
     return true
   } catch {
@@ -229,14 +221,14 @@ export async function canWriteText(handle: string, who: Address, key: string): P
   }
 }
 
-/** Does `who` hold ROLE_SET_TEXT on the per-record resource for `key`? */
+/** Does `who` hold ROLE_SET_TEXT on the resource for `key` (keccak256(key), per resolver)? */
 export async function hasTextRole(handle: string, who: Address, key: string): Promise<boolean> {
   const resolver = await resolverFor(handle)
   if (!resolver) return false
   try {
     return await publicClient.readContract({
       address: resolver, abi: resolverAbi, functionName: 'hasRoles',
-      args: [textResource(nodeOf(handle), key), ROLE_SET_TEXT, who],
+      args: [textResource(key), ROLE_SET_TEXT, who],
     })
   } catch {
     return false
@@ -331,23 +323,19 @@ export async function setText(
     : await walletClient()
   const { request } = await publicClient.simulateContract({
     account, address: resolver, abi: resolverAbi, functionName: 'setText',
-    args: [nodeOf(handle), key, value],
+    args: [dnsEncode(handle), key, value],
   })
   const hash = await client.writeContract(request)
   await publicClient.waitForTransactionReceipt({ hash })
   return hash
 }
 
-/** The ETH address a handle resolves to. Read straight from the resolver: an unset addr is a
- *  legitimate 0x0 answer, not a resolution failure, so there is nothing for the gateway path to
- *  add here. */
+/** The ETH address a handle resolves to, through ENS's canonical path. Handles issued on 09-15
+ *  get addr from the resolver's initializer, so an unset addr now means "not a live handle". */
 export async function readAddr(handle: string): Promise<Address | null> {
-  const resolver = await resolverFor(handle)
-  if (!resolver) return null
+  if (!LORTNOC.registry) return null
   try {
-    return await publicClient.readContract({
-      address: resolver, abi: resolverAbi, functionName: 'addr', args: [nodeOf(handle)],
-    }) as Address
+    return await publicClient.getEnsAddress({ name: handle, universalResolverAddress: ENS.universalResolver as Address })
   } catch {
     return null
   }
@@ -362,15 +350,17 @@ export async function setAddr(handle: string, addr: Address, signer?: Account): 
     ? { client: ownerClient(signer), account: signer }
     : await walletClient()
   const { request } = await publicClient.simulateContract({
-    account, address: resolver, abi: resolverAbi, functionName: 'setAddr',
-    args: [nodeOf(handle), addr],
+    account, address: resolver, abi: resolverAbi, functionName: 'setAddress',
+    args: [dnsEncode(handle), 60n, addr],
   })
   const hash = await client.writeContract(request)
   await publicClient.waitForTransactionReceipt({ hash })
   return hash
 }
 
-/** Grant or revoke write access to exactly ONE text record. The flagship demo. */
+/** Grant or revoke write access to exactly ONE text key. The flagship demo.
+ *  Grant → grantSetterRoles(setText(name, key, ""), account); revoke → revokeRoles(keccak256(key),
+ *  ROLE_SET_TEXT, account). Needs ROLE_SET_TEXT_ADMIN, which the owner holds from the claim. */
 export async function setTextDelegation(
   handle: string,
   key: string,
@@ -385,13 +375,22 @@ export async function setTextDelegation(
   const { client, account } = signer
     ? { client: ownerClient(signer), account: signer }
     : await walletClient()
-  const { request } = await publicClient.simulateContract({
-    account, address: resolver, abi: resolverAbi, functionName: 'authorizeTextRoles',
-    args: [dnsEncode(handle), key, account_, grant],
-  })
-  const hash = await client.writeContract(request)
+  let hash: Hex
+  if (grant) {
+    const { request } = await publicClient.simulateContract({
+      account, address: resolver, abi: resolverAbi, functionName: 'grantSetterRoles',
+      args: [encodeFunctionData({ abi: resolverAbi, functionName: 'setText', args: [dnsEncode(handle), key, ''] }), account_],
+    })
+    hash = await client.writeContract(request)
+  } else {
+    const { request } = await publicClient.simulateContract({
+      account, address: resolver, abi: resolverAbi, functionName: 'revokeRoles',
+      args: [textResource(key), ROLE_SET_TEXT, account_],
+    })
+    hash = await client.writeContract(request)
+  }
   const receipt = await publicClient.waitForTransactionReceipt({ hash })
-  if (receipt.status !== 'success') throw new Error(`authorizeTextRoles reverted (tx ${hash})`)
+  if (receipt.status !== 'success') throw new Error(`${grant ? 'grantSetterRoles' : 'revokeRoles'} reverted (tx ${hash})`)
   return hash
 }
 
@@ -400,18 +399,4 @@ export async function setTextDelegation(
 function hexToBytes(hex: string): Uint8Array {
   const h = hex.replace(/^0x/, '')
   return Uint8Array.from(h.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)))
-}
-
-/** Decode an ABI-encoded `string` return without pulling in a decoder for one shape. */
-function decodeString(data: Hex): string | null {
-  try {
-    const body = data.slice(2)
-    if (body.length < 128) return null
-    const len = parseInt(body.slice(64, 128), 16)
-    if (!len) return ''
-    const bytes = body.slice(128, 128 + len * 2)
-    return new TextDecoder().decode(Uint8Array.from(bytes.match(/.{1,2}/g)!.map((b) => parseInt(b, 16))))
-  } catch {
-    return null
-  }
 }

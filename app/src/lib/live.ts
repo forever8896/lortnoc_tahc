@@ -559,7 +559,7 @@ export class LiveBackend implements Backend {
     }
   }
 
-  /** authorizeTextRoles on ONE key, for any address. This is the ENS v2 flagship: the grantee
+  /** grantSetterRoles / revokeRoles on ONE key, for any address. This is the ENS v2 flagship: the grantee
    *  can write that record and nothing else, and one transaction takes it back. */
   async delegateRecord(key: string, to: string, grant: boolean): Promise<string> {
     if (!this.id?.handle) throw new Error('claim a handle first')
@@ -819,7 +819,7 @@ export class LiveBackend implements Backend {
     }
   }
 
-  /** authorizeTextRoles on ONE key. Grant → the gateway can rotate the inbox pointer and
+  /** grantSetterRoles / revokeRoles on ONE key. Grant → the gateway can rotate the inbox pointer and
    *  nothing else; revoke → it loses that in the same single transaction. */
   async delegateInbox(grant: boolean): Promise<string> {
     if (!this.id?.handle) throw new Error('claim a handle first')

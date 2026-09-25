@@ -240,13 +240,13 @@ export class MockBackend implements Backend {
   async delegateInbox(grant: boolean): Promise<string> {
     this.delegated = grant
     return grant
-      ? 'demo: authorizeTextRoles(eth.lortnoc.inbox → gateway) — the gateway may rotate the inbox pointer only; a pubkey write reverts.'
+      ? 'demo: grantSetterRoles(setText(eth.lortnoc.inbox) → gateway) — the gateway may rotate the inbox pointer only; a pubkey write reverts.'
       : 'demo: role revoked in one tx — the gateway can no longer write anything.'
   }
 
   async delegateRecord(key: string, to: string, grant: boolean): Promise<string> {
     if (key.endsWith('inbox')) this.delegated = grant
-    return `demo: authorizeTextRoles(${key} → ${to.slice(0, 8)}…, ${grant}) — on-chain in live mode.`
+    return `demo: ${grant ? 'grantSetterRoles' : 'revokeRoles'}(${key} → ${to.slice(0, 8)}…) — on-chain in live mode.`
   }
 
   async setRecord(key: string, value: string): Promise<string> {
