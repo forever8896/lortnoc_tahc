@@ -73,7 +73,7 @@ export function screen(step, cfg) {
       return {
         text:
           `<b>ETHGlobal Tokyo raffle</b>\n\n` +
-          `🧥 <b>The legendary jean jacket goes to whoever's post gets the most engagement.</b>\n\n` +
+          `🧥 <b>The legendary jean jacket goes to whoever's post gets the most engagement</b>, and <b>eight other pieces of merch are raffled among every participant.</b>\n\n` +
           `To enter, do all three:\n\n` +
           `<b>1. Post something on X with the extension on.</b> It gets tagged <code>#lortnoctahc</code> automatically — that's how we find it. No post, no entry.\n\n` +
           `<b>2. Follow all three on X:</b>\n` +
@@ -89,7 +89,7 @@ export function screen(step, cfg) {
     case 'done':
       return {
         text:
-          `<b>You're entered — good luck in Tokyo.</b>\n\nKeep that post going: the most engagement wins the jacket. 🧥\n\n` +
+          `<b>You're entered — good luck in Tokyo.</b>\n\nYou're in the draw for the eight pieces of merch — and keep that post going: the most engagement wins the jacket. 🧥\n\n` +
           `Stuck, or something broke? Reply here — a human reads this.\n\n` +
           `/steps — walk through setup again\n/privacy — what this bot keeps about you\n/delete — erase it`,
         buttons: [[{ text: 'lortnoctahc.com', url: cfg.siteUrl }]],
@@ -102,7 +102,7 @@ export function screen(step, cfg) {
           `<b>Lortnoc Tahc for X</b> — hide what you post inside what you post.\n\n` +
           `You write a real post. Before it leaves the page, the extension turns it into ordinary-looking text. ` +
           `People with the extension see the real one; everyone else sees chatter.\n\n` +
-          `Setup takes about five minutes: download, load, post — then enter the <b>ETHGlobal Tokyo raffle</b>. 🧥 The top-engagement post wins the legendary jean jacket.\n\n` +
+          `Setup takes about five minutes: download, load, post — then enter the <b>ETHGlobal Tokyo raffle</b>. 🧥 The top-engagement post wins the legendary jean jacket, and eight more pieces of merch are raffled among everyone who enters.\n\n` +
           `<i>This bot keeps your Telegram username so we can reach alpha testers. /privacy for details, /delete to erase it.</i>`,
         buttons: [next("Let's set it up →", 'download')],
       }

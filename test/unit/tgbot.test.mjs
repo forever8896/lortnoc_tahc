@@ -137,6 +137,7 @@ describe('onboarding bot', () => {
     assert.match(text, /No post, no entry/)
     assert.match(text, /jean jacket/)
     assert.match(text, /most engagement/)
+    assert.match(text, /eight other pieces of merch are raffled among every participant/)
     assert.doesNotMatch(text, /odds/, 'the jacket goes to the top post outright, not by chance')
     assert.match(screen('run', cfg).text, /need a post to enter/)
   })
