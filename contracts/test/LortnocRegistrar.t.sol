@@ -13,10 +13,10 @@ import {
 /// @notice Unit tests for permissionless handle issuance on ENS v2 (CLAUDE.md §6.5).
 ///
 /// The headline claim this contract makes is a security claim: `claim()` is ONE transaction in
-/// which the registrar deploys the caller's resolver, writes their records, hands them every
-/// role, and then **drops its own** — so afterwards it has no authority over the handle at all.
-/// That is the ENS-booth demo, and it was asserted only by a deploy script against live Sepolia.
-/// These tests assert it locally, including the ordering constraint that makes it work.
+/// which the registrar deploys the caller's resolver, has its INITIALIZER write their records,
+/// and grants roles to the claimant only — at 09-15 the registrar never holds a role on a handle
+/// resolver at all, not even for one transaction. These tests assert it against mocks of the
+/// 09-15 shapes; `LortnocRegistrar.fork.t.sol` asserts it against the real bytecode.
 contract LortnocRegistrarTest is Test {
     MockLortnocRegistry internal registry;
     MockVerifiableFactory internal factory;
@@ -28,7 +28,7 @@ contract LortnocRegistrarTest is Test {
     address internal bob = makeAddr("bob");
     address internal relayer = makeAddr("relayer");
 
-    bytes32 internal constant PARENT_NODE = keccak256("lortnoctahc.eth");
+    bytes internal constant PARENT_DNS = hex"0b6c6f72746e6f63746168630365746800"; // lortnoctahc.eth
     string internal constant PUBKEY = "0xabababababababababababababababababababababababababababababababab";
 
     event HandleClaimed(
@@ -44,7 +44,7 @@ contract LortnocRegistrarTest is Test {
             ILortnocRegistry(address(registry)),
             IVerifiableFactory(address(factory)),
             resolverImpl,
-            PARENT_NODE,
+            PARENT_DNS,
             owner
         );
         registry.setRegistrar(address(registrar), true);
@@ -68,35 +68,34 @@ contract LortnocRegistrarTest is Test {
         // The same guarantee stated as a behaviour rather than a bitmap.
         vm.prank(alice);
         (address resolver,) = registrar.claim("alice", PUBKEY);
-        bytes32 node = registrar.nodeOf("alice");
+        bytes memory name = registrar.dnsNameOf("alice");
 
         vm.expectRevert(abi.encodeWithSelector(MockPermissionedResolver.NotAuthorized.selector, address(registrar)));
         vm.prank(address(registrar));
-        MockPermissionedResolver(resolver).setText(node, "eth.lortnoc.pubkey", "hijacked");
+        MockPermissionedResolver(resolver).setText(name, "eth.lortnoc.pubkey", "hijacked");
     }
 
     function test_claim_theOwnerCanStillWriteTheirOwnRecords() public {
         vm.prank(alice);
         (address resolver,) = registrar.claim("alice", PUBKEY);
-        bytes32 node = registrar.nodeOf("alice");
+        bytes memory name = registrar.dnsNameOf("alice");
 
         vm.prank(alice);
-        MockPermissionedResolver(resolver).setText(node, "eth.lortnoc.inbox", "relay://topic");
-        assertEq(MockPermissionedResolver(resolver).text(node, "eth.lortnoc.inbox"), "relay://topic");
+        MockPermissionedResolver(resolver).setText(name, "eth.lortnoc.inbox", "relay://topic");
+        assertEq(MockPermissionedResolver(resolver).textOf(name, "eth.lortnoc.inbox"), "relay://topic");
     }
 
     function test_claim_writesBothPubkeyAndAddr() public {
         // The 2026-07-27 resolution bug: `_claim` wrote only the text record, so every handle
         // reported addr = 0x0 and explorers rendered the name as "does not resolve". `addr` MUST
-        // be written in this transaction, because the next step revokes the only authority the
-        // registrar ever holds.
+        // be written by the initializer: afterwards the registrar has no authority to write it.
         vm.prank(alice);
         (address resolver,) = registrar.claim("alice", PUBKEY);
-        bytes32 node = registrar.nodeOf("alice");
+        bytes memory name = registrar.dnsNameOf("alice");
 
         MockPermissionedResolver r = MockPermissionedResolver(resolver);
-        assertEq(r.text(node, "eth.lortnoc.pubkey"), PUBKEY);
-        assertEq(r.addr(node), alice, "addr was not set - explorers will report the name as unresolvable");
+        assertEq(r.textOf(name, "eth.lortnoc.pubkey"), PUBKEY);
+        assertEq(r.addrOf(name), alice, "addr was not set - explorers will report the name as unresolvable");
     }
 
     function test_claim_registersTheSubnamePointingAtThatResolver() public {
@@ -121,8 +120,8 @@ contract LortnocRegistrarTest is Test {
     }
 
     function test_claim_resolverAddressIsDeterministicFromTheLabel() public {
-        // CREATE2 on the node means the resolver address is predictable before deployment.
-        address predicted = _predictResolver(registrar.nodeOf("alice"));
+        // CREATE2 on predictSalt(node, 0) == node: predictable before deployment.
+        address predicted = _predictResolver(registrar.predictSalt(registrar.nodeOf("alice"), 0));
         vm.prank(alice);
         (address resolver,) = registrar.claim("alice", PUBKEY);
         assertEq(resolver, predicted);
@@ -130,7 +129,7 @@ contract LortnocRegistrarTest is Test {
 
     function test_claim_emitsHandleClaimed() public {
         bytes32 node = registrar.nodeOf("alice");
-        address predicted = _predictResolver(node);
+        address predicted = _predictResolver(uint256(node));
 
         vm.expectEmit(true, true, false, true);
         emit HandleClaimed("alice", alice, predicted, 1, node);
@@ -218,7 +217,7 @@ contract LortnocRegistrarTest is Test {
 
         // The relayer paid the gas and must own nothing.
         assertEq(registry.findOwner("alice"), alice, "the relayer took the handle");
-        assertEq(MockPermissionedResolver(resolver).addr(registrar.nodeOf("alice")), alice);
+        assertEq(MockPermissionedResolver(resolver).addrOf(registrar.dnsNameOf("alice")), alice);
         assertTrue(MockPermissionedResolver(resolver).hasRoles(alice));
         assertFalse(MockPermissionedResolver(resolver).hasRoles(relayer), "the relayer kept roles");
         assertFalse(MockPermissionedResolver(resolver).hasRoles(address(registrar)));
@@ -264,7 +263,7 @@ contract LortnocRegistrarTest is Test {
 
         LortnocRegistrar fresh = new LortnocRegistrar(
             ILortnocRegistry(address(registry)), IVerifiableFactory(address(factory)),
-            resolverImpl, PARENT_NODE, owner
+            resolverImpl, PARENT_DNS, owner
         );
         assertFalse(fresh.isRelayer(relayer), "a fresh registrar must not inherit relayers");
     }
@@ -344,24 +343,86 @@ contract LortnocRegistrarTest is Test {
     // ---- misc --------------------------------------------------------------------------------
 
     function test_nodeOf_isNamehashUnderTheParent() public view {
-        assertEq(
-            registrar.nodeOf("alice"),
-            keccak256(abi.encodePacked(PARENT_NODE, keccak256(bytes("alice"))))
-        );
+        bytes32 parent = keccak256(abi.encodePacked(
+            keccak256(abi.encodePacked(bytes32(0), keccak256("eth"))), keccak256("lortnoctahc")
+        ));
+        assertEq(registrar.PARENT_NODE(), parent, "parent node derived from the DNS name");
+        assertEq(registrar.nodeOf("alice"), keccak256(abi.encodePacked(parent, keccak256(bytes("alice")))));
+    }
+
+    function test_dnsNameOf_isTheWireFormTheSettersTake() public view {
+        assertEq(registrar.dnsNameOf("alice"), abi.encodePacked(uint8(5), "alice", PARENT_DNS));
+    }
+
+    // ---- 09-15 additions: re-claim after expiry, one-shot migration ---------------------------
+
+    function test_reclaimAfterExpiry_getsAFreshResolver() public {
+        // The 06-29 contract used salt = node, so a lapsed label could never be re-claimed: the
+        // second deployProxy CREATE2-collided forever. predictSalt(node, n) fixes that.
+        vm.prank(alice);
+        (address r1,) = registrar.claim("alice", PUBKEY);
+        registry.release("alice"); // expiry
+        vm.prank(bob);
+        (address r2,) = registrar.claim("alice", PUBKEY);
+        assertTrue(r1 != r2);
+        assertEq(r2, _predictResolver(registrar.predictSalt(registrar.nodeOf("alice"), 1)));
+        assertEq(registry.findOwner("alice"), bob);
+    }
+
+    function test_migrate_carriesRecordsVerbatim_andAddrIsTheClaimant() public {
+        string[] memory k = new string[](2);
+        string[] memory v = new string[](2);
+        k[0] = "eth.lortnoc.knock";
+        v[0] = '{"prompt":"bar?","salt":"c2FsdA==","kdf":{"t":2,"m":19456,"p":1}}';
+        k[1] = "eth.lortnoc.sui";
+        v[1] = "0xabc";
+        vm.prank(owner);
+        (address resolver,) = registrar.migrate("kirsten", PUBKEY, alice, k, v);
+        MockPermissionedResolver r = MockPermissionedResolver(resolver);
+        bytes memory name = registrar.dnsNameOf("kirsten");
+        assertEq(r.textOf(name, k[0]), v[0], "knock salt must be byte-identical");
+        assertEq(r.textOf(name, k[1]), v[1]);
+        assertEq(r.textOf(name, "eth.lortnoc.pubkey"), PUBKEY);
+        assertEq(r.addrOf(name), alice);
+        assertFalse(r.hasRoles(owner), "the registrar owner gained roles on a migrated handle");
+        assertFalse(r.hasRoles(address(registrar)));
+    }
+
+    function test_migrate_isOwnerOnly_refusesPubkeyKey_andClosesForever() public {
+        vm.expectRevert(LortnocRegistrar.NotOwner.selector);
+        vm.prank(alice);
+        registrar.migrate("kevin", PUBKEY, alice, new string[](0), new string[](0));
+
+        string[] memory bad = new string[](1);
+        bad[0] = "eth.lortnoc.pubkey";
+        vm.expectRevert(abi.encodeWithSelector(LortnocRegistrar.ReservedKey.selector, bad[0]));
+        vm.prank(owner);
+        registrar.migrate("kevin", PUBKEY, alice, bad, new string[](1));
+
+        vm.expectRevert(LortnocRegistrar.LengthMismatch.selector);
+        vm.prank(owner);
+        registrar.migrate("kevin", PUBKEY, alice, new string[](1), new string[](0));
+
+        vm.startPrank(owner);
+        registrar.closeMigration();
+        assertFalse(registrar.migrationOpen());
+        vm.expectRevert(LortnocRegistrar.MigrationIsClosed.selector);
+        registrar.migrate("kevin", PUBKEY, alice, new string[](0), new string[](0));
+        vm.stopPrank();
     }
 
     function test_constructor_rejectsZeroAddresses() public {
         vm.expectRevert(LortnocRegistrar.ZeroAddress.selector);
-        new LortnocRegistrar(ILortnocRegistry(address(0)), IVerifiableFactory(address(factory)), resolverImpl, PARENT_NODE, owner);
+        new LortnocRegistrar(ILortnocRegistry(address(0)), IVerifiableFactory(address(factory)), resolverImpl, PARENT_DNS, owner);
 
         vm.expectRevert(LortnocRegistrar.ZeroAddress.selector);
-        new LortnocRegistrar(ILortnocRegistry(address(registry)), IVerifiableFactory(address(0)), resolverImpl, PARENT_NODE, owner);
+        new LortnocRegistrar(ILortnocRegistry(address(registry)), IVerifiableFactory(address(0)), resolverImpl, PARENT_DNS, owner);
 
         vm.expectRevert(LortnocRegistrar.ZeroAddress.selector);
-        new LortnocRegistrar(ILortnocRegistry(address(registry)), IVerifiableFactory(address(factory)), address(0), PARENT_NODE, owner);
+        new LortnocRegistrar(ILortnocRegistry(address(registry)), IVerifiableFactory(address(factory)), address(0), PARENT_DNS, owner);
 
         vm.expectRevert(LortnocRegistrar.ZeroAddress.selector);
-        new LortnocRegistrar(ILortnocRegistry(address(registry)), IVerifiableFactory(address(factory)), resolverImpl, PARENT_NODE, address(0));
+        new LortnocRegistrar(ILortnocRegistry(address(registry)), IVerifiableFactory(address(factory)), resolverImpl, PARENT_DNS, address(0));
     }
 
     function test_claim_revertsIfTheRegistrarLacksROLE_REGISTRAR() public {
@@ -374,6 +435,11 @@ contract LortnocRegistrarTest is Test {
 
     function testFuzz_claim_anyValidLabelMintsToTheCaller(uint8 len, address claimant) public {
         vm.assume(claimant != address(0));
+        // The fuzzer likes to pick addresses that exist in this test (the registrar itself, the
+        // factory, a precompile...). A claimant that IS the registrar trivially "holds roles as
+        // the registrar" — that is not the property under test, so exclude in-test contracts.
+        vm.assume(claimant.code.length == 0 && uint160(claimant) > 0x100);
+        vm.assume(claimant != address(registrar) && claimant != address(factory) && claimant != address(registry));
         len = uint8(bound(len, 3, 32));
         bytes memory label = new bytes(len);
         for (uint256 i; i < len; ++i) label[i] = bytes1(uint8(97 + (i % 26)));
@@ -388,8 +454,8 @@ contract LortnocRegistrarTest is Test {
 
     // ---- helpers -----------------------------------------------------------------------------
 
-    function _predictResolver(bytes32 node) internal view returns (address) {
-        bytes32 outerSalt = keccak256(abi.encode(address(registrar), uint256(node)));
+    function _predictResolver(uint256 salt) internal view returns (address) {
+        bytes32 outerSalt = keccak256(abi.encode(address(registrar), salt));
         return address(
             uint160(
                 uint256(

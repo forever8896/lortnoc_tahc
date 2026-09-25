@@ -1,70 +1,68 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @notice Stand-ins for the pinned ENS v2 Sepolia deployment, faithful to the parts
-///         LortnocRegistrar depends on and no further.
-///
-/// @dev The behaviour these mocks reproduce deliberately includes the AWKWARD parts, because
-///      those are where the registrar's ordering constraints come from:
-///
-///        * MockPermissionedResolver enforces roles on writes, so a test can prove the registrar
-///          really does drop its own authority in step 4 — a resolver that accepted every write
-///          would make that assertion vacuous.
-///        * It also refuses to remove the last assignee of a role, mirroring EAC. That is the
-///          reason `_claim` must grant to the claimant BEFORE revoking from itself, and the
-///          reason a naive reordering would revert rather than silently leave the registrar in
-///          control.
+import {Grant} from "../../src/LortnocRegistrar.sol";
 
-/// @dev Mirrors `PermissionedResolverImpl` closely enough to test the role handover.
+/// @notice Stand-ins for the pinned ENS v2 Sepolia deployment (`sepolia-deployment-2026-09-15`),
+///         faithful to the parts LortnocRegistrar depends on and no further. The fork test
+///         (`LortnocRegistrar.fork.t.sol`) runs the REAL bytecode; these mocks keep the unit tier
+///         offline.
+///
+/// @dev Reproduced 09-15 behaviour:
+///        * `initialize(Grant[] grants, bytes[] calls)` — `calls` run WITHOUT permission checks
+///          while initializing (PermissionedResolver.sol:119-126,370-378). That is why the
+///          registrar never needs, and never holds, a role on a handle's resolver.
+///        * Setters take the DNS-encoded NAME (`setText(bytes,…)`, `setAddress(bytes,uint256,bytes)`).
+///        * After init, writes are role-checked, so "the registrar cannot write" is a real assertion.
+
+/// @dev Mirrors `PermissionedResolverImpl` @09-15 closely enough to test the handover.
 contract MockPermissionedResolver {
     mapping(address account => uint256 roles) public roles;
-    mapping(bytes32 node => mapping(string key => string value)) public text;
-    mapping(bytes32 node => address) public addr;
+    mapping(bytes32 nameHash => mapping(string key => string value)) internal _text;
+    mapping(bytes32 nameHash => bytes) internal _addr;
 
-    uint256 public roleHolders; // how many accounts hold roles, for the last-assignee rule
     bool public initialized;
-    address public implementation;
+    bool internal _initializing;
 
     error NotAuthorized(address caller);
     error AlreadyInitialized();
-    error LastRoleAssignee();
 
-    function initialize(address admin, uint256 roleBitmap, bytes[] calldata setters) external {
+    function initialize(Grant[] calldata grants, bytes[] calldata calls) external {
         if (initialized) revert AlreadyInitialized();
         initialized = true;
-        roles[admin] = roleBitmap;
-        if (roleBitmap != 0) roleHolders++;
-        for (uint256 i; i < setters.length; ++i) {
-            (bool ok,) = address(this).call(setters[i]);
-            require(ok, "setter failed");
+        _initializing = true;
+        for (uint256 i; i < grants.length; ++i) roles[grants[i].account] |= grants[i].roleBitmap;
+        for (uint256 i; i < calls.length; ++i) {
+            (bool ok,) = address(this).call(calls[i]);
+            require(ok, "init call failed");
         }
+        _initializing = false;
     }
 
     modifier authorized() {
-        if (roles[msg.sender] == 0) revert NotAuthorized(msg.sender);
+        if (!_initializing && roles[msg.sender] == 0) revert NotAuthorized(msg.sender);
         _;
     }
 
-    function setText(bytes32 node, string calldata key, string calldata value) external authorized {
-        text[node][key] = value;
+    function setText(bytes calldata name, string calldata key, string calldata value) external authorized {
+        _text[keccak256(name)][key] = value;
     }
 
-    function setAddr(bytes32 node, address a) external authorized {
-        addr[node] = a;
+    function setAddress(bytes calldata name, uint256 coinType, bytes calldata a) external authorized {
+        require(coinType == 60, "mock: ETH only");
+        _addr[keccak256(name)] = a;
     }
 
-    function grantRootRoles(uint256 roleBitmap, address account) external authorized returns (bool) {
-        if (roles[account] == 0 && roleBitmap != 0) roleHolders++;
-        roles[account] |= roleBitmap;
-        return true;
+    /// @dev Test-only reads. The real 09-15 resolver has NO direct getters — reads go through
+    ///      `resolve(name, data)` via the UniversalResolver.
+    function textOf(bytes calldata name, string calldata key) external view returns (string memory) {
+        return _text[keccak256(name)][key];
     }
 
-    function revokeRootRoles(uint256 roleBitmap, address account) external authorized returns (bool) {
-        if (roles[account] != 0 && roleHolders == 1) revert LastRoleAssignee();
-        uint256 next = roles[account] & ~roleBitmap;
-        if (roles[account] != 0 && next == 0) roleHolders--;
-        roles[account] = next;
-        return true;
+    function addrOf(bytes calldata name) external view returns (address) {
+        bytes memory a = _addr[keccak256(name)];
+        if (a.length != 20) return address(0);
+        return address(bytes20(a));
     }
 
     function hasRoles(address account) external view returns (bool) {
@@ -134,6 +132,11 @@ contract MockLortnocRegistry {
 
     function findOwner(string calldata label) external view returns (address) {
         return entries[label].owner;
+    }
+
+    /// @dev Simulates expiry: the real registry reports owner 0 for an expired label.
+    function release(string calldata label) external {
+        delete entries[label];
     }
 
     function getResolver(string calldata label) external view returns (address) {

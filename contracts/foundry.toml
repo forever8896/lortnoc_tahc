@@ -8,6 +8,7 @@ optimizer = true
 optimizer_runs = 200
 evm_version = "cancun"
 
-# Sepolia — ENS v2, pinned deployment tag sepolia-deployment-2026-06-29
+# Sepolia — ENS v2, pinned deployment tag sepolia-deployment-2026-09-15
+# Fork tests (test/*.fork.t.sol) run only when FORK_RPC is set.
 [rpc_endpoints]
 sepolia = "${SEPOLIA_RPC_URL}"
