@@ -12,6 +12,7 @@ export const LABEL: Readonly<{
   conv: string
   semaphore: string
   seal: string
+  xpublic: string
 }>
 
 /** MS = HKDF(wallet signature | passphrase). The only thing a user backs up. */
@@ -36,10 +37,36 @@ export function deriveSemaphoreSecret(ms: Uint8Array, index?: number): string
 /** K_conv from ECDH — identical on both ends by symmetry (§5.3). 64 bytes → AES-256-SIV. */
 export function deriveConvKey(myPriv: Uint8Array, theirPub: Uint8Array, myPub: Uint8Array): Uint8Array
 
+/**
+ * K_public — the fixed key every X Mode 1 post is encrypted under. 64 bytes → AES-256-SIV.
+ *
+ * ⚠️ Obfuscation, NOT encryption: the constant ships in a public MIT-licensed extension, so this
+ * key is extractable in minutes. Delivers "you need the tool to read this", never "only
+ * authorised people can read this". The UI must never show a lock in this mode.
+ */
+export function derivePublicChannelKey(): Uint8Array
+
+/** CEK for X Mode 3, expanded from a 16-byte seed. 64 bytes -> AES-256-SIV. */
+export function deriveContentKey(seed: Uint8Array): Uint8Array
+
+/** Per-recipient XOR key-wrap mask for X Mode 3. 16 bytes, one-time-pad under a fresh ECDH. */
+export function deriveWrapMask(convKey: Uint8Array): Uint8Array
+
 /** Fresh ephemeral X25519 keypair for one conversation. */
 export function genKeyPair(): KeyPair
 
 export function encrypt(key: Uint8Array, plaintext: string): Uint8Array
+
+/**
+ * Byte-level AES-SIV, for payloads that are already bytes (e.g. squeezed plaintext).
+ *
+ * `encrypt` UTF-8 encodes its string argument, which inflates compressed bytes by ~50% and eats
+ * the whole saving — use this for anything that is not literally text.
+ */
+export function encryptBytes(key: Uint8Array, bytes: Uint8Array): Uint8Array
+
+/** Returns the plaintext BYTES, or null if the tag doesn't verify (not one of ours). */
+export function tryDecryptBytes(key: Uint8Array, ciphertext: Uint8Array): Uint8Array | null
 
 /** Returns the decoded message, or null if the tag doesn't verify (not one of ours). */
 export function tryDecrypt(key: Uint8Array, ciphertext: Uint8Array): string | null

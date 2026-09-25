@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lortnoc tahc for X</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <header class="hdr">
+      <div class="brand">
+        <img class="brand-logo" src="/logo.png" alt="lortnoc tahc" />
+      </div>
+      <span id="status" class="chip chip-off"><i class="led"></i>codec</span>
+    </header>
+
+    <!-- master switch -->
+    <button id="masterSwitch" class="master" data-on="false" aria-pressed="false">
+      <div class="master__l">
+        <div class="master__label">Stego posting</div>
+        <div id="masterSub" class="master__sub">off · posting normally</div>
+      </div>
+      <div class="switch"><div class="knob"></div></div>
+    </button>
+
+    <section class="card">
+      <div class="card__head">
+        <span class="eyebrow">Addressed to</span>
+        <span id="modeChip" class="chip chip-off">public channel</span>
+      </div>
+      <label class="field">
+        <input type="text" id="recipients" spellcheck="false" placeholder="alice, bob — or leave empty" />
+      </label>
+      <p class="hint">
+        Names resolve through ENS to their messaging keys. <strong>Leave empty</strong> and the post
+        goes to the public channel instead.
+      </p>
+      <!--
+        The mode note is swapped by popup.ts, because the honest copy for the two modes is
+        genuinely different and PRD §5 forbids showing a lock for the public one. Mode 1's key
+        ships inside a public extension, so "you need the tool" is the entire property; claiming
+        more is the one thing that would get us correctly called out.
+      -->
+      <p id="modeNote" class="note"></p>
+    </section>
+
+    <section class="card">
+      <div class="card__head">
+        <span class="eyebrow">Your identity</span>
+        <span id="idChip" class="chip chip-off">locked</span>
+      </div>
+      <label class="field">
+        <input type="password" id="passphrase" spellcheck="false" placeholder="passphrase" />
+      </label>
+      <div class="actions">
+        <button id="unlock" class="btn btn--sm">Unlock</button>
+        <button id="lock" class="btn btn--ghost btn--sm">Lock</button>
+      </div>
+      <p class="hint">
+        Needed only to <strong>read</strong> posts addressed to you. Sending needs nothing.
+        Held in memory and cleared when the browser closes.
+      </p>
+      <div id="pubRow" class="fp" hidden>
+        <span class="fp__label">Your key</span>
+        <code id="pub" class="fp__code">—</code>
+        <span class="fp__note">publish as eth.lortnoc.pubkey</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card__head">
+        <span class="eyebrow">Diagnostics</span>
+        <span id="selfChip" class="chip chip-off">not run</span>
+      </div>
+      <button id="selftest" class="btn btn--sm">Run self-test</button>
+      <p class="hint">
+        Round-trips a real message through the whole stack — compress, encrypt, frame, codec,
+        decode, decrypt — in both modes. Needs no X page and no second person, so a failure here
+        points at the codec or the crypto rather than the DOM.
+      </p>
+      <div id="selfOut" class="diag" hidden></div>
+    </section>
+
+    <details class="adv">
+      <summary>Advanced</summary>
+      <label class="field">
+        <span class="eyebrow">Codec URL</span>
+        <input type="text" id="codecUrl" spellcheck="false" placeholder="https://lortnoc-codec.fly.dev" />
+      </label>
+      <div class="actions">
+        <button id="save" class="btn btn--sm">Save</button>
+        <button id="check" class="btn btn--ghost btn--sm">Check codec</button>
+      </div>
+    </details>
+
+    <a id="cta" class="cta" href="https://app.lortnoctahc.com" target="_blank" rel="noopener">
+      <div class="cta__body">
+        <p class="cta__lead">Public posts are the demo. Real conversations belong <strong>off X entirely.</strong></p>
+        <p class="cta__go">Move to decentralized messaging, today <span class="cta__arrow">→</span></p>
+      </div>
+      <div class="cta__host">app.lortnoctahc.com</div>
+    </a>
+
+    <p id="hint" class="hint hint--warn" hidden></p>
+
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>

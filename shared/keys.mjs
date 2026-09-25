@@ -40,6 +40,9 @@ export const LABEL = Object.freeze({
   conv: 'lortnoc/conv/x25519/v1',
   semaphore: 'lortnoc/semaphore/v1',
   seal: 'lortnoc/seal/v1',
+  xpublic: 'lortnoc/x/public/v1',
+  xcek: 'lortnoc/x/cek/v1',
+  xwrap: 'lortnoc/x/wrap/v1',
 })
 
 /** secp256k1 group order — a private key must land in [1, n-1]. */
@@ -146,6 +149,72 @@ export function deriveConvKey(myPriv, theirPub, myPub) {
   return hkdf(sha256, shared, ECDH_SALT, info, 64)
 }
 
+// ---------------------------------------------------------------------------
+// K_public — the X public-channel key (PRD-x-extension.md §5, Mode 1)
+// ---------------------------------------------------------------------------
+
+/** The public constant K_public is derived from. Not a secret and not treated as one. */
+const X_PUBLIC_CONSTANT = enc.encode('lortnoc tahc public channel v1')
+
+/**
+ * K_public — the fixed key every Mode 1 post on X is encrypted under.
+ *
+ * ⚠️ THIS IS OBFUSCATION, NOT ENCRYPTION, and the UI must never imply otherwise (no lock icon,
+ * no "encrypted" label). The constant it derives from ships inside a public MIT-licensed
+ * extension, so anyone can extract this key in minutes. The property it delivers is "you need
+ * the tool to read this" — never "only authorised people can read this."
+ *
+ * It exists because it is the right primitive for a booth demo: zero friction, works between
+ * total strangers, no handshake, no wallet. Modes 2 and 3 are where confidentiality lives.
+ *
+ * Derived rather than hardcoded so it is domain-separated from every other key in this table —
+ * a bug that crossed K_public with K_conv would hand a real conversation key the same
+ * everyone-has-it property, which is the one mistake here that would actually matter.
+ *
+ * @returns {Uint8Array} 64 bytes → AES-256-SIV
+ */
+export function derivePublicChannelKey() {
+  return hkdf(sha256, X_PUBLIC_CONSTANT, enc.encode(LABEL.xpublic), enc.encode('x-public'), 64)
+}
+
+/**
+ * CEK — the per-message content key for X Mode 3 (named recipients).
+ *
+ * Mode 3 encrypts the MESSAGE once under this key and then wraps only the 32-byte seed for each
+ * recipient. The alternative the PRD originally specified — encrypt the whole message once per
+ * recipient — makes cover text scale with `recipients × message`, which at ~11 cover characters
+ * per payload byte is unaffordable past two recipients.
+ *
+ * Expanded from a 32-byte seed rather than being 64 random bytes because the SEED is what gets
+ * wrapped per recipient, and every wrapped byte is paid N times.
+ *
+ * @param {Uint8Array} seed 32 random bytes, fresh per message
+ * @returns {Uint8Array} 64 bytes → AES-256-SIV
+ */
+export function deriveContentKey(seed) {
+  return hkdf(sha256, seed, enc.encode(LABEL.xcek), enc.encode('cek'), 64)
+}
+
+/**
+ * The per-recipient key-wrap mask for X Mode 3.
+ *
+ * Mode 3 wraps the content seed for each recipient by XOR against this mask — a one-time pad under
+ * a key that came from a FRESH ephemeral ECDH, so it is used exactly once. There is deliberately
+ * no per-wrap authentication tag: the body's AES-SIV tag already authenticates the result, and a
+ * second tag would cost 16 bytes PER RECIPIENT to re-answer a question already answered once.
+ *
+ * That is the whole reason this exists. An AEAD wrap costs 48 bytes per recipient; this costs 16.
+ * Measured, the difference is "four recipients cannot fit in 16 posts" versus "four recipients
+ * fit" — the property the X surface sells is the property that scales with recipient count, so
+ * every byte here is paid N times.
+ *
+ * @param {Uint8Array} convKey 64-byte ECDH output for one recipient
+ * @returns {Uint8Array} 16 bytes
+ */
+export function deriveWrapMask(convKey) {
+  return hkdf(sha256, convKey, enc.encode(LABEL.xwrap), enc.encode('wrap'), 16)
+}
+
 /** Fresh ephemeral X25519 keypair for one conversation (§5.3 Tier 1). */
 export function genKeyPair() {
   const priv = crypto.getRandomValues(new Uint8Array(32)) // any 32 bytes is a valid x25519 scalar
@@ -164,6 +233,30 @@ export function encrypt(key, plaintext) {
 export function tryDecrypt(key, ciphertext) {
   try {
     return dec.decode(aessiv(key).decrypt(ciphertext))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Byte-level AES-SIV, for payloads that are already bytes rather than text.
+ *
+ * `encrypt` above takes a STRING and UTF-8 encodes it, which is right for a plain message and
+ * WRONG for anything compressed: every byte >= 0x80 becomes two under UTF-8, so a compressed
+ * payload inflates by roughly half on the way in and the compression is worse than useless.
+ * That is not hypothetical — it was measured while sizing the X build, where it silently ate
+ * the entire saving before anyone looked at the byte counts.
+ *
+ * Same key, same construction, same auth tag as the string version; only the framing differs.
+ */
+export function encryptBytes(key, bytes) {
+  return aessiv(key).encrypt(bytes)
+}
+
+/** Returns the plaintext BYTES, or null if the tag doesn't verify (not one of ours). */
+export function tryDecryptBytes(key, ciphertext) {
+  try {
+    return aessiv(key).decrypt(ciphertext)
   } catch {
     return null
   }

@@ -3,6 +3,7 @@
 //   GET    /api/admin                      -> { waitlist: [...], alpha: [...], counts }
 //   GET    /api/admin?export=waitlist      -> CSV
 //   GET    /api/admin?export=alpha         -> CSV
+//   GET    /api/admin?export=bot           -> CSV (Telegram onboarding bot users)
 //   PATCH  /api/admin  { table:'alpha', id, status }   -> 204
 //   DELETE /api/admin  { table, id }                   -> 204
 //
@@ -33,9 +34,12 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       const which = String(req.query?.export || '')
-      if (which === 'waitlist' || which === 'alpha') {
+      if (which === 'waitlist' || which === 'alpha' || which === 'bot') {
         const rows = which === 'waitlist'
           ? await sql`SELECT email, telegram, source, created_at FROM waitlist ORDER BY created_at DESC`
+          : which === 'bot'
+          ? await sql`SELECT username, tg_id, step, source, last_message, started_at, last_seen
+                      FROM bot_users ORDER BY started_at DESC`
           : await sql`SELECT telegram, status, message, agreed_at, disclaimer, source, created_at
                       FROM alpha ORDER BY created_at DESC`
         res.status(200)
@@ -44,15 +48,20 @@ export default async function handler(req, res) {
         return res.end(csv(rows))
       }
 
-      const [waitlist, alpha] = await Promise.all([
+      const [waitlist, alpha, bot] = await Promise.all([
         sql`SELECT id, email, telegram, source, created_at FROM waitlist ORDER BY created_at DESC LIMIT 1000`,
         sql`SELECT id, telegram, status, message, agreed_at, disclaimer, source, created_at
             FROM alpha ORDER BY created_at DESC LIMIT 1000`,
+        sql`SELECT tg_id, username, step, source, last_message, started_at, last_seen
+            FROM bot_users ORDER BY started_at DESC LIMIT 1000`,
       ])
       return json(res, 200, {
         waitlist,
         alpha,
+        bot,
         counts: {
+          bot: bot.length,
+          botCompleted: bot.filter((r) => r.step === 'done').length,
           waitlist: waitlist.length,
           alpha: alpha.length,
           new: alpha.filter((r) => r.status === 'new').length,

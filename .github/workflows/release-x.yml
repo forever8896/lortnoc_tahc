@@ -1,0 +1,110 @@
+name: release-extension-x
+
+# The X extension (extension-x/), released the same verifiable way as the Telegram one
+# (release.yml): GitHub's CI builds it from the tagged commit, packages dist/, records a SHA-256
+# and a build-provenance attestation, and publishes both. The onboarding bot links here.
+#
+# Tags are `x-v*` (e.g. x-v0.1.0). release.yml triggers on `v*`, which does NOT match `x-v…`,
+# so the two never fire for each other's tags.
+#
+# Published with --latest=false: the site's install page links to /releases/latest for the
+# TELEGRAM extension, and marking this one latest would silently hand Telegram users the X build.
+
+on:
+  push:
+    tags: ['x-v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag to release (e.g. x-v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extension-x/package-lock.json
+
+      # extension-x/src imports shared/ by relative path, exactly like the Telegram build.
+      - name: Install workspaces
+        run: |
+          npm ci --prefix shared
+          npm ci --prefix extension-x
+
+      - name: Build the extension
+        working-directory: extension-x
+        run: npm run build
+
+      - name: Resolve tag
+        id: v
+        run: echo "tag=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Package dist/ + checksum
+        id: pkg
+        run: |
+          # x-v0.1.0 -> lortnoc-tahc-x-v0.1.0.zip (the bot's verify step globs lortnoc-tahc-x-*.zip)
+          ZIP="lortnoc-tahc-${{ steps.v.outputs.tag }}.zip"
+          ( cd extension-x/dist && zip -r "../../$ZIP" . )
+          sha256sum "$ZIP" | tee "$ZIP.sha256"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "sha=$(cut -d' ' -f1 "$ZIP.sha256")" >> "$GITHUB_OUTPUT"
+
+      - name: Attest build provenance
+        continue-on-error: true
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: ${{ steps.pkg.outputs.zip }}
+
+      - name: Write release notes
+        run: |
+          cat > RELEASE_NOTES.md <<EOF
+          # lortnoc tahc for X ${{ steps.v.outputs.tag }}
+
+          Steganographic posting for X. Built in public CI from this tagged commit — verify, don't trust.
+
+          **SHA-256** \`${{ steps.pkg.outputs.zip }}\`
+          \`\`\`
+          ${{ steps.pkg.outputs.sha }}
+          \`\`\`
+
+          ## Install
+          1. Download \`${{ steps.pkg.outputs.zip }}\` below and check its SHA-256 matches the value above.
+          2. Unzip it somewhere permanent, open \`chrome://extensions\`, turn on **Developer mode**.
+          3. Click **Load unpacked**, pick the unzipped folder, open x.com and switch it on.
+
+          With the recipients field empty, posts go to the public channel: anyone with the extension
+          can read them. That hides them from people without the tool — it is not private. Set
+          recipients for posts only they can read.
+
+          ## Verify it yourself
+          \`\`\`
+          git checkout ${{ steps.v.outputs.tag }}
+          npm ci --prefix shared
+          npm ci --prefix extension-x && npm run --prefix extension-x build
+          \`\`\`
+          Build-provenance attestation: \`gh attestation verify ${{ steps.pkg.outputs.zip }} -R \${{ github.repository }}\`
+          EOF
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.v.outputs.tag }}"
+          ZIP="${{ steps.pkg.outputs.zip }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ZIP" "$ZIP.sha256" --clobber
+          else
+            gh release create "$TAG" "$ZIP" "$ZIP.sha256" \
+              --title "lortnoc tahc for X $TAG" --notes-file RELEASE_NOTES.md --latest=false
+          fi

@@ -1,0 +1,25 @@
+{
+  "name": "lortnoc-tahc-extension-x",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Steganographic posting for X — type real, post cover text, decode inline.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.7.0",
+    "@types/chrome": "^0.0.287",
+    "@types/node": "^22.20.1",
+    "typescript": "^5.7.0",
+    "vite": "^6.3.0"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^2.0.0",
+    "@noble/curves": "^2.0.0",
+    "@noble/hashes": "^2.0.0",
+    "viem": "^2.55.17"
+  }
+}

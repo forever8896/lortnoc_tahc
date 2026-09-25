@@ -14,13 +14,25 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { ROOT, source } from '../lib/env.mjs'
 
+/**
+ * The ONE sanctioned Telegram bot: the onboarding funnel (@lortnoctahc_bot). CLAUDE.md §4 forbids a
+ * bot in the MESSAGING path — something acting as a user's Telegram account, which is where the
+ * ban/ToS risk lives. A Bot API bot that people choose to message, holding no user session and
+ * never touching the extension, is outside that rule; §4 records the carve-out.
+ *
+ * Exempted by EXACT path, never by directory: a bot token turning up anywhere else — above all in
+ * extension/ or app/ — must still fail here. The test below proves the product never reaches in.
+ */
+const FUNNEL_BOT = ['site/api/tgbot.js', 'site/api/_lib/bot.js', 'site/scripts/tgbot-setup.mjs']
+
 /** Search tracked source only — build output, node_modules and vendored deps are not ours. */
-function grepSource(pattern) {
+function grepSource(pattern, { includeFunnelBot = false } = {}) {
   try {
     const out = execFileSync(
       'git',
       ['grep', '-n', '-i', '-E', pattern, '--', ':!*/node_modules/*', ':!*/dist/*', ':!*/out/*',
-       ':!*/lib/*', ':!*.zip', ':!CLAUDE.md', ':!README.md', ':!*/docs/*', ':!test/*', ':!*.md'],
+       ':!*/lib/*', ':!*.zip', ':!CLAUDE.md', ':!README.md', ':!*/docs/*', ':!test/*', ':!*.md',
+       ...(includeFunnelBot ? [] : FUNNEL_BOT.map((f) => `:!${f}`))],
       { cwd: ROOT, encoding: 'utf8' },
     )
     return out.trim().split('\n').filter(Boolean)
@@ -41,10 +53,42 @@ describe('§4 — no userbot, no MTProto, no held Telegram session credential', 
     assert.deepEqual(hits, [], `a bot token reference appeared:\n${hits.join('\n')}`)
   })
 
+  test('the funnel bot is isolated — no product surface imports or references it', () => {
+    // The carve-out above is only safe while the bot stays a separate funnel. If the extension,
+    // app, codec or relayer ever import it or read its token, it has become part of the
+    // messaging path, and §4 is broken no matter what the exemption says.
+    const hits = grepSource('tgbot|_lib/bot\\.js|TG_BOT_TOKEN|TG_WEBHOOK_SECRET', { includeFunnelBot: true })
+      .filter((h) => !FUNNEL_BOT.some((f) => h.startsWith(`${f}:`)))
+      .filter((h) => /^(extension|extension-x|app|codec|relayer|shared)\//.test(h))
+    assert.deepEqual(hits, [], `a product surface reaches into the funnel bot:\n${hits.join('\n')}`)
+  })
+
   test('the extension only ever talks to Telegram through the DOM', () => {
     // A fetch to a telegram.org API endpoint would mean we hold a session credential.
     const hits = grepSource('fetch\\([^)]*api\\.telegram|telegram\\.org/(bot|api)')
     assert.deepEqual(hits, [], `a direct Telegram API call appeared:\n${hits.join('\n')}`)
+  })
+})
+
+describe('§4 — the X overlay is DOM-only too (no API token, no OAuth)', () => {
+  // PRD-x-extension.md §9. The Telegram design deliberately avoids MTProto and stored
+  // credentials so there is no ban risk; the same rule has to hold on X, where the automation
+  // rules are stricter. The failure this guards against is the tempting one — "just use the API,
+  // it's so much easier than driving Draft.js" — which trades the whole no-credential property
+  // for convenience, and does it in a single import nobody reviews closely.
+  test('no X/Twitter API client library is present', () => {
+    const hits = grepSource('twitter-api|twitter_api|twit\\b|@twurple|tweepy|node-twitter|twitter-lite')
+    assert.deepEqual(hits, [], `an X API client appeared:\n${hits.join('\n')}`)
+  })
+
+  test('no X API credential or OAuth token is read or stored', () => {
+    const hits = grepSource('bearer_token|bearerToken|TWITTER_TOKEN|X_API_KEY|consumer_secret|access_token_secret|oauth_token')
+    assert.deepEqual(hits, [], `an X credential reference appeared:\n${hits.join('\n')}`)
+  })
+
+  test('the X extension only ever talks to X through the DOM', () => {
+    const hits = grepSource('fetch\\([^)]*api\\.(x|twitter)\\.com|api\\.twitter\\.com/[0-9]')
+    assert.deepEqual(hits, [], `a direct X API call appeared:\n${hits.join('\n')}`)
   })
 })
 

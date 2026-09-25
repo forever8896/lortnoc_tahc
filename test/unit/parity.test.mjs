@@ -89,8 +89,17 @@ describe('extension crypto ≡ app crypto (§3 "one key set")', () => {
         own: 'lortnoc/evm/secp256k1/v1',
         sui: 'lortnoc/sui/ed25519/v1',
         conv: 'lortnoc/conv/x25519/v1',
+        // Added for X Mode 1 (PRD-x-extension.md §5). ADDITIVE — a new label cannot change any
+        // key derived under the existing ones, which is why this test is updated rather than
+        // relaxed. It stays pinned for the same reason as the rest: K_public is the key every
+        // public-channel post on X is readable under, so a change to it silently orphans them.
         semaphore: 'lortnoc/semaphore/v1',
         seal: 'lortnoc/seal/v1',
+        xpublic: 'lortnoc/x/public/v1',
+        // X Mode 3 content key (PRD §5). Also additive. Pinned for the same reason: it is what
+        // every named-recipient post's body is encrypted under.
+        xcek: 'lortnoc/x/cek/v1',
+        xwrap: 'lortnoc/x/wrap/v1',
       },
       'an HKDF label changed — this breaks every existing key derived under it',
     )

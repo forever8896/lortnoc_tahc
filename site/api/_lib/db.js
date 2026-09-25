@@ -56,6 +56,18 @@ export async function init() {
       source       TEXT,
       created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
     )`
+    // Telegram onboarding bot (api/tgbot.js). Same sensitivity as `alpha`: Telegram identities of
+    // people who sought out a surveillance-evasion tool. Keyed on the numeric id because usernames
+    // are optional and changeable. Users erase their own row with /delete.
+    await sql`CREATE TABLE IF NOT EXISTS bot_users (
+      tg_id         BIGINT PRIMARY KEY,
+      username      TEXT,
+      source        TEXT,
+      step          TEXT NOT NULL DEFAULT 'welcome',
+      last_message  TEXT,
+      started_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      last_seen     TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`
     await sql`CREATE TABLE IF NOT EXISTS rate_limit (
       bucket       TEXT PRIMARY KEY,
       count        INT NOT NULL DEFAULT 1,
