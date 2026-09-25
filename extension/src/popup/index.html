@@ -14,6 +14,51 @@
       <span id="status" class="chip chip-off"><i class="led"></i>codec</span>
     </header>
 
+    <!-- Setup walkthrough.
+         Shown until every step is satisfied (or it is dismissed), then reachable again from the
+         footer link. The steps TICK THEMSELVES from the state the popup already reads — codec
+         health, the active tab, the stego switch, the handshake — because a checklist that
+         cannot see whether you did the thing is just instructions with boxes drawn round them.
+         Installing this extension leaves you looking at Telegram with nothing visibly changed;
+         this is the part that says what to do next. -->
+    <section id="guide" class="guide" hidden>
+      <div class="guide__head">
+        <span class="eyebrow">Set up · 4 steps</span>
+        <button id="guideClose" class="guide__x" title="hide this">skip</button>
+      </div>
+      <ol class="guide__steps">
+        <li class="gstep" data-step="codec">
+          <span class="gstep__mark"></span>
+          <span class="gstep__body">
+            <b>Codec reachable</b>
+            <span class="gstep__hint">the service that writes your cover text</span>
+          </span>
+        </li>
+        <li class="gstep" data-step="tab">
+          <span class="gstep__mark"></span>
+          <span class="gstep__body">
+            <b>Open Telegram Web</b>
+            <span class="gstep__hint">use the <code>/k/</code> version — <a id="guideOpenTg" href="https://web.telegram.org/k/" target="_blank" rel="noopener">open it</a></span>
+          </span>
+        </li>
+        <li class="gstep" data-step="on">
+          <span class="gstep__mark"></span>
+          <span class="gstep__body">
+            <b>Turn PrivacyMaxxing on</b>
+            <span class="gstep__hint">the switch below — off means you send normally</span>
+          </span>
+        </li>
+        <li class="gstep" data-step="hs">
+          <span class="gstep__mark"></span>
+          <span class="gstep__body">
+            <b>Connect with the person you are chatting with</b>
+            <span class="gstep__hint">both of you press Connect. Keys are exchanged through the chat itself — nothing is typed, no secret is sent.</span>
+          </span>
+        </li>
+      </ol>
+      <p id="guideNow" class="guide__now">—</p>
+    </section>
+
     <!-- master switch -->
     <button id="masterSwitch" class="master" data-on="false" aria-pressed="false">
       <div class="master__l">
@@ -64,6 +109,8 @@
       </div>
       <div class="cta__host">app.lortnoctahc.com</div>
     </a>
+
+    <button id="guideOpen" class="guide__reopen" hidden>Show setup guide</button>
 
     <script type="module" src="./popup.ts"></script>
   </body>

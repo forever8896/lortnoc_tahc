@@ -115,3 +115,53 @@ body {
 .cta__arrow { transition: transform .2s; }
 .cta:hover .cta__arrow { transform: translateX(4px); }
 .cta__host { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--rule); font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--faint); text-align: right; }
+
+/* ── setup walkthrough ─────────────────────────────────────────────────────────────────────
+   Shown on first run and until every step is satisfied. Steps are driven by real state, so the
+   styling has three cases that must stay visually distinct at a glance: done, the one to do
+   next, and not yet reachable. */
+.guide {
+  border: 1px solid var(--rule); background: var(--panel);
+  padding: 12px; margin-bottom: 14px;
+}
+.guide__head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.guide__x {
+  background: none; border: 0; cursor: pointer; padding: 0;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--faint);
+}
+.guide__x:hover { color: var(--ink); }
+.guide__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.gstep { display: flex; gap: 9px; align-items: flex-start; }
+/* The mark is the whole status readout: empty ring = to do, filled = done. */
+.gstep__mark {
+  flex: none; width: 14px; height: 14px; margin-top: 2px;
+  border: 1px solid var(--rule); border-radius: 50%;
+  display: grid; place-items: center;
+}
+.gstep__mark::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: transparent; }
+.gstep__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.gstep b { font-weight: 400; font-size: 12.5px; color: var(--muted); }
+.gstep__hint { font-family: var(--mono); font-size: 10px; line-height: 1.5; color: var(--faint); }
+.gstep__hint a { color: var(--signal); }
+.gstep__hint code { font-size: 10px; }
+
+.gstep[data-state="done"] .gstep__mark { border-color: var(--signal); }
+.gstep[data-state="done"] .gstep__mark::after { background: var(--signal); }
+.gstep[data-state="done"] b { color: var(--faint); text-decoration: line-through; text-decoration-color: var(--rule); }
+.gstep[data-state="done"] .gstep__hint { display: none; }
+
+/* Exactly one step is "now" — the next thing to actually do. Everything else is quiet, so the
+   popup answers "what do I do?" without being read top to bottom. */
+.gstep[data-state="now"] .gstep__mark { border-color: var(--signal); box-shadow: 0 0 0 3px rgba(18,196,190,0.12); }
+.gstep[data-state="now"] b { color: var(--ink); }
+
+.guide__now {
+  margin: 10px 0 0; padding-top: 9px; border-top: 1px solid var(--rule);
+  font-family: var(--mono); font-size: 10px; line-height: 1.55; color: var(--signal);
+}
+.guide__reopen {
+  width: 100%; margin-top: 10px; padding: 7px; cursor: pointer;
+  background: none; border: 1px solid var(--rule); color: var(--faint);
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+}
+.guide__reopen:hover { color: var(--ink); border-color: var(--ink); }

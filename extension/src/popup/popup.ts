@@ -14,6 +14,8 @@ function paintMaster(): void {
   master.dataset.on = String(stegoOn)
   master.setAttribute('aria-pressed', String(stegoOn))
   masterSub.textContent = stegoOn ? 'on · hiding your messages' : 'off · sending normally'
+  guideState.on = stegoOn
+  paintGuide()
 }
 
 function setChip(el: HTMLElement, text: string, on: boolean, led = false): void {
@@ -26,6 +28,8 @@ async function checkHealth(): Promise<void> {
   const res = await sendToCodec<HealthData>({ type: 'HEALTH' })
   if (res.ok && res.data.ready) setChip(status, res.data.model ?? 'codec ok', true, true)
   else setChip(status, 'offline', false, true)
+  guideState.codec = Boolean(res.ok && res.data.ready)
+  paintGuide()
 }
 
 // Freemium meter readout — reads the same storage.local the content script writes, so the
@@ -74,8 +78,77 @@ async function prefillCta(): Promise<void> {
   }
 }
 
+
+// ---- setup walkthrough ---------------------------------------------------------------------
+//
+// Four steps, each TICKED BY REAL STATE rather than by the user claiming to have done it. The
+// popup already reads all four: codec health, whether the active tab is Telegram Web /k/, the
+// stego switch, and the handshake status. Reusing those readings is the whole point — a guide
+// that cannot see whether the step worked is a leaflet, and the failure it has to survive is
+// someone doing the step and the guide still saying to do it.
+//
+// Shown until every step is satisfied, then it hides itself and leaves a link to reopen. It is
+// NOT shown again automatically once completed: a checklist that reappears every time you open
+// the popup is nagging, and by then the popup's own chips report the same state.
+const guideEl = byId<HTMLElement>('guide')
+const guideNow = byId<HTMLElement>('guideNow')
+const guideOpen = byId<HTMLButtonElement>('guideOpen')
+
+type GuideState = { codec: boolean; tab: boolean; on: boolean; hs: boolean }
+const guideState: GuideState = { codec: false, tab: false, on: false, hs: false }
+/** True once the user has finished or skipped it — kept in storage so it survives the popup. */
+let guideDismissed = false
+
+/** What to actually do next, in one line. Written per step because "complete the steps above"
+ *  is not guidance. */
+const NEXT: Record<keyof GuideState, string> = {
+  codec: 'The codec is unreachable — check the URL under Advanced, or your connection.',
+  tab: 'Open Telegram Web (/k/) in this tab, then reopen this popup.',
+  on: 'Flip PrivacyMaxxing on, below.',
+  hs: 'Ask the other person to install this too, then both press Connect securely.',
+}
+const ORDER: (keyof GuideState)[] = ['codec', 'tab', 'on', 'hs']
+
+function paintGuide(): void {
+  const done = ORDER.every((k) => guideState[k])
+  // Remember completion the first time it happens. Without this the guide comes BACK the moment
+  // a step stops being true — flip PrivacyMaxxing off for one message and a set-up user is shown
+  // the beginner checklist again. The chips report that state anyway.
+  if (done && !guideDismissed) {
+    guideDismissed = true
+    void chrome.storage.local.set({ [LOCAL.guideDone]: true })
+  }
+  // Hidden when finished or skipped; the reopen button takes its place.
+  const show = !done && !guideDismissed
+  guideEl.hidden = !show
+  guideOpen.hidden = show
+  guideOpen.textContent = done ? 'Show setup guide' : 'Show setup guide (unfinished)'
+  if (!show) return
+
+  const next = ORDER.find((k) => !guideState[k])
+  for (const key of ORDER) {
+    const li = guideEl.querySelector<HTMLElement>(`.gstep[data-step="${key}"]`)
+    if (li) li.dataset.state = guideState[key] ? 'done' : key === next ? 'now' : 'todo'
+  }
+  guideNow.textContent = next ? NEXT[next] : 'All set — send a message and watch it change.'
+}
+
+/** Mark the guide finished so it stops appearing. Called on completion and on skip. */
+async function settleGuide(): Promise<void> {
+  guideDismissed = true
+  await chrome.storage.local.set({ [LOCAL.guideDone]: true })
+  paintGuide()
+}
+
+byId<HTMLButtonElement>('guideClose').addEventListener('click', () => void settleGuide())
+guideOpen.addEventListener('click', () => {
+  guideDismissed = false
+  paintGuide()
+})
+
 async function load(): Promise<void> {
-  const local = await chrome.storage.local.get([LOCAL.enabled, LOCAL.codecUrl])
+  const local = await chrome.storage.local.get([LOCAL.enabled, LOCAL.codecUrl, LOCAL.guideDone])
+  guideDismissed = Boolean(local[LOCAL.guideDone])
   stegoOn = Boolean(local[LOCAL.enabled])
   paintMaster()
   codecUrl.value = (local[LOCAL.codecUrl] as string) || DEFAULT_CODEC_URL
@@ -130,10 +203,18 @@ async function refreshHsStatus(): Promise<void> {
   if (!tab?.id) return
   if (!(tab.url ?? '').includes('web.telegram.org')) {
     setChip(hsStatus, 'open Telegram', false)
+    guideState.tab = false
+    guideState.hs = false
+    paintGuide()
     return
   }
   if (!(await reachContentScript(tab.id))) {
     setChip(hsStatus, 'reload the tab', false)
+    // On the right site but the overlay is not running on it — the step is NOT done, and the
+    // guide must not advance to "connect" and send someone hunting for a button that is not there.
+    guideState.tab = false
+    guideState.hs = false
+    paintGuide()
     return
   }
   try {
@@ -145,8 +226,12 @@ async function refreshHsStatus(): Promise<void> {
     }
     if (r?.client && r.client !== 'k') {
       setChip(hsStatus, 'use /k/', false)
+      guideState.tab = false
+      guideState.hs = false
+      paintGuide()
       return
     }
+    guideState.tab = true
     const map: Record<string, [string, boolean]> = {
       none: ['not connected', false],
       offered: ['invite sent…', false],
@@ -154,6 +239,8 @@ async function refreshHsStatus(): Promise<void> {
     }
     const [text, on] = map[r?.status] ?? ['not connected', false]
     setChip(hsStatus, text, on)
+    guideState.hs = r?.status === 'established'
+    paintGuide()
     paintConnect(r?.status ?? 'none')
     // Only meaningful once a key exists; before that there is nothing to compare.
     fpRow.hidden = !r?.fingerprint
