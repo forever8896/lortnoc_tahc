@@ -2,7 +2,7 @@
 // the right-click menu (reveal). Both inject the content script into ONE tab on demand; activeTab
 // is granted by the user gesture itself, so the extension holds no standing access to any site.
 import contentScript from '../content/index.ts?script'
-import { CODER, DEFAULT_CODEC_URL, LOCAL } from '../shared/messages'
+import { CODER, DEFAULT_CODEC_URL, DEFAULT_GATE_URL, LOCAL } from '../shared/messages'
 import type { SwRequest, SwResponse } from '../shared/messages'
 
 const TIMEOUT = 30_000 // gpt2 takes seconds; fail closed rather than hang
@@ -10,6 +10,11 @@ const TIMEOUT = 30_000 // gpt2 takes seconds; fail closed rather than hang
 async function codecBase(): Promise<string> {
   const got = await chrome.storage.local.get(LOCAL.codecUrl)
   return ((got[LOCAL.codecUrl] as string) || DEFAULT_CODEC_URL).replace(/\/+$/, '')
+}
+
+async function gateBase(): Promise<string> {
+  const got = await chrome.storage.local.get(LOCAL.gateUrl)
+  return ((got[LOCAL.gateUrl] as string) || DEFAULT_GATE_URL).replace(/\/+$/, '')
 }
 
 async function post(url: string, body: unknown): Promise<Response> {
@@ -22,6 +27,18 @@ async function post(url: string, body: unknown): Promise<Response> {
 }
 
 async function handle(msg: SwRequest): Promise<SwResponse> {
+  if (msg.type === 'GATE_HEALTH' || msg.type === 'GATE') {
+    try {
+      const g = await gateBase()
+      const r = msg.type === 'GATE_HEALTH'
+        ? await fetch(`${g}/health`, { signal: AbortSignal.timeout(8_000) })
+        : await post(`${g}${msg.path}`, msg.body)
+      const data = await r.json().catch(() => ({}))
+      return r.ok ? { ok: true, data } : { ok: false, status: r.status, error: (data as { error?: string }).error ?? `gate ${r.status}` }
+    } catch (e) {
+      return { ok: false, error: `gate unreachable: ${String(e)}` }
+    }
+  }
   const base = await codecBase()
   try {
     if (msg.type === 'HEALTH') {

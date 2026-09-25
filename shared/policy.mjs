@@ -254,7 +254,9 @@ export function parse(payload) {
     at = r.at
   }
   if (at + 16 > payload.length) throw new Error('parse: truncated')
-  return { nonce, shape, material, header: payload.subarray(0, at), body: payload.subarray(at) }
+  // The same value compile() tags gate deposits with — a reader sends it with a release request.
+  const policyHash = sha256(payload.subarray(0, shapeEnd))
+  return { nonce, shape, material, policyHash, header: payload.subarray(0, at), body: payload.subarray(at) }
 }
 
 /**
@@ -287,7 +289,7 @@ export async function open(payload, inputs = {}) {
       }
       return acc
     }
-    const ctx = leafCtx(p.nonce, path, { cache, kdfProfiles: inputs.kdfProfiles, inputs })
+    const ctx = leafCtx(p.nonce, path, { cache, kdfProfiles: inputs.kdfProfiles, inputs, policyHash: p.policyHash })
     try {
       return (await moduleFor(node).open(ctx, p.material.get(String(path)), node)) ?? []
     } catch {

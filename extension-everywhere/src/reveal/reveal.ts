@@ -3,7 +3,8 @@
 // could read it.
 import { canonicalCover, inspect, openMessage } from '../../../shared/webframe.mjs'
 import { fromB64 } from '../../../shared/keys.mjs'
-import { sw } from '../shared/messages'
+import { gateReleaser } from '../../../shared/gateclient.mjs'
+import { sw, gatePost } from '../shared/messages'
 import type { DecodeData, FrameToContent } from '../shared/messages'
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
@@ -20,6 +21,9 @@ function fit() {
 
 /** Passphrases typed in this card, in memory only — gone when the card closes. */
 const tried: string[] = []
+/** Why the gate said no, e.g. "not yet" + when — shown instead of a bare failure. */
+const denied: { last: { deny?: string; retryAt?: number } | null } = { last: null }
+const release = gateReleaser({ post: gatePost, onDeny: (d: { deny?: string; retryAt?: number }) => (denied.last = d) })
 let frame: Uint8Array | null = null
 
 function show(text: string, obfuscationOnly: boolean) {
@@ -36,9 +40,14 @@ function show(text: string, obfuscationOnly: boolean) {
 async function attempt() {
   if (!frame) return
   const info = inspect(frame)!
-  const text = await openMessage(frame, { passphrases: tried })
+  denied.last = null
+  const needsGate = info.needs?.includes('after')
+  const text = await openMessage(frame, { passphrases: tried, ...(needsGate ? { release } : {}) })
   if (text !== null) return show(text, !!(info.honesty as { obfuscationOnly?: boolean } | undefined)?.obfuscationOnly)
-  if (tried.length) setStatus('That didn’t open it.', 'err')
+  // (read through a cast: TS cannot see the onDeny callback assigning it during openMessage)
+  const deny = denied.last as { retryAt?: number } | null
+  if (deny?.retryAt) setStatus(`Locked until ${new Date(deny.retryAt).toLocaleString()}.`, 'err')
+  else if (tried.length) setStatus('That didn’t open it.', 'err')
   fit()
 }
 

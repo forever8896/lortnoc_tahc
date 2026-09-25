@@ -21,9 +21,10 @@ import { fileURLToPath } from 'node:url'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const DIST = join(ROOT, 'extension-everywhere/dist')
 const CODEC_PORT = 8898
+const GATE_PORT = 8897
 const SECRET = 'meet at the market at seven, bring the list'
 
-let skip = null, chromium, codec, site, siteUrl
+let skip = null, chromium, codec, gate, site, siteUrl
 const comments = []
 const dirs = []
 
@@ -59,6 +60,19 @@ before(async () => {
     await new Promise((r) => setTimeout(r, 250))
     if (i === 59) skip = 'local codec did not start'
   }
+  const gateDb = mkdtempSync(join(tmpdir(), 'lortnoc-gate-'))
+  dirs.push(gateDb)
+  gate = spawn(process.execPath, [join(ROOT, 'gate/server.mjs')], {
+    env: { ...process.env, PORT: String(GATE_PORT), GATE_DB: join(gateDb, 'gate.sqlite') },
+    stdio: 'ignore',
+  })
+  for (let i = 0; i < 40; i++) {
+    try {
+      if ((await fetch(`http://127.0.0.1:${GATE_PORT}/health`)).ok) break
+    } catch {}
+    await new Promise((r) => setTimeout(r, 150))
+    if (i === 39) skip = 'local gate did not start'
+  }
   site = createServer((req, res) => {
     if (req.method === 'POST') {
       let b = ''
@@ -77,6 +91,7 @@ before(async () => {
 
 after(() => {
   codec?.kill()
+  gate?.kill()
   site?.close()
   for (const d of dirs) rmSync(d, { recursive: true, force: true })
 })
@@ -91,7 +106,8 @@ async function profile() {
   })
   let [swk] = ctx.serviceWorkers()
   if (!swk) swk = await ctx.waitForEvent('serviceworker')
-  await swk.evaluate((url) => chrome.storage.local.set({ codecUrl: url }), `http://127.0.0.1:${CODEC_PORT}`)
+  await swk.evaluate(([codecUrl, gateUrl]) => chrome.storage.local.set({ codecUrl, gateUrl }),
+    [`http://127.0.0.1:${CODEC_PORT}`, `http://127.0.0.1:${GATE_PORT}`])
   return { ctx, sw: swk }
 }
 
@@ -187,4 +203,52 @@ describe('extension-everywhere, three profiles on a comment section', () => {
     assert.equal(await card.isHidden('#out'), true)
     await ctx.close()
   })
+})
+
+/** datetime-local value for `h` hours from now, as the sheet's input expects (browser local time). */
+const localIn = (page, h) => page.evaluate((h) => {
+  const d = new Date(Date.now() + h * 3600_000)
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
+}, h)
+
+describe('timed messages through a real gate', () => {
+  for (const [name, hours, opens] of [['still locked (opens in an hour)', 1, false], ['already open (opened an hour ago)', -1, true]]) {
+    test(name, { timeout: 120_000 }, async (t) => {
+      if (skip) return t.skip(skip)
+      comments.length = 0
+      const writer = await profile()
+      const page = await writer.ctx.newPage()
+      await page.goto(siteUrl)
+      await page.click('#c')
+      await trigger(writer.sw, { action: 'compose' })
+      const sheet = await frameOf(page, 'sheet')
+      await sheet.waitForSelector('#msg')
+      await sheet.selectOption('#groups select', 'after')
+      await sheet.click('#groups .check .x') // drop "anyone with the extension"
+      await sheet.fill('#groups input[type=datetime-local]', await localIn(page, hours))
+      assert.match(await sheet.textContent('#honesty'), /gate could read this/, 'a time lock alone must be labelled gate-readable')
+      await sheet.fill('#msg', 'the tasting starts at noon')
+      await sheet.click('#go')
+      await sheet.waitForSelector('.status.ok', { timeout: 60_000 })
+      await page.click('button:has-text("Post comment")')
+      await page.waitForSelector('.comment')
+      await writer.ctx.close()
+
+      const reader = await profile()
+      const rp = await reader.ctx.newPage()
+      await rp.goto(siteUrl)
+      await trigger(reader.sw, { action: 'scan' })
+      await rp.click('button:has-text("Reveal")')
+      const card = await frameOf(rp, 'reveal')
+      if (opens) {
+        await card.waitForSelector('#out:not([hidden])', { timeout: 60_000 })
+        assert.equal(await card.textContent('#plain'), 'the tasting starts at noon')
+      } else {
+        await card.waitForSelector('.status.err', { timeout: 60_000 })
+        assert.match(await card.textContent('#status'), /Locked until/)
+        assert.equal(await card.isHidden('#out'), true)
+      }
+      await reader.ctx.close()
+    })
+  }
 })

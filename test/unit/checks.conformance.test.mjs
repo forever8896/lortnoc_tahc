@@ -6,10 +6,19 @@ import assert from 'node:assert/strict'
 import { CHECKS, byTag } from '../../shared/checks/index.mjs'
 import { compile, open, parse } from '../../shared/policy.mjs'
 import { genKeyPair } from '../../shared/keys.mjs'
+import { createGate } from '../../gate/core.mjs'
+import { gateDepositor, gateReleaser } from '../../shared/gateclient.mjs'
 
 const FAST = [{ t: 1, m: 64, p: 1 }, { t: 1, m: 128, p: 1 }]
 const MSG = new TextEncoder().encode('conformance')
 const me = genKeyPair(), other = genKeyPair()
+
+// One real gate for every attested check, called in-process.
+const gate = createGate()
+const post = async (path, body) => (path === '/deposit' ? gate.deposit(body) : gate.release(body))
+const deposit = gateDepositor({ gatePub: gate.pub, post })
+const release = gateReleaser({ post })
+const HOUR = 3600_000
 
 /** Per check: a spec, inputs that satisfy it, inputs that must not, and secrets that must never
  *  reach the wire. `failing: null` = the check is satisfied by everyone (declared by its flags). */
@@ -20,6 +29,12 @@ const FIXTURES = {
     passing: { passphrases: ['Tangerine  Rocket'] },
     failing: { passphrases: ['tangerine rockets'] },
     secrets: ['tangerine rocket'],
+  },
+  after: {
+    spec: { after: Date.now() - HOUR },
+    passing: { release },
+    failing: {}, // no gate → no share
+    secrets: [],
   },
   recipients: {
     spec: { recipients: [me.pub] },
@@ -41,6 +56,10 @@ describe('every registered check', () => {
     test(`${id}: declares the whole interface`, () => {
       for (const f of ['describe', 'encodeParams', 'decodeParams', 'seal', 'readMaterial', 'open'])
         assert.equal(typeof m[f], 'function', `${id}.${f}`)
+      if (m.kind === 'attested') {
+        assert.equal(typeof m.gate?.release, 'function', `${id}: attested checks decide at the gate`)
+        assert.ok(m.flags.gateHoldsShare, `${id}: must declare that the gate holds its share`)
+      }
       assert.ok(Number.isInteger(m.tag) && m.tag >= 0 && m.tag < 32, 'tag fits 5 bits')
       assert.equal(byTag(m.tag), m)
       assert.ok(['inline', 'attested'].includes(m.kind))
@@ -55,13 +74,13 @@ describe('every registered check', () => {
     })
 
     test(`${id}: satisfied opens, unsatisfied does not`, async () => {
-      const payload = await compile(node, MSG, { kdfProfiles: FAST })
+      const payload = await compile(node, MSG, { kdfProfiles: FAST, deposit })
       assert.deepEqual(await open(payload, { ...fx.passing, kdfProfiles: FAST }), MSG)
       if (fx.failing) assert.equal(await open(payload, { ...fx.failing, kdfProfiles: FAST }), null)
     })
 
     test(`${id}: secrets never reach the wire; describe() never leaks them`, async () => {
-      const payload = await compile(node, MSG, { kdfProfiles: FAST })
+      const payload = await compile(node, MSG, { kdfProfiles: FAST, deposit })
       const hex = Buffer.from(payload).toString('hex')
       const label = m.describe(parse(payload).shape)
       for (const s of fx.secrets) {
@@ -72,8 +91,8 @@ describe('every registered check', () => {
     })
 
     test(`${id}: two posts of the same message share no material (fresh nonce)`, async () => {
-      const a = parse(await compile(node, MSG, { kdfProfiles: FAST }))
-      const b = parse(await compile(node, MSG, { kdfProfiles: FAST }))
+      const a = parse(await compile(node, MSG, { kdfProfiles: FAST, deposit }))
+      const b = parse(await compile(node, MSG, { kdfProfiles: FAST, deposit }))
       assert.notDeepEqual(a.header, b.header)
     })
   }

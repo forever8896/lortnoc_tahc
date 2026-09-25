@@ -5,21 +5,32 @@ import { sealMessage, presentCover } from '../../../shared/webframe.mjs'
 import { honesty } from '../../../shared/policy.mjs'
 import { generatePassphrase } from '../../../shared/checks/passphrase.mjs'
 import { toB64, fromHex } from '../../../shared/keys.mjs'
-import { sw, LOCAL } from '../shared/messages'
-import type { EncodeData, ContentToFrame, FrameToContent } from '../shared/messages'
+import { gateDepositor } from '../../../shared/gateclient.mjs'
+import { sw, LOCAL, gatePost } from '../shared/messages'
+import type { EncodeData, ContentToFrame, FrameToContent, GateHealth } from '../shared/messages'
 
 type CheckDraft =
   | { check: 'public' }
   | { check: 'passphrase'; passphrase: string; hint: string }
   | { check: 'recipients'; keys: string }
+  | { check: 'after'; when: string }
 
 const LABELS: Record<CheckDraft['check'], string> = {
   public: 'Anyone with the extension',
   passphrase: 'Anyone with the passphrase',
   recipients: 'Named people',
+  after: 'Opens after a time',
+}
+/** datetime-local value for `h` hours from now, in the user's own time zone */
+const localIn = (h: number) => {
+  const d = new Date(Date.now() + h * 3600_000)
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
 }
 const fresh = (check: CheckDraft['check']): CheckDraft =>
-  check === 'public' ? { check } : check === 'passphrase' ? { check, passphrase: generatePassphrase(), hint: '' } : { check, keys: '' }
+  check === 'public' ? { check }
+  : check === 'passphrase' ? { check, passphrase: generatePassphrase(), hint: '' }
+  : check === 'after' ? { check, when: localIn(1) }
+  : { check, keys: '' }
 
 let groups: CheckDraft[][] = [[fresh('public')]]
 
@@ -42,6 +53,11 @@ const fit = () => requestAnimationFrame(() => toParent({ lortnoc: 'resize', heig
 function leaf(d: CheckDraft) {
   if (d.check === 'public') return { check: 'public' }
   if (d.check === 'passphrase') return { check: 'passphrase', passphrase: d.passphrase, ...(d.hint.trim() ? { hint: d.hint.trim() } : {}) }
+  if (d.check === 'after') {
+    const t = new Date(d.when).getTime()
+    if (!Number.isFinite(t)) throw new Error('Pick when it should open.')
+    return { check: 'after', after: t }
+  }
   const keys = d.keys.split(/[\s,]+/).filter(Boolean)
   if (!keys.length) throw new Error('Add at least one messaging key for "Named people".')
   return { check: 'recipients', recipients: keys.map((k) => fromHex(k)) }
@@ -107,6 +123,10 @@ function checkEl(d: CheckDraft, remove: () => void): HTMLElement {
     row.append(pw, regen)
     fields.append(row, input(d.hint, (v) => (d.hint = v), 'Hint shown to readers (optional, public)'),
       note('Share the passphrase privately. The generated one is five random words; a guessable one (a name, a place) can be cracked offline by anyone who sees the post.'))
+  } else if (d.check === 'after') {
+    const i = Object.assign(document.createElement('input'), { type: 'datetime-local', value: d.when })
+    i.oninput = () => ((d.when = i.value), renderHonesty())
+    fields.append(i, note('Nobody can open it before then — held by the lortnoc gate. Combine with a passphrase so the gate alone can never read it.'))
   } else {
     const ta = document.createElement('textarea')
     ta.placeholder = 'Messaging keys (hex), one per line — ENS names come with the ENS update'
@@ -138,6 +158,7 @@ function renderHonesty() {
   if (h.obfuscationOnly) chip('hidden, not private — anyone with the extension', 'warn')
   else chip('🔒 only who you chose', 'ok')
   if (h.offlineGuessable) chip('passphrase can be guessed offline — use a strong one', 'warn')
+  if (!h.obfuscationOnly && h.gateCanRead) chip('the lortnoc gate could read this', 'warn')
   if (!h.obfuscationOnly && !h.gateCanRead) chip('no server can read this', 'ok')
 }
 
@@ -152,7 +173,14 @@ async function go() {
   btn.disabled = true
   try {
     setStatus('Locking it…')
-    const frame = await sealMessage(text, buildPolicy())
+    const policy = buildPolicy()
+    let deposit
+    if (JSON.stringify(policy).includes('"check":"after"')) {
+      const g = await sw<GateHealth>({ type: 'GATE_HEALTH' })
+      if (!g.ok) throw new Error(`The gate is unreachable (${g.error}) — needed for timed messages.`)
+      deposit = gateDepositor({ gatePub: g.data.pub, post: gatePost })
+    }
+    const frame = await sealMessage(text, policy, { deposit })
     setStatus('Turning it into ordinary text…')
     const r = await sw<EncodeData>({ type: 'ENCODE', ciphertextB64: toB64(frame) })
     if (!r.ok) throw new Error(r.error)
