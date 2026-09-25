@@ -21,15 +21,15 @@ export function esbuildAvailable() {
 }
 
 /**
- * Build test/browser/entry.ts into a single IIFE and return its path.
+ * Build an entry into a single IIFE and return its path.
  * Bundling (rather than serving raw modules) keeps the fixture page free of import maps and
  * resolves @noble out of shared/node_modules exactly as the real extension build does.
  */
-export async function buildBundle() {
+export async function buildBundle(entry = 'test/browser/entry.ts', name = 'lortnoc.js') {
   const dir = await mkdtemp(join(tmpdir(), 'lortnoc-browser-'))
-  const out = join(dir, 'lortnoc.js')
+  const out = join(dir, name)
   await execFileAsync(ESBUILD, [
-    resolve(ROOT, 'test/browser/entry.ts'),
+    resolve(ROOT, entry),
     '--bundle',
     '--format=iife',
     '--target=chrome120',
@@ -37,4 +37,9 @@ export async function buildBundle() {
     `--outfile=${out}`,
   ])
   return out
+}
+
+/** The X build's entry. Separate extension, separate bundle — same harness. */
+export function buildXBundle() {
+  return buildBundle('test/browser/x-entry.ts', 'lortnoc-x.js')
 }

@@ -5,9 +5,16 @@
 // from the PRD table. X ships new markup without notice; `data-testid` is the most durable hook
 // available, and it is still only "most durable", not durable. Fail loudly when one resolves null.
 
-/** The editable composer. Verified: a contenteditable div carrying Draft.js's
- *  `public-DraftEditor-content` class with a `data-contents="true"` child. */
-export const COMPOSE = '[data-testid="tweetTextarea_0"]'
+/** Any editable composer — the first post of a thread AND every later part.
+ *
+ * ⚠️ RE-MEASURED on live x.com 2026-09-25, and it has CHANGED since 2026-08-18. Thread parts now
+ * carry their own index: `tweetTextarea_0`, `tweetTextarea_1`, `tweetTextarea_2`… (in August every
+ * part was a repeated `tweetTextarea_0`). Matching the prefix covers both schemes. The
+ * `[contenteditable="true"]` half matters: X also renders `tweetTextarea_0_label` and
+ * `tweetTextarea_0RichTextInputContainer`, which share the prefix but are not editors.
+ *
+ * Matching only `_0` is what broke every thread: part 2 was never found. */
+export const COMPOSE = '[data-testid^="tweetTextarea_"][contenteditable="true"]'
 
 /**
  * The post button — BOTH variants, always.
@@ -45,18 +52,39 @@ export const THREAD_ADD = '[data-testid="addButton"]'
  * So the index is the position in document order among visible editable composers, and the
  * selector is constant.
  */
-export const COMPOSER_ALL = '[data-testid="tweetTextarea_0"][contenteditable="true"]'
+export const COMPOSER_ALL = COMPOSE
 
-/** All visible composers, in document order. Index 0 is the first post of the thread. */
-export function composers(): HTMLElement[] {
-  return Array.from(document.querySelectorAll<HTMLElement>(COMPOSER_ALL)).filter(
+/**
+ * The container a thread lives in: the open compose DIALOG if there is one, else the document.
+ *
+ * ⚠️ MEASURED 2026-09-25 — the bug that made long posts "break up and freeze". Composing from the
+ * Post button opens a modal OVER the home timeline, and the timeline keeps its own visible,
+ * editable "What's happening?" composer underneath. Counting composers page-wide made THAT the
+ * "second composer", so part 2 of every thread was written into the home timeline box instead of
+ * the thread, the modal's "Post all" stayed disabled, the check failed, and the retries piled the
+ * text into the wrong box before aborting. Everything thread-related is scoped to this root.
+ */
+export function composeRoot(from?: Element | null): ParentNode {
+  const anchor = from ?? document.activeElement
+  const dialog = anchor?.closest?.('[role="dialog"]')
+  if (dialog?.querySelector(COMPOSE)) return dialog
+  // No composer focused: prefer an open compose dialog over the timeline behind it.
+  const open = Array.from(document.querySelectorAll('[role="dialog"]')).find(
+    (d) => (d as HTMLElement).offsetParent !== null && d.querySelector(COMPOSE),
+  )
+  return open ?? document
+}
+
+/** All visible composers in `root`, in document order. Index 0 is the first post of the thread. */
+export function composers(root: ParentNode = composeRoot()): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(COMPOSE)).filter(
     (el) => el.offsetParent !== null,
   )
 }
 
-/** The Nth visible composer, or null if it has not mounted yet. */
-export function composerAt(i: number): HTMLElement | null {
-  return composers()[i] ?? null
+/** The Nth visible composer in `root`, or null if it has not mounted yet. */
+export function composerAt(i: number, root: ParentNode = composeRoot()): HTMLElement | null {
+  return composers(root)[i] ?? null
 }
 
 /**
@@ -70,8 +98,8 @@ export function composerAt(i: number): HTMLElement | null {
  * Post's disabled state is model-driven, so it is the honest oracle — and it works for thread
  * parts too, because X disables Post while ANY part of the thread is empty (measured).
  */
-export function modelAccepted(): boolean {
-  return activePostButton()?.getAttribute('aria-disabled') !== 'true'
+export function modelAccepted(root: ParentNode = composeRoot()): boolean {
+  return activePostButton(root)?.getAttribute('aria-disabled') !== 'true'
 }
 
 /** Wait for `get` to return something, polling. Threading is inherently async: clicking
@@ -105,8 +133,8 @@ export function onX(): boolean {
  *
  * ⚠️ It is wrong for anything that WAITS for an element to appear — see `visibleOnly`.
  */
-export function visible<T extends HTMLElement>(selector: string): T | null {
-  const all = Array.from(document.querySelectorAll<T>(selector))
+export function visible<T extends HTMLElement>(selector: string, root: ParentNode = document): T | null {
+  const all = Array.from(root.querySelectorAll<T>(selector))
   return all.find((el) => el.offsetParent !== null) ?? all[0] ?? null
 }
 
@@ -122,18 +150,21 @@ export function visible<T extends HTMLElement>(selector: string): T | null {
  * composers a thread mounts"), because the failure is invisible from the outside: the post
  * succeeds, it is just missing a piece.
  */
-export function visibleOnly<T extends HTMLElement>(selector: string): T | null {
-  return Array.from(document.querySelectorAll<T>(selector)).find((el) => el.offsetParent !== null) ?? null
+export function visibleOnly<T extends HTMLElement>(selector: string, root: ParentNode = document): T | null {
+  return Array.from(root.querySelectorAll<T>(selector)).find((el) => el.offsetParent !== null) ?? null
 }
 
-/** The active composer, or null. */
+/** The composer the user is writing in: the focused one, else the first in the open dialog, else
+ *  the first visible one. Page-wide "first visible" would pick the timeline box behind a modal. */
 export function activeCompose(): HTMLElement | null {
-  return visible<HTMLElement>(COMPOSE)
+  const focused = (document.activeElement as HTMLElement | null)?.closest?.<HTMLElement>(COMPOSE)
+  if (focused) return focused
+  return visible<HTMLElement>(COMPOSE, composeRoot())
 }
 
-/** The active post button, or null. */
-export function activePostButton(): HTMLElement | null {
-  return visible<HTMLElement>(POST_BUTTON)
+/** The post button belonging to `root` — the modal's "Post all", never the timeline's "Post". */
+export function activePostButton(root: ParentNode = composeRoot()): HTMLElement | null {
+  return visible<HTMLElement>(POST_BUTTON, root)
 }
 
 /**

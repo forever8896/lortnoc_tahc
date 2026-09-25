@@ -1,0 +1,105 @@
+<!doctype html>
+<!--
+  An X (twitter.com) DOM fixture.
+
+  Only the structure `extension-x/src/content/selectors.ts` actually reaches for is reproduced,
+  plus the four details that the live §7 spike proved matter:
+
+    * The composer is a **Draft.js** editor (`public-DraftEditor-content` wrapping a
+      `[data-contents="true"]` node), NOT a plain contenteditable. The real one rebuilds its
+      content from a controlled model; the fixture cannot reproduce that, so the compose tests
+      here assert the SELECTION and TARGETING logic, never that Draft accepted an insertion.
+    * The post button exists in BOTH variants — `tweetButton` and `tweetButtonInline`. The spike
+      caught X flipping between them mid-session, so the code must query both and take the
+      visible one. Here the inline variant is hidden, exactly as the modal case behaves.
+    * The feed is **virtualised**, so a tweet's identity comes from the permalink status id, not
+      from its DOM node or its position. Two articles below deliberately share everything except
+      their permalink.
+    * Only tweets carrying the hashtag are candidates. Untagged ones must never cost a decode.
+
+  A fixture cannot prove the selectors match today's X — only a live page can, and X ships markup
+  without notice. What it proves is that the logic layered on those selectors is correct, which is
+  the part we own and the part that regresses.
+-->
+<meta charset="utf-8" />
+<title>X — DOM fixture</title>
+<style>
+  /* offsetParent is null for display:none — that is how the fixture models the composer and
+     button variants X mounts but hides. Keep it simple and explicit. */
+  .hidden-variant { display: none; }
+  [data-testid='primaryColumn'] { height: 400px; overflow-y: auto; }
+  article { padding: 6px; border-bottom: 1px solid #eee; }
+  .public-DraftEditor-content { border: 1px solid #ccc; min-height: 24px; padding: 4px; }
+</style>
+
+<div data-testid="primaryColumn">
+  <!-- Ours: carries the hashtag. -->
+  <article data-testid="tweet">
+    <a href="/someone/status/1000000000000000001"><time>1h</time></a>
+    <div data-testid="tweetText">the weather has been mild lately and nothing much is happening #lortnoctahc</div>
+  </article>
+
+  <!-- Not ours: no hashtag. Must never cost a decode. -->
+  <article data-testid="tweet">
+    <a href="/someone/status/1000000000000000002"><time>2h</time></a>
+    <div data-testid="tweetText">just an ordinary tweet about breakfast</div>
+  </article>
+
+  <!-- Someone else using the hashtag normally, mid-sentence. Not ours (we always append). -->
+  <article data-testid="tweet">
+    <a href="/someone/status/1000000000000000003"><time>3h</time></a>
+    <div data-testid="tweetText">what even is #lortnoctahc anyway</div>
+  </article>
+
+  <!-- Two thread parts. Same author, adjacent, distinguished ONLY by permalink — this is the
+       pair that would collide under any DOM-node or index-based cache. -->
+  <article data-testid="tweet">
+    <a href="/someone/status/1000000000000000004"><time>4h</time></a>
+    <div data-testid="tweetText">first part of a thread reading like ordinary chatter #lortnoctahc</div>
+  </article>
+  <article data-testid="tweet">
+    <a href="/someone/status/1000000000000000005"><time>4h</time></a>
+    <div data-testid="tweetText">first part of a thread reading like ordinary chatter #lortnoctahc</div>
+  </article>
+
+  <!-- Still posting: no permalink yet. A verdict must NOT be cached against an id that will
+       change, so this one is skipped rather than recorded as "not ours". -->
+  <article data-testid="tweet">
+    <div data-testid="tweetText">a post that has no permalink yet #lortnoctahc</div>
+  </article>
+</div>
+
+<!-- The composer. Draft.js structure, and the indexed ids threading walks. -->
+<div>
+  <div data-testid="tweetTextarea_0_label">
+    <div
+      data-testid="tweetTextarea_0"
+      class="notranslate public-DraftEditor-content"
+      contenteditable="true"
+    >
+      <div data-contents="true"><div><span data-text="true">meet at 8</span></div></div>
+    </div>
+  </div>
+
+  <!-- The second composer a thread mounts.
+       ⚠️ It carries data-testid="tweetTextarea_0" — the SAME id as the first. Measured on live
+       x.com 2026-08-18: adding a thread part does not create `tweetTextarea_1`. Indexing by id
+       finds nothing for part 2 and aborts the whole thread, so the code indexes by POSITION.
+       Hidden here until a test reveals it, standing in for the real mount delay (>1.5s live). -->
+  <div class="hidden-variant" id="second-composer">
+    <div
+      data-testid="tweetTextarea_0"
+      class="notranslate public-DraftEditor-content"
+      contenteditable="true"
+    >
+      <div data-contents="true"><div><span data-text="true"></span></div></div>
+    </div>
+  </div>
+
+  <div data-testid="addButton" role="button">Add another post</div>
+
+  <!-- BOTH post-button variants. The inline one is hidden, so `activePostButton` must pick the
+       visible `tweetButton` — picking the first match would take the wrong one. -->
+  <div class="hidden-variant"><button data-testid="tweetButtonInline">Post</button></div>
+  <button data-testid="tweetButton">Post</button>
+</div>

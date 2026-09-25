@@ -19,10 +19,11 @@
 import {
   activeCompose,
   activePostButton,
+  composeRoot,
   composers,
   composerAt,
   modelAccepted,
-  visible,
+  visibleOnly,
   waitFor,
   COMPOSE,
   POST_BUTTON,
@@ -115,10 +116,25 @@ export async function replaceCompose(el: HTMLElement, text: string): Promise<boo
     const got = readCompose(el)
     // modelAccepted() is the load-bearing half: the DOM can hold exactly the right text while
     // X's controlled model never saw it, and then clicking Post does nothing at all.
-    if ((stripTag(got) ?? got) === want && modelAccepted()) return true
+    if ((stripTag(got) ?? got) === want && modelAccepted(composeRoot(el))) return true
   }
   console.warn('[lortnoc] composer would not accept the text after 3 attempts')
   return false
+}
+
+/**
+ * Take focus OFF the editor, then give X a moment, before pressing one of its controls.
+ *
+ * ⚠️ MEASURED on live x.com 2026-09-25. A real mouse press moves focus off the Draft.js editor,
+ * and X commits the editor's text into its thread state on that blur. A programmatic .click()
+ * (and even a full synthetic pointer sequence) does NOT move focus — so pressing "Add post"
+ * that way threw away the part being edited: part 1 vanished when adding part 2, and part 2 was
+ * emptied when adding part 3. Blurring first, then clicking, kept every part intact, three deep.
+ */
+async function commitThenPress(button: HTMLElement): Promise<void> {
+  ;(document.activeElement as HTMLElement | null)?.blur?.()
+  await new Promise((r) => setTimeout(r, 250))
+  button.click()
 }
 
 /** Ctrl/Cmd+Enter is X's post shortcut. Plain Enter is a newline and must be left alone. */
@@ -148,26 +164,27 @@ export type SwapFn = (realText: string, progress: Progress) => Promise<string[] 
  *
  * @returns true when the chain was laid out and Post was clicked
  */
-async function layoutThread(parts: string[]): Promise<boolean> {
-  const first = composerAt(0) ?? activeCompose()
-  if (!first) return false
+async function layoutThread(parts: string[], first: HTMLElement): Promise<boolean> {
+  // Everything below is scoped to the container this thread lives in — the compose dialog when
+  // composing from the Post button — so the home timeline's own composer behind the modal can
+  // never be mistaken for a thread part (see composeRoot).
+  const root = composeRoot(first)
   if (!(await replaceCompose(first, parts[0]))) return false
 
   for (let i = 1; i < parts.length; i++) {
-    // `addButton` only exists once the previous part has content — measured. Waiting for it also
-    // means we never click it while the model is still catching up with the last insert.
-    const add = await waitFor(() => visible<HTMLElement>(THREAD_ADD))
+    // `addButton` only exists once the previous part has content — measured. Strictly visible
+    // and inside this dialog: a hidden or foreign addButton would be clicked to no effect.
+    const add = await waitFor(() => visibleOnly<HTMLElement>(THREAD_ADD, root))
     if (!add) {
       console.warn('[lortnoc] thread control not found — cannot post part', i + 1)
       return false
     }
-    add.click()
+    await commitThenPress(add)
 
-    // Wait for the Nth composer BY POSITION — they all share tweetTextarea_0 (see composerAt).
-    // Measured mount latency exceeded 1.5s, so the timeout is generous; the poll is cheap.
-    const box = await waitFor(() => (composers().length > i ? composerAt(i) : null), 8000)
+    // Wait for the Nth composer in THIS dialog. Measured mount latency exceeded 1.5s.
+    const box = await waitFor(() => (composers(root).length > i ? composerAt(i, root) : null), 8000)
     if (!box) {
-      console.warn(`[lortnoc] composer ${i} never mounted (${composers().length} present)`)
+      console.warn(`[lortnoc] composer ${i} never mounted (${composers(root).length} present)`)
       return false
     }
     if (!(await replaceCompose(box, parts[i]))) return false
@@ -195,7 +212,7 @@ export function installPostInterceptor(isReady: () => boolean, onSwap: SwapFn): 
     try {
       const parts = await onSwap(real, progress) // squeeze + encrypt + /encode (GPT-2 → seconds)
       if (parts == null || parts.length === 0) return // fail-closed: leave the draft, do not post
-      if (!(await layoutThread(parts))) {
+      if (!(await layoutThread(parts, input))) {
         console.warn('[lortnoc] could not lay the post out — not posting')
         progress.fail('Could not set the composer')
         return
@@ -212,14 +229,16 @@ export function installPostInterceptor(isReady: () => boolean, onSwap: SwapFn): 
       // leave?", and those are different questions: an APPEND satisfies the first and fails the
       // second. So this is checked separately, against the actual composer contents, at the last
       // possible moment, on every part of a thread.
-      const leaked = composers().find((c) => readCompose(c).includes(real))
+      const root = composeRoot(input)
+      // Checked page-wide as well as in the dialog: a leak into ANY composer is still a leak.
+      const leaked = [...composers(root), ...composers(document)].find((c) => readCompose(c).includes(real))
       if (leaked) {
         console.error('[lortnoc] ABORT: the composer still contains your plaintext — not posting')
         progress.fail('Aborted — your real message was still in the box')
         return
       }
 
-      const btn = activePostButton()
+      const btn = activePostButton(root)
       if (!btn) {
         console.warn('[lortnoc] post button not found for', POST_BUTTON)
         progress.fail('Post button not found')
@@ -227,7 +246,8 @@ export function installPostInterceptor(isReady: () => boolean, onSwap: SwapFn): 
       }
       progress.set(3, parts.length > 1 ? `${parts.length}-post thread` : 'via X')
       allowNextClick = true
-      btn.click() // real post; our click passes the interceptor via allowNextClick
+      // Blur first so X commits the last part's text before "Post all" reads it (commitThenPress).
+      await commitThenPress(btn) // real post; our click passes the interceptor via allowNextClick
       progress.done('Posted — reads like normal chatter')
       window.setTimeout(() => {
         allowNextClick = false
