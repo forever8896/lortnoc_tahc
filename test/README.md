@@ -34,7 +34,7 @@ imports, so the product source never has to be edited to suit the tests.)
 
 | Tier | Tests | Needs | What it proves |
 |---|---|---|---|
-| `unit` | 88 | nothing | Crypto, framing, session state, metering, ticket binding |
+| `unit` | 174 | nothing | Crypto, framing, session state, metering, ticket binding, unread/notify rules |
 | `invariants` | 16 | `git` | The CLAUDE.md §4 "hard constraints in review" |
 | `codec` | 77 | `python3` | Coder reversibility, the x402 paywall, the HTTP contract |
 | `contracts` | 55 | `forge` | `LortnocMembership` + `LortnocRegistrar` |
@@ -70,6 +70,7 @@ test/
     session.test.mjs         handshake state machine, persistence, the replay guard
     metering.test.mjs        freemium counter, membership bypass, server reconciliation
     ticket.test.mjs          the Semaphore public signal that binds a claim
+    unread.test.mjs          what turns an arrival into a notification (app/src/lib/unread.ts)
   invariants/
     spec.test.mjs            §4 / §8 / §9 enforced against the tree
   browser/

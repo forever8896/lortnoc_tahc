@@ -8,7 +8,7 @@
 //
 // Registered via --import in the `test` scripts.
 import { registerHooks } from 'node:module'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const CANDIDATES = ['.ts', '.tsx', '.mts', '/index.ts', '/index.tsx']
@@ -33,6 +33,32 @@ registerHooks({
       }
       throw err
     }
+  },
+  /**
+   * Two Vite-isms the product source is entitled to use and Node is not obliged to understand.
+   * Both are rewritten in the LOADER, never in the source — "edit the product to suit the tests"
+   * is the failure this whole suite exists to avoid.
+   *
+   *  1. `import.meta.env.VITE_X` — Vite substitutes these at build time. Node leaves
+   *     `import.meta.env` undefined, so the very first property read throws before any test runs.
+   *     Rewriting it to an empty object makes every `(import.meta.env.X as string) || 'default'`
+   *     in live/config.ts take its default, which is exactly the public-endpoint configuration a
+   *     test should run against.
+   *  2. `import ... from './x.json'` — Node requires an explicit import attribute; Vite does not.
+   *
+   * Without these, nothing under app/src/lib/live can be imported at all, which is why the
+   * Sui/Walrus/Seal layer had no automated tier (CLAUDE.md §2.1) — not because it was untestable,
+   * but because the test runner could not load it.
+   */
+  load(url, context, nextLoad) {
+    const result = nextLoad(url, context)
+    if (!/\/(app|extension|extension-x)\/.*\.tsx?$/.test(url)) return result
+    let src = result.source == null ? readFileSync(fileURLToPath(url), 'utf8') : String(result.source)
+    if (!src.includes('import.meta.env') && !/from\s+['"][^'"]+\.json['"]/.test(src)) return result
+    src = src
+      .replace(/import\.meta\.env/g, '({})')
+      .replace(/(from\s+['"][^'"]+\.json['"])(\s*[;\n])/g, '$1 with { type: "json" }$2')
+    return { ...result, source: src, shortCircuit: true }
   },
 })
 

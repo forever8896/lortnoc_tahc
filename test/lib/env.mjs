@@ -83,9 +83,16 @@ export function installChromeStub() {
 // ---------------------------------------------------------------------------
 export const CODEC = process.env.CODEC || 'http://127.0.0.1:8080'
 
+/** How long to wait for /health. 1.5s suits a local process; a REMOTE codec needs far more —
+ *  the hosted one is a single fly machine that may be cold-starting GPT-2, and this file already
+ *  invites `CODEC=http://host:port`. With the local default, pointing at the hosted codec made
+ *  every integration test silently SKIP while reporting the tier green, which looks identical to
+ *  having run them. Override with CODEC_TIMEOUT. */
+const HEALTH_TIMEOUT = Number(process.env.CODEC_TIMEOUT || 1500)
+
 /** Is a codec reachable? Integration tests skip (not fail) when it isn't, so `npm test`
  *  stays green on a laptop with no Python process running. CI runs it with one up. */
-export async function codecUp(timeoutMs = 1500) {
+export async function codecUp(timeoutMs = HEALTH_TIMEOUT) {
   try {
     const ac = new AbortController()
     const t = setTimeout(() => ac.abort(), timeoutMs)
@@ -97,11 +104,23 @@ export async function codecUp(timeoutMs = 1500) {
   }
 }
 
+/** A metering bucket unique to this test process (§9).
+ *
+ *  Without it every run lands in auth.py's `_ANON` bucket — shared with every other caller that
+ *  omits a handle, including real users. A single `npm test` against a metered codec then burns
+ *  that shared free tier for everyone, and the tests themselves start 402ing partway through with
+ *  "cover text is not plain: undefined", which reads exactly like a codec bug and is not one.
+ *
+ *  NOTE this does not make the tier free against a metered codec: the free limit is 10 sends and
+ *  some tests encode far more than that. Point it at a LOCAL codec with `CODEC_AUTH=0` for a full
+ *  green run; against the hosted one, expect the longer suites to hit the limit. */
+const RUN_BUCKET = `test:${Math.random().toString(36).slice(2, 10)}`
+
 export async function codecEncode(ciphertextB64, opts = {}) {
   const r = await fetch(`${CODEC}/encode`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ciphertext: ciphertextB64, ...opts }),
+    body: JSON.stringify({ ciphertext: ciphertextB64, handle: RUN_BUCKET, ...opts }),
   })
   return { status: r.status, body: await r.json().catch(() => null) }
 }

@@ -49,9 +49,12 @@ const TIERS = {
     args: ['--import', HOOK, '--test', '--test-concurrency=1', 'test/browser/*.test.mjs'],
   },
   integration: { label: 'integration — needs a live codec', ...node(['test/integration/*.test.mjs']) },
+  // Real chains, real wallets. Serialised: the tests share one conversation head and build a
+  // thread on it, so they are ordered by construction rather than independent.
+  dm: { label: 'dm — Lortnoc DM on real chains', ...node(['--test-concurrency=1', 'test/dm/*.test.mjs']) },
 }
 
-const ORDER = ['unit', 'invariants', 'codec', 'contracts', 'browser', 'integration']
+const ORDER = ['unit', 'invariants', 'codec', 'contracts', 'browser', 'integration', 'dm']
 
 function run({ cmd, args, cwd }) {
   return new Promise((done) => {
