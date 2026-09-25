@@ -260,7 +260,17 @@ export async function fees(publicClient, bump = 1) {
  */
 export async function sendTx(publicClient, walletClient, { to, data, value }, label, { timeoutMs = 150_000, tries = 4 } = {}) {
   const account = walletClient.account
-  const nonce = await publicClient.getTransactionCount({ address: account.address, blockTag: 'pending' })
+  // Load-balanced public RPCs can answer from a node a block behind; take the max of a few reads
+  // so we never reuse a nonce that has just been mined ("nonce too low").
+  let nonce = 0
+  for (let i = 0; i < 3; i++) {
+    const [p, l] = await Promise.all([
+      publicClient.getTransactionCount({ address: account.address, blockTag: 'pending' }),
+      publicClient.getTransactionCount({ address: account.address, blockTag: 'latest' }),
+    ])
+    nonce = Math.max(nonce, p, l)
+    if (i < 2) await sleep(1500)
+  }
   const est = await publicClient.estimateGas({ account, to, data, value })
   const gas = (est * 125n) / 100n + 20_000n
   const hashes = []
