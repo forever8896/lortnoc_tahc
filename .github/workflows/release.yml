@@ -96,7 +96,7 @@ jobs:
           npm ci --prefix extension && npm run --prefix extension build
           \`\`\`
           Read the source, rebuild from the tag, and compare. This artifact also carries a GitHub
-          build-provenance attestation (\`gh attestation verify ${{ steps.pkg.outputs.zip }} -R \${{ github.repository }}\`).
+          build-provenance attestation (\`gh attestation verify ${{ steps.pkg.outputs.zip }} -R ${{ github.repository }}\`).
           EOF
 
       - name: Publish release

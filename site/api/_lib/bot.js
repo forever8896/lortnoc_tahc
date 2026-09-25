@@ -36,11 +36,10 @@ export function screen(step, cfg) {
         text:
           `<b>Step 1 of 3 — Download</b>\n\n` +
           `💻 <b>Do this on your laptop</b>, in Chrome — not on your phone.\n\n` +
-          `Get the X extension from GitHub Releases. It is built by public CI from the tagged commit, ` +
-          `so the file comes from GitHub, not from us.\n\n` +
-          `Download the <code>.zip</code> file.`,
+          `Tap <b>Download</b> below — it downloads <code>${esc(cfg.downloadName)}</code> straight from GitHub.\n\n` +
+          `<i>On the release page yourself? Pick that <code>.zip</code> — not the <code>.sha256</code> or the "Source code" files.</i>`,
         buttons: [
-          [{ text: '⬇️ Open the release', url: cfg.releaseUrl }],
+          [{ text: '⬇️ Download', url: cfg.downloadUrl }],
           next("I've downloaded it →", 'load'),
           [back('welcome')],
         ],

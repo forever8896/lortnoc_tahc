@@ -18,6 +18,11 @@ export const config = { runtime: 'nodejs' }
 const REPO = 'https://github.com/forever8896/lortnoc_tahc'
 const cfg = {
   releaseUrl: process.env.X_EXT_RELEASE_URL || `${REPO}/releases/tag/x-v0.1.0`,
+  // A direct asset link, so one tap downloads the zip instead of landing on a page with four files
+  // (zip, .sha256, two "Source code" archives) and hoping the user picks right. Bump both together
+  // on a new x-v* release.
+  downloadName: 'lortnoc-tahc-x-v0.1.0.zip',
+  downloadUrl: process.env.X_EXT_DOWNLOAD_URL || `${REPO}/releases/download/x-v0.1.0/lortnoc-tahc-x-v0.1.0.zip`,
   repoUrl: REPO,
   siteUrl: 'https://www.lortnoctahc.com',
 }

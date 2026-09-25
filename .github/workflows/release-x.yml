@@ -93,7 +93,7 @@ jobs:
           npm ci --prefix shared
           npm ci --prefix extension-x && npm run --prefix extension-x build
           \`\`\`
-          Build-provenance attestation: \`gh attestation verify ${{ steps.pkg.outputs.zip }} -R \${{ github.repository }}\`
+          Build-provenance attestation: \`gh attestation verify ${{ steps.pkg.outputs.zip }} -R ${{ github.repository }}\`
           EOF
 
       - name: Publish release

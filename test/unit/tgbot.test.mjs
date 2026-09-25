@@ -4,7 +4,7 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { handleUpdate, screen, STEPS, FOLLOW } from '../../site/api/_lib/bot.js'
 
-const cfg = { releaseUrl: 'https://example.test/release', repoUrl: 'https://example.test/repo', siteUrl: 'https://example.test' }
+const cfg = { releaseUrl: 'https://example.test/release', repoUrl: 'https://example.test/repo', siteUrl: 'https://example.test', downloadName: 'lortnoc-tahc-x-v9.zip', downloadUrl: 'https://example.test/lortnoc-tahc-x-v9.zip' }
 
 function harness() {
   const calls = []
@@ -89,7 +89,8 @@ describe('onboarding bot', () => {
   })
 
   test('every screen links the right places and uses the X extension, not the Telegram one', () => {
-    assert.ok(screen('download', cfg).buttons.flat().some((b) => b.url === cfg.releaseUrl))
+    assert.ok(screen('download', cfg).buttons.flat().some((b) => b.url === cfg.downloadUrl), 'download button must be the direct zip link')
+    assert.match(screen('download', cfg).text, /lortnoc-tahc-x-v9\.zip/)
     for (const s of STEPS) assert.doesNotMatch(screen(s, cfg).text, /PrivacyMaxxing|Telegram Web/)
   })
 
