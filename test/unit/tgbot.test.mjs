@@ -131,6 +131,12 @@ describe('onboarding bot', () => {
     assert.equal(h.rows.get(42).step, 'raffle', 'still waiting for a handle')
   })
 
+  test('the laptop requirement is stated up front, before any setup step', () => {
+    assert.match(screen('welcome', cfg).text, /laptop or desktop/)
+    assert.match(screen('welcome', cfg).text, /won't run on your phone/)
+    assert.match(screen('download', cfg).text, /Do this on your laptop/)
+  })
+
   test('the raffle makes posting a requirement and names the jacket prize', () => {
     const text = screen('raffle', cfg).text
     assert.match(text, /Post something on X/)

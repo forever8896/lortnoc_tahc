@@ -35,6 +35,7 @@ export function screen(step, cfg) {
       return {
         text:
           `<b>Step 1 of 3 — Download</b>\n\n` +
+          `💻 <b>Do this on your laptop</b>, in Chrome — not on your phone.\n\n` +
           `Get the X extension from GitHub Releases. It is built by public CI from the tagged commit, ` +
           `so the file comes from GitHub, not from us.\n\n` +
           `Download the <code>.zip</code> file.`,
@@ -100,11 +101,13 @@ export function screen(step, cfg) {
       return {
         text:
           `<b>Lortnoc Tahc for X</b> — hide what you post inside what you post.\n\n` +
+          `💻 <b>You'll need a laptop or desktop with Chrome</b> (or Brave, Edge, Arc). It's a browser extension, so it won't run on your phone. ` +
+          `If you're on your phone now, open this chat in Telegram on your computer to carry on.\n\n` +
           `You write a real post. Before it leaves the page, the extension turns it into ordinary-looking text. ` +
           `People with the extension see the real one; everyone else sees chatter.\n\n` +
           `Setup takes about five minutes: download, load, post — then enter the <b>ETHGlobal Tokyo raffle</b>. 🧥 The top-engagement post wins the legendary jean jacket, and eight more pieces of merch are raffled among everyone who enters.\n\n` +
           `<i>This bot keeps your Telegram username so we can reach alpha testers. /privacy for details, /delete to erase it.</i>`,
-        buttons: [next("Let's set it up →", 'download')],
+        buttons: [next("I'm on my laptop — let's go →", 'download')],
       }
   }
 }
