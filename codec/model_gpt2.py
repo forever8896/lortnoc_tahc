@@ -143,6 +143,28 @@ class GPT2Model:
         pairs.sort(key=lambda p: (-p[0], p[1]))  # deterministic tie-break by token id
         return [tid for _, tid in pairs]
 
+    def dist(self, ctx: tuple, top_n: int) -> list[tuple[int, int]]:
+        """Top-`top_n` safe tokens as (token_id, positive_int_weight) for the arith coder.
+
+        Softmax the logits OVER THE SAFE TOKEN SET restricted to the top_n (renormalize on
+        the candidate set only), quantized to integers round(prob*2^16) floored at 1.
+        Deterministic order (-logit, then token id) -- same tie-break as topk(). Computed in
+        float64 + Python math to keep the quantization stable; encode and decode call the
+        SAME warm process, so both ends read identical logits -> identical integer weights.
+        """
+        import math
+
+        self._ensure(ctx)
+        vals = self._logits[self.safe_ids].double()
+        n = min(top_n, int(vals.shape[0]))
+        top = self.torch.topk(vals, n)
+        pairs = [(float(v), int(self.safe_ids[i])) for v, i in zip(top.values, top.indices)]
+        pairs.sort(key=lambda p: (-p[0], p[1]))  # deterministic tie-break by token id
+        mx = pairs[0][0]
+        exps = [math.exp(logit - mx) for logit, _ in pairs]  # softmax over the candidate set
+        s = sum(exps)
+        return [(tid, max(1, int(e / s * 65536 + 0.5))) for (_, tid), e in zip(pairs, exps)]
+
     def to_words(self, tokens: list[int]) -> str:
         return " ".join(self.tok2word[t] for t in tokens)
 

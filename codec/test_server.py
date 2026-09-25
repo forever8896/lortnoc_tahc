@@ -175,14 +175,14 @@ class RoundTripTests(ServerTestCase):
         # swallowing a real message forever).
         original = codec.decode
         try:
-            codec.decode = lambda cover: (_ for _ in ()).throw(RuntimeError("model exploded"))
+            codec.decode = lambda cover, coder_name=None: (_ for _ in ()).throw(RuntimeError("model exploded"))
             status, _, _ = self.decode("some plausible cover text here")
             self.assertEqual(status, 500, "an internal error was cached as 'not ours'")
 
-            codec.decode = lambda cover: (_ for _ in ()).throw(ValueError("bad framing"))
+            codec.decode = lambda cover, coder_name=None: (_ for _ in ()).throw(ValueError("bad framing"))
             self.assertEqual(self.decode("x y z")[0], 400, "a plain ValueError leaked a 422")
 
-            codec.decode = lambda cover: (_ for _ in ()).throw(coder.NotCoverText("chatter"))
+            codec.decode = lambda cover, coder_name=None: (_ for _ in ()).throw(coder.NotCoverText("chatter"))
             self.assertEqual(self.decode("x y z")[0], 422, "genuine chatter no longer 422s")
         finally:
             codec.decode = original

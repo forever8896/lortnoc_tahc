@@ -33,7 +33,7 @@ os.environ.pop("CODEC_ENFORCE", None)
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-MODULES = ["test_coder", "test_codec", "test_auth", "test_server"]
+MODULES = ["test_coder", "test_arith", "test_codec", "test_auth", "test_server"]
 
 
 def _wrap_function_tests(module_name):

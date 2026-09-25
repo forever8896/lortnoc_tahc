@@ -180,7 +180,7 @@ class Handler(BaseHTTPRequestHandler):
                     reserved = not verdict["member"]
 
                 try:
-                    cover, select = codec.encode(ct, fast=fast)
+                    cover, select = codec.encode(ct, fast=fast, coder_name=req.get("coder"))
                 except Exception:
                     # A failed encode must not cost the user a free send.
                     if reserved:
@@ -205,7 +205,7 @@ class Handler(BaseHTTPRequestHandler):
                     },
                 )
             if path == "/decode":
-                ct = codec.decode(req["coverText"])
+                ct = codec.decode(req["coverText"], coder_name=req.get("coder"))
                 return self._json(200, {"ciphertext": base64.b64encode(ct).decode()})
             return self._json(404, {"error": "not found"})
         except coder.NotCoverText:

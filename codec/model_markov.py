@@ -134,6 +134,45 @@ class MarkovModel:
                     break
         return out[:n]
 
+    def dist(self, ctx: tuple, top_n: int) -> list[tuple[int, int]]:
+        """Top-`top_n` successors as (id, integer weight) for the arith coder.
+
+        Weights are RANK-BASED, not the raw n-gram counts, because this model discards counts at
+        freeze time: `self.ngrams[o][key]` is a list of successor ids already ordered by
+        (count desc, id asc) — see the freeze step in __init__. Rank is therefore all the count
+        information that survives, and a geometric decay over it is a faithful, monotone stand-in.
+
+        (An earlier draft of this method indexed `for s, c in ...`, which assumed a
+        list-of-(id, count) shape this branch does not have. It raised
+        `TypeError: cannot unpack non-iterable int` on the first call — the arith coder's
+        markov path, not the gpt2 one, so it only surfaced on the fallback backend.)
+
+        What the arith coder actually requires is not accuracy but AGREEMENT: identical integer
+        weights on both ends, deterministically. Same higher-order-first backoff as topk(), same
+        deterministic global-top padding.
+        """
+        out: list[tuple[int, int]] = []
+        seen: set[int] = set()
+        w = 1 << 16
+
+        def push(sid: int) -> bool:
+            nonlocal w
+            if sid in seen:
+                return False
+            seen.add(sid)
+            out.append((sid, max(1, w)))
+            w = max(1, (w * 88) // 100)  # integer-only decay; no floats reach the coder
+            return len(out) >= top_n
+
+        for o in range(min(self.order, len(ctx)), 0, -1):
+            for s in self.ngrams[o].get(ctx[-o:], ()):
+                if push(s):
+                    return out
+        for s in self.global_top:  # pad deterministically to top_n
+            if push(s):
+                break
+        return out
+
     def to_words(self, tokens: list[int]) -> str:
         return " ".join(self.id2word[t] for t in tokens)
 

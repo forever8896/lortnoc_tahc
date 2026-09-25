@@ -12,12 +12,21 @@ Backend selection (env CODEC_BACKEND, default "auto"):
                with a loud log. So you always get a working codec, and the real one
                whenever it loads and verifies.
 
-CODEC_K (default 3) = bits hidden per token in the gpt2 backend (higher = shorter cover
+CODEC_K (default 3) = bits hidden per token, BLOCK coder only (higher = shorter cover
 text, less natural).
+
+CODEC_CODER (default "block") selects the coder over the chosen model:
+    block  — fixed k bits per token (coder.py). Simple; wastes capacity where the model is
+             uncertain and forces unnatural picks where it is confident.
+    arith  — variable-rate arithmetic coder (arith.py); each token carries ~its actual
+             information content. Measured ~25% shorter cover text than block k=3 on gpt2,
+             AND more natural, because it follows the model's own distribution instead of
+             overriding it. CODEC_TOPN (default 64) sets the candidate-set size.
 """
 import os
 import threading
 
+import arith
 import coder
 import wordmap
 import zerog
@@ -27,6 +36,8 @@ _lock = threading.Lock()
 
 BACKEND = os.environ.get("CODEC_BACKEND", "auto").lower()
 K = int(os.environ.get("CODEC_K", "3"))
+CODER = os.environ.get("CODEC_CODER", "block").lower()  # "block" | "arith"
+TOPN = int(os.environ.get("CODEC_TOPN", "64"))  # arith candidate-set size
 # Falling back to the wordmap placeholder is allowed only when asked for explicitly, or when
 # it IS what was asked for. Tests and local dev set CODEC_BACKEND=wordmap; production does
 # not, and there a silent fallback should be a startup failure rather than a quiet downgrade.
@@ -38,12 +49,45 @@ MODEL: str
 DIGEST: str
 
 
+def _pick(which: str | None) -> str:
+    """Resolve a per-request coder name against the deployment default.
+
+    The coder is PER REQUEST, not per deployment, and that is load-bearing: both extensions
+    call the SAME codec instance (§6.2 — one warm process is what makes encode and decode
+    deterministic against each other). Flipping a global default would therefore silently
+    change the coder under the Telegram build too, and every message already sitting in a
+    Telegram chat would stop decoding — encoded with block, read back with arith. Letting the
+    caller name its coder means the X build can take the shorter one without touching history.
+    """
+    name = (which or CODER).lower()
+    return name if name in ("block", "arith") else CODER
+
+
+def _hide(data: bytes, model, which: str | None = None) -> str:
+    """Encode via the selected coder. Single choke point: the self-test, the encoder and the
+    decoder all route through here, so a mismatched coder is impossible by construction."""
+    if _pick(which) == "arith":
+        return arith.encode(data, model, TOPN)
+    return coder.encode(data, model, K)
+
+
+def _seek(cover: str, model, which: str | None = None) -> bytes:
+    if _pick(which) == "arith":
+        return arith.decode(cover, model, TOPN)
+    return coder.decode(cover, model, K)
+
+
+def _rate() -> str:
+    """The coder half of the MODEL string, so /health reports what actually ran."""
+    return f"arith-t{TOPN}" if CODER == "arith" else f"k{K}"
+
+
 def _selftest(model) -> None:
     # CODEC_SELFTEST=0 skips; small payloads keep cold-boot fast (matters on fly).
     n = int(os.environ.get("CODEC_SELFTEST", "3"))
     for _ in range(n):
         x = os.urandom(1 + os.urandom(1)[0] % 8)
-        if coder.decode(coder.encode(x, model, K), model, K) != x:
+        if _seek(_hide(x, model), model) != x:
             raise RuntimeError("self-test round-trip failed")
 
 
@@ -56,7 +100,7 @@ def _load() -> None:
             m = GPT2Model()
             _selftest(m)
             _kind, _model = "gpt2", m
-            MODEL, DIGEST = f"gpt2/k{K}", m.digest()
+            MODEL, DIGEST = f"gpt2/{_rate()}", m.digest()
             print(f"[codec] backend=gpt2 k={K} ({MODEL} {DIGEST})")
             return
         except Exception as e:  # noqa: BLE001
@@ -71,7 +115,7 @@ def _load() -> None:
             m = MarkovModel(order=order)
             _selftest(m)
             _kind, _model = "markov", m
-            MODEL, DIGEST = f"markov-o{order}/k{K}", m.digest()
+            MODEL, DIGEST = f"markov-o{order}/{_rate()}", m.digest()
             print(f"[codec] backend=markov order={order} k={K} ({MODEL} {DIGEST})")
             return
         except Exception as e:  # noqa: BLE001
@@ -103,7 +147,7 @@ def select_info() -> str:
     return f"0g-best-of-{zerog.VARIANTS}" if zerog.enabled() else "off"
 
 
-def encode(data: bytes, fast: bool = False) -> tuple[str, str]:
+def encode(data: bytes, fast: bool = False, coder_name: str | None = None) -> tuple[str, str]:
     """(cover text, selection method). fast=True skips best-of-N (single cover, no 0G
     round-trip) — used for handshake frames, which carry only public keys.
 
@@ -116,14 +160,14 @@ def encode(data: bytes, fast: bool = False) -> tuple[str, str]:
     # generate N candidate covers (only if 0G selection is enabled AND not fast — else 1)
     n = 1 if fast or not zerog.enabled() else zerog.VARIANTS
     with _lock:  # model is stateful; hold the lock only for generation
-        covers = [coder.encode(data, _model, K) for _ in range(n)]
+        covers = [_hide(data, _model, coder_name) for _ in range(n)]
     if n == 1:
         return covers[0], "single"
     return zerog.select_best(covers)  # 0G network call OUTSIDE the lock
 
 
-def decode(cover: str) -> bytes:
+def decode(cover: str, coder_name: str | None = None) -> bytes:
     if _kind in ("gpt2", "markov"):
         with _lock:
-            return coder.decode(cover, _model, K)
+            return _seek(cover, _model, coder_name)
     return wordmap.decode(cover)

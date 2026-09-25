@@ -23,8 +23,14 @@ class MockModel:
     def extend(self, ctx: int, tok: int) -> int:
         return ((ctx ^ (tok & _M)) * 0x100000001B3) & _M  # FNV-1a step
 
-    def topk(self, ctx: int, k: int) -> list[int]:
-        n = 1 << k
+    def _candidates(self, ctx: int, n: int) -> list[int]:
+        """`n` distinct token ids, deterministic order. Shared by topk() and dist().
+
+        Factored out because dist() needs an arbitrary count (top_n) while topk() needs a power
+        of two (2^k). They MUST walk the same hash sequence: if they disagreed, the block coder
+        and the arith coder would see different candidate sets from the same model and the mock
+        would stop being a valid stand-in for either.
+        """
         out: list[int] = []
         i = 0
         while len(out) < n:
@@ -33,6 +39,21 @@ class MockModel:
             if v not in out:
                 out.append(v)
             i += 1
+        return out
+
+    def topk(self, ctx: int, k: int) -> list[int]:
+        return self._candidates(ctx, 1 << k)
+
+    def dist(self, ctx: int, top_n: int) -> list[tuple[int, int]]:
+        # Synthetic, deterministic, moderately-skewed distribution over the top_n candidates:
+        # a quantized geometric decay (ratio ~0.92) -> entropy ~4.8 bits/token, integer
+        # weights only. Order = candidate order (deterministic); NOT gpt2's real curve -- the
+        # numbers are illustrative, but the round-trip they drive is exact (see test_arith).
+        out: list[tuple[int, int]] = []
+        w = 1 << 16
+        for t in self._candidates(ctx, top_n):
+            out.append((t, w))
+            w = max(1, (w * 92) // 100)
         return out
 
     def to_words(self, tokens: list[int]) -> str:
