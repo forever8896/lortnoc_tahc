@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install | Lortnoc Tahc</title>
+<meta name="description" content="Install the Lortnoc Tahc extension for Telegram Web: download the signed build, verify it, load it unpacked, and connect with someone.">
+<meta name="theme-color" content="#08080A">
+<link rel="preload" href="fonts/jost/jost-300.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a class="topbar__home topbar__back" href="index.html" aria-label="Back to Lortnoc Tahc"><span aria-hidden="true">&larr;</span><img src="logos/lortnoctahc.png" alt="Lortnoc Tahc"></a>
+  <a class="topbar__brand" href="index.html"><span class="topbar__mark">Install</span></a>
+</header>
+
+<main class="doc">
+
+  <div class="doc__hero">
+    <div class="eyebrow eyebrow--signal doc__partner">Install &middot; about five minutes</div>
+    <h1>Read the code, then run it.</h1>
+    <p class="lede">Lortnoc Tahc is a browser extension that sits on top of Telegram Web. It swaps your message for innocuous cover text before it sends, and turns it back for the person on the other end. There is no store gatekeeper and no black box &mdash; you download a build made by public CI, check it, and load it yourself.</p>
+
+    <div class="actions">
+      <a class="btn" href="https://github.com/forever8896/lortnoc_tahc/releases/latest" target="_blank" rel="noopener">Download the latest build</a>
+      <a class="btn btn--ghost" href="https://github.com/forever8896/lortnoc_tahc" target="_blank" rel="noopener">Read the source</a>
+    </div>
+  </div>
+
+  <section>
+    <h2>Before you start</h2>
+    <p>Two things, and the second one is the one people miss.</p>
+    <div class="spec-wrap">
+      <table class="spec">
+        <tr><th>A Chromium browser</th><td>Chrome, Brave, Edge, Arc &mdash; anything that loads unpacked extensions. Firefox is not supported yet.</td></tr>
+        <tr><th>Someone to talk to</th><td><strong>Both sides need the extension.</strong> It is a shared key between two browsers, so a message you hide is cover text to everyone who does not have it &mdash; including your friend, until they install it too.</td></tr>
+      </table>
+    </div>
+    <p>You do not need an account, a wallet, or a Telegram bot. Nothing logs in as you, and the extension never holds a Telegram credential &mdash; it reads and writes the page you already had open.</p>
+  </section>
+
+  <section>
+    <h2>Install it</h2>
+    <ol class="steps">
+      <li>
+        <b>Download the build.</b>
+        Grab the <code>.zip</code> from <a href="https://github.com/forever8896/lortnoc_tahc/releases/latest" target="_blank" rel="noopener">GitHub Releases</a> &mdash; served by GitHub, not by us. The release page lists a <b>SHA-256</b> for the file; check it matches before you unzip.
+      </li>
+      <li>
+        <b>Unzip it somewhere permanent.</b>
+        Chrome loads an unpacked extension from the folder, and keeps reading it from there. If you unzip to Downloads and later clear it, the extension disappears with it.
+      </li>
+      <li>
+        <b>Open <code>chrome://extensions</code> and turn on Developer mode.</b>
+        The toggle is top-right. Chrome will remind you that you are running a developer extension each time it starts &mdash; expected, and the price of not hiding behind a store review.
+      </li>
+      <li>
+        <b>Click Load unpacked, choose the unzipped folder.</b>
+        Lortnoc Tahc appears in the list. Pin it to the toolbar &mdash; the popup is where you turn it on and where the setup guide lives.
+      </li>
+      <li>
+        <b>Open Telegram Web at <code>web.telegram.org/k/</code>.</b>
+        The <code>/k/</code> version specifically. Telegram ships two web clients with different markup; the overlay is built against K, and the popup will tell you if you are on the other one.
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Turn it on</h2>
+    <p>Open the extension popup. It walks you through the remaining setup and <strong>ticks each step off as it detects it</strong> &mdash; the codec being reachable, the right tab being open, the switch being on, the key exchange being done. If a step will not go green, that is the thing to fix, and the guide says what.</p>
+    <ol class="steps">
+      <li><b>Flip PrivacyMaxxing on.</b> Off means you are sending normally. On means your next message gets swapped before it leaves the page.</li>
+      <li><b>Both of you press Connect securely.</b> Your browsers exchange public keys <em>through the chat itself</em>, disguised as ordinary chatter. Nothing is typed, and no secret is ever sent &mdash; the shared key is derived on both sides, never transmitted.</li>
+      <li><b>Compare the safety code.</b> Both popups show the same short code. If they match, nobody is in the middle. If they do not, stop.</li>
+      <li><b>Type a message and send it.</b> You will see it change in the box. What Telegram stores is the cover text; what your friend sees is what you wrote.</li>
+    </ol>
+    <p>Hover any decoded message to see exactly what Telegram has on its servers for it. That is the whole product in one gesture.</p>
+  </section>
+
+  <section>
+    <h2>When something is wrong</h2>
+    <div class="spec-wrap">
+      <table class="spec">
+        <tr><th>&ldquo;offline&rdquo; next to codec</th><td>The service that writes cover text is unreachable. Check your connection; the URL is under Advanced in the popup if you are running your own.</td></tr>
+        <tr><th>&ldquo;use /k/&rdquo;</th><td>You are on Telegram&rsquo;s other web client. Go to <code>web.telegram.org/k/</code>.</td></tr>
+        <tr><th>&ldquo;reload the tab&rdquo;</th><td>Normal right after installing or updating: the page was loaded before the extension was. Refresh Telegram Web.</td></tr>
+        <tr><th>Your friend sees gibberish</th><td>They do not have the extension, or you have not both pressed Connect. Cover text is what the world is supposed to see.</td></tr>
+        <tr><th>A message did not decode</th><td>It fails closed &mdash; you see the cover text rather than an error, and nothing leaks. It is an unaudited alpha; sending sometimes breaks.</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Don&rsquo;t trust us</h2>
+    <p>A privacy tool you cannot inspect is just a promise. The extension is built in the open by public CI and published straight to GitHub, so you can rebuild it from the tag and compare it to what you downloaded before it ever touches your browser.</p>
+    <div class="actions">
+      <a class="btn btn--ghost" href="https://github.com/forever8896/lortnoc_tahc" target="_blank" rel="noopener">Read the source</a>
+      <a class="btn btn--ghost" href="https://github.com/forever8896/lortnoc_tahc#build-it-yourself" target="_blank" rel="noopener">Rebuild &amp; verify</a>
+      <a class="btn btn--ghost" href="https://github.com/forever8896/lortnoc_tahc/releases" target="_blank" rel="noopener">All releases</a>
+    </div>
+    <p class="eyebrow install__note">It loads unpacked, so it will not auto-update &mdash; we ship often, so check the releases page. A Chrome Web Store listing is on the way; the verifiable path above will always be here.</p>
+  </section>
+
+  <section>
+    <h2>After Telegram</h2>
+    <p>The extension hides your messages on a platform that still stores them. When you want the version with nothing on Telegram&rsquo;s servers at all, there is a messenger with your own handle, your own keys, and a vault you can walk away with.</p>
+    <div class="actions">
+      <a class="btn" href="https://app.lortnoctahc.com" target="_blank" rel="noopener">Open the app</a>
+    </div>
+  </section>
+
+  <nav class="docnav">
+    <div class="docnav__grid">
+      <a href="sui.html"><span>01 &mdash; Storage</span><b>Every message encrypted, anonymized, and stored immutably</b></a>
+      <a href="0g.html"><span>02 &mdash; Compute</span><b>Intelligent AI for realistic conversation obfuscation</b></a>
+      <a href="ens.html"><span>03 &mdash; Identity</span><b>A name you own, with permissions you control</b></a>
+    </div>
+  </nav>
+
+</main>
+<script defer src="/_vercel/insights/script.js"></script>
+</body>
+</html>
