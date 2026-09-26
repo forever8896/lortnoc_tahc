@@ -147,6 +147,8 @@ export async function buySpace(req: { label: string; token: string; chainId: 1 |
     return { ok: false, error: tx?.error ?? 'no transaction' }
   }
   await setState({ label, step: 'paid — creating the ENS name', txHash: tx.hash, owner })
+  // the wallet's part is over — close its tab now; the Spaces page follows the rest live
+  await chrome.tabs.remove(tabId).catch(() => {})
 
   // 3. the relayer mints the space (it waits for confirmations; retry while it says "pending")
   for (let i = 0; i < 40; i++) {

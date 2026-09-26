@@ -47,6 +47,9 @@
     .push { margin-top: auto; }
     .quiet { font-size: 12.5px; color: var(--faint); } .quiet a, a.quiet { color: var(--muted); }
     .msg { min-height: 18px; font-size: 13px; } .msg.ok { color: var(--signal); } .msg.err { color: var(--warn); }
+    .msg.busy::before { content: ''; display: inline-block; width: 12px; height: 12px; margin-right: 8px; vertical-align: -2px; border-radius: 50%;
+      border: 2px solid rgba(18,196,190,.25); border-top-color: var(--signal); animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg) } }
     a { color: var(--signal); }
 
     /* ---- spaces: the product ---- */
@@ -89,7 +92,8 @@
     .cta { width: 100%; padding: 14px; font-size: 15.5px; margin-top: 4px; }
     .track { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
     .track div { font-size: 12.5px; color: var(--faint); border-top: 2px solid var(--rule); padding-top: 8px; }
-    .track div.on { color: var(--ink); border-color: var(--warn); } .track div.done { color: var(--signal); border-color: var(--signal); }
+    .track div.on { color: var(--ink); border-color: var(--signal); animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 50% { border-color: rgba(18,196,190,.25) } } .track div.done { color: var(--signal); border-color: var(--signal); }
 
     .h-sec { display: flex; justify-content: space-between; align-items: baseline; margin: 40px 0 12px; }
     .h-sec h2 { font-weight: 400; font-size: 20px; margin: 0; }

@@ -7,7 +7,7 @@ import { COUNTRIES } from '../shared/countries'
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
 const esc = (t: string) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-const say = (id: string, text: string, kind: '' | 'ok' | 'err' = '') => Object.assign($(id), { textContent: text, className: `msg ${kind}` })
+const say = (id: string, text: string, kind: '' | 'ok' | 'err' | 'busy' = '') => Object.assign($(id), { textContent: text, className: `msg ${kind}` })
 const countryName = (a: string) => COUNTRIES.find(([c]) => c === a)?.[1] ?? a
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
 const debounce = <A extends unknown[]>(fn: (...a: A) => void, ms: number) => {
@@ -120,9 +120,13 @@ async function withWalletTab<T>(run: (tabId: number) => Promise<T>): Promise<T> 
     chrome.tabs.onUpdated.addListener(on)
   })
   await new Promise((r) => setTimeout(r, 600)) // let the wallet inject window.ethereum
+  // the wallet tab may close before `run` finishes (a purchase closes it once paid) — come back at once
+  const back = (id: number) => { if (id === tab.id && me?.id) chrome.tabs.update(me.id, { active: true }).catch(() => {}) }
+  chrome.tabs.onRemoved.addListener(back)
   try {
     return await run(tab.id!)
   } finally {
+    chrome.tabs.onRemoved.removeListener(back)
     await chrome.tabs.remove(tab.id!).catch(() => {})
     if (me?.id) await chrome.tabs.update(me.id, { active: true }).catch(() => {})
   }
@@ -248,20 +252,55 @@ $('demoMint').onclick = async () => {
 }
 
 /** Payment → ENS name → Ready, from the service worker's purchase state. */
+let lastStep: string | undefined // undefined until the first render, so opening the page on a finished purchase throws no confetti
 async function renderBuy() {
   const r = await chrome.runtime.sendMessage({ type: 'BUY_STATE' })
   const st = r?.data as { label: string; step: string; error?: string; name?: string } | null
+  if (lastStep !== undefined && lastStep !== 'done' && st?.step === 'done') confetti()
+  lastStep = st?.step ?? '' 
   const cells = [...$('track').children] as HTMLElement[]
   const stage = !st ? -1 : st.step === 'done' ? 3 : st.step.startsWith('paid') ? 1 : st.step === 'failed' ? -2 : 0
   cells.forEach((c, i) => (c.className = stage === 3 || i < stage ? 'done' : i === stage ? 'on' : ''))
   if (!st) return
   if (st.step === 'done') say('buyState', `✓ ${st.name} is yours. Lock posts to "NFT holders of ${st.label}.space".`, 'ok')
   else if (st.step === 'failed') say('buyState', `${st.label}: ${st.error ?? 'failed'}`, 'err')
-  else say('buyState', `${st.label}: ${st.step}`)
+  else if (st.step.startsWith('paid')) say('buyState', `Paid. Registering ${st.label}.space.lortnoctahc.eth on ENS — about a minute.`, 'busy')
+  else say('buyState', `${st.label}: ${st.step}`, 'busy')
+}
+// the service worker writes each step to storage — follow it live, wherever the purchase was started
+chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.buyState) void renderBuy(), void renderSpaces() })
+
+/** A short burst of teal confetti — skipped for people who asked for less motion. */
+function confetti() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const cv = Object.assign(document.createElement('canvas'), { width: innerWidth * devicePixelRatio, height: innerHeight * devicePixelRatio })
+  Object.assign(cv.style, { position: 'fixed', inset: '0', width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: '9999' })
+  document.body.append(cv)
+  const g = cv.getContext('2d')!
+  g.scale(devicePixelRatio, devicePixelRatio)
+  const colors = ['#12c4be', '#12c4be', '#5fe0da', '#0b8f8a', '#b8f3f0', '#edeae4']
+  const bits = Array.from({ length: 180 }, (_, i) => {
+    const left = i % 2 === 0, a = (left ? -60 : -120) * Math.PI / 180 + (Math.random() - 0.5) * 0.9, v = 9 + Math.random() * 9
+    return { x: left ? 0 : innerWidth, y: innerHeight * 0.75, vx: Math.cos(a) * v, vy: Math.sin(a) * v, w: 5 + Math.random() * 6, h: 3 + Math.random() * 4,
+      r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.4, c: colors[i % colors.length] }
+  })
+  const t0 = performance.now()
+  const frame = (t: number) => {
+    const k = (t - t0) / 2800
+    g.clearRect(0, 0, innerWidth, innerHeight)
+    g.globalAlpha = Math.max(0, 1 - Math.max(0, k - 0.6) / 0.4)
+    for (const b of bits) {
+      b.vy += 0.28; b.vx *= 0.99; b.vy *= 0.99; b.x += b.vx; b.y += b.vy; b.r += b.vr
+      g.save(); g.translate(b.x, b.y); g.rotate(b.r); g.fillStyle = b.c; g.fillRect(-b.w / 2, -b.h / 2, b.w, b.h * Math.abs(Math.cos(b.r * 2))); g.restore()
+    }
+    if (k < 1) requestAnimationFrame(frame)
+    else cv.remove()
+  }
+  requestAnimationFrame(frame)
 }
 $('buy').onclick = async () => {
   if (!(ok.name && ok.col)) return
-  say('buyState', 'Confirm the payment in your wallet…')
+  say('buyState', 'Confirm the payment in your wallet…', 'busy')
   try {
     // the service worker carries on (relayer, ENS) after the wallet tab closes
     const r = await withWalletTab((tabId) => chrome.runtime.sendMessage({ type: 'BUY_SPACE', label: label(), token: token(), chainId: payOn, tabId }).catch(() => null))
