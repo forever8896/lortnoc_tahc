@@ -219,7 +219,13 @@ const checkName = debounce(async () => {
   check('nameCheck', ok.name ? `${l}.space.lortnoctahc.eth is available` : 'Taken. Try another name.', ok.name ? 'ok' : 'bad')
   mark('s1', ok.name)
 }, 400)
-$('buyName').addEventListener('input', () => void checkName())
+$('buyName').addEventListener('input', () => {
+  void checkName()
+  void chrome.runtime.sendMessage({ type: 'BUY_STATE' }).then((r) => {
+    const st = r?.data as { step: string; at?: number } | null
+    if (st && (st.step === 'done' || st.step === 'failed') && buyDismissed !== st.at) (buyDismissed = st.at), void renderBuy()
+  })
+})
 
 const checkCol = debounce(async () => {
   const addr = $<HTMLInputElement>('nftAddress').value.trim()
@@ -271,17 +277,21 @@ $('demoMint').onclick = async () => {
 }
 
 /** Payment → ENS name → Ready, from the service worker's purchase state. */
+let buyDismissed: number | undefined // the `at` of a finished purchase the user moved on from
 let lastStep: string | undefined // undefined until the first render, so opening the page on a finished purchase throws no confetti
 async function renderBuy() {
   const r = await chrome.runtime.sendMessage({ type: 'BUY_STATE' })
-  const st = r?.data as { label: string; step: string; error?: string; name?: string } | null
+  let st = r?.data as { label: string; step: string; error?: string; name?: string; at?: number } | null
+  // a finished (or failed) purchase is news for a while, not forever; a new name dismisses it at once
+  const over = st && (st.step === 'done' || st.step === 'failed')
+  if (over && (buyDismissed === st!.at || Date.now() - (st!.at ?? 0) > 10 * 60_000)) st = null
   if (lastStep !== undefined && lastStep !== 'done' && st?.step === 'done') confetti()
   lastStep = st?.step ?? '' 
   const cells = [...$('track').children] as HTMLElement[]
   const stage = !st ? -1 : st.step === 'done' ? 3 : st.step.startsWith('paid') ? 1 : st.step === 'failed' ? -2 : 0
   cells.forEach((c, i) => (c.className = stage === 3 || i < stage ? 'done' : i === stage ? 'on' : ''))
   $('buy').classList.toggle('busy', stage === 0 || stage === 1)
-  if (!st) return
+  if (!st) return void say('buyState', '')
   if (st.step === 'done') say('buyState', `${st.name} is yours. Lock posts to "NFT holders of ${st.label}.space".`, 'ok')
   else if (st.step === 'failed') say('buyState', `${st.label}: ${st.error ?? 'failed'}`, 'err')
   else if (st.step.startsWith('paid')) say('buyState', `Paid. Registering ${st.label}.space.lortnoctahc.eth on ENS. About a minute.`, 'busy')

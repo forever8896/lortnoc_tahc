@@ -435,8 +435,8 @@ function renderDetail(p: Preset) {
   const mine = Object.keys(memberOf)
   if (mine.length) {
     const pre = p.startsWith('space:') && memberOf[p.slice(6)] ? p.slice(6) : mine[0]
-    const l = Object.assign(document.createElement('label'), { className: 'toggle' })
-    l.innerHTML = `<input type="checkbox" id="signAs"> Sign as <select id="signSpace">${mine
+    const l = Object.assign(document.createElement('label'), { className: 'toggle sign' })
+    l.innerHTML = `<input type="checkbox" id="signAs"><span>Sign as</span><select id="signSpace">${mine
       .map((sp) => `<option value="${sp}"${sp === pre ? ' selected' : ''}>${memberOf[sp]} · ${sp}</option>`).join('')}</select>`
     box.append(l)
   }
