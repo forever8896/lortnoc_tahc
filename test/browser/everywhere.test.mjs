@@ -152,10 +152,8 @@ describe('extension-everywhere, three profiles on a comment section', () => {
     await trigger(sw, { action: 'compose' })
     const sheet = await frameOf(page, 'sheet')
     await sheet.waitForSelector('#msg')
-    // Requirement 1: swap "anyone with the extension" for a passphrase.
-    await sheet.selectOption('#groups select', 'passphrase')
-    await sheet.click('#groups .check .x') // remove the public check
-    passphrase = await sheet.inputValue('#groups .check input[type=text]')
+    await sheet.selectOption('#who', 'passphrase')
+    passphrase = await sheet.inputValue('#pass')
     assert.equal(passphrase.split(' ').length, 5, 'a generated five-word passphrase is the default')
     await sheet.fill('#msg', SECRET)
     await sheet.type('#msg', '!') // real keystrokes too, not only fill()
@@ -231,10 +229,9 @@ describe('timed messages through a real gate', () => {
       await trigger(writer.sw, { action: 'compose' })
       const sheet = await frameOf(page, 'sheet')
       await sheet.waitForSelector('#msg')
-      await sheet.selectOption('#groups select', 'after')
-      await sheet.click('#groups .check .x') // drop "anyone with the extension"
-      await sheet.fill('#groups input[type=datetime-local]', await localIn(page, hours))
-      assert.match(await sheet.textContent('#honesty'), /gate could read this/, 'a time lock alone must be labelled gate-readable')
+      await sheet.selectOption('#who', 'after')
+      await sheet.fill('#when', await localIn(page, hours))
+      assert.match(await sheet.textContent('#honesty'), /gate holds part of the key/, 'a time lock alone must be labelled gate-readable')
       await sheet.fill('#msg', 'the tasting starts at noon')
       await sheet.click('#go')
       await sheet.waitForSelector('.status.ok', { timeout: 60_000 })

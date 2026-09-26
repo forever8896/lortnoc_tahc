@@ -175,8 +175,7 @@ async function main() {
   if (!info) return setStatus('This is a lortnoc message from another surface (X or Telegram) — open it there.', 'err'), fit()
   if (info.unsupported) return setStatus('This message needs a newer version of the extension.', 'err'), fit()
 
-  const checks = $('checks')
-  for (const c of info.checks ?? []) checks.append(Object.assign(document.createElement('span'), { className: 'chip', textContent: c }))
+  $('checks').textContent = `Locked · ${(info.checks ?? []).join(' · ')}`
   $('needs').hidden = false
   $('pass').hidden = !info.needs?.includes('passphrase')
   $('identity').hidden = !info.needs?.includes('recipients')

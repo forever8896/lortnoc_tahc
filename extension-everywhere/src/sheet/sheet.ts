@@ -38,6 +38,17 @@ const fresh = (check: CheckDraft['check']): CheckDraft =>
   : { check, keys: '' }
 
 let groups: CheckDraft[][] = [[fresh('public')]]
+
+/** The ready-made choices. "custom" reveals the full builder (AND of ORs). */
+type Preset = 'public' | 'passphrase' | 'human' | 'human-or-pass' | 'after' | `space:${string}` | 'custom'
+function presetGroups(p: Preset): CheckDraft[][] {
+  if (p === 'passphrase') return [[fresh('passphrase')]]
+  if (p === 'human') return [[fresh('human')]]
+  if (p === 'human-or-pass') return [[fresh('human'), fresh('passphrase')]]
+  if (p === 'after') return [[fresh('after')]]
+  if (p.startsWith('space:')) return [[{ check: 'human', preset: 'poh', space: p.slice(6) }]]
+  return [[fresh('public')]]
+}
 /** Spaces you own or joined — offered in the World ID check and for "post as member". */
 let knownSpaces: string[] = []
 let memberOf: Record<string, string> = {}
@@ -165,20 +176,20 @@ function input(value: string, on: (v: string) => void, placeholder = '') {
 }
 
 function renderHonesty() {
-  const root = $('honesty')
-  root.replaceChildren()
   let h
   try {
     h = honesty(buildPolicy())
   } catch {
-    return
+    return void ($('honesty').textContent = '')
   }
-  const chip = (t: string, kind: string) => root.append(Object.assign(document.createElement('span'), { className: `chip ${kind}`, textContent: t }))
-  if (h.obfuscationOnly) chip('hidden, not private — anyone with the extension', 'warn')
-  else chip('🔒 only who you chose', 'ok')
-  if (h.offlineGuessable) chip('passphrase can be guessed offline — use a strong one', 'warn')
-  if (!h.obfuscationOnly && h.gateCanRead) chip('the lortnoc gate could read this', 'warn')
-  if (!h.obfuscationOnly && !h.gateCanRead) chip('no server can read this', 'ok')
+  // ONE line — the thing that matters most for this choice.
+  $('honesty').textContent = h.obfuscationOnly
+    ? 'Hidden, not private — anyone with lortnoc can read it.'
+    : h.offlineGuessable
+      ? '🔒 Share the passphrase privately. Keep the generated words — a guessable one can be cracked.'
+      : h.gateCanRead
+        ? '🔒 Locked. The lortnoc gate holds part of the key — add a passphrase if that matters.'
+        : '🔒 Only the people you chose can read it.'
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +214,8 @@ async function go() {
       deposit = gateDepositor({ gatePub: g.data.pub, post: gatePost })
     }
     let body = text
-    const asSpace = $<HTMLSelectElement>('postAs').value
+    const who = $<HTMLSelectElement>('who').value
+    const asSpace = who.startsWith('space:') && ($('signAs') as HTMLInputElement | null)?.checked ? who.slice(6) : ''
     if (asSpace) {
       setStatus(`Signing as your member name in ${asSpace}…`)
       body = withAuthor(text, { space: asSpace, ...(await attestAsMember(asSpace, contentHash(text))) })
@@ -216,8 +228,6 @@ async function go() {
     // deep scan (shape + codec) or right-click Reveal instead.
     lastCover = presentCover(r.data.coverText, { marker: false })
     $('cover').textContent = lastCover
-    $('result').hidden = false
-    fit()
     toParent({ lortnoc: 'insert', text: lastCover })
     // Plaintext is done with: clear it from this frame's memory and DOM.
     msgEl.value = ''
@@ -233,7 +243,10 @@ window.addEventListener('message', (e) => {
   const m = e.data as ContentToFrame
   if (m?.lortnoc !== 'inserted') return
   if (m.how === 'field') setStatus('Inserted. Post it the way you normally would.', 'ok')
-  else setStatus('Couldn’t write into that box — press Copy, then paste it in.', 'err')
+  else {
+    $('result').hidden = false // only now does the user need to see the cover text
+    setStatus('Couldn’t write into that box — press Copy, then paste it in.', 'err')
+  }
 })
 
 $('copy').onclick = async () => {
@@ -242,20 +255,72 @@ $('copy').onclick = async () => {
 }
 $('close').onclick = () => toParent({ lortnoc: 'close' })
 $('addGroup').onclick = () => ((groups.push([fresh('passphrase')]), render()))
+
+/** The detail line under the dropdown: only the ONE input the chosen preset needs. */
+function renderDetail(p: Preset) {
+  const box = $('detail')
+  box.replaceChildren()
+  $('custom').hidden = p !== 'custom'
+  if (p === 'custom') return render()
+  const pass = groups.flat().find((d) => d.check === 'passphrase') as Extract<CheckDraft, { check: 'passphrase' }> | undefined
+  if (pass) {
+    const i = Object.assign(document.createElement('input'), { type: 'text', value: pass.passphrase, id: 'pass' })
+    i.oninput = () => ((pass.passphrase = i.value), renderHonesty())
+    const again = Object.assign(document.createElement('button'), { className: 'btn btn-ghost btn-small', textContent: 'New' })
+    again.onclick = () => ((pass.passphrase = generatePassphrase()), (i.value = pass.passphrase))
+    const copy = Object.assign(document.createElement('button'), { className: 'btn btn-ghost btn-small', textContent: 'Copy' })
+    copy.onclick = () => void navigator.clipboard.writeText(pass.passphrase).then(() => (copy.textContent = 'Copied'))
+    const row = Object.assign(document.createElement('div'), { className: 'row' })
+    row.append(i, again, copy)
+    box.append(row)
+  }
+  const after = groups.flat().find((d) => d.check === 'after') as Extract<CheckDraft, { check: 'after' }> | undefined
+  if (after) {
+    const i = Object.assign(document.createElement('input'), { type: 'datetime-local', value: after.when, id: 'when' })
+    i.oninput = () => (after.when = i.value)
+    box.append(i)
+  }
+  if (p.startsWith('space:') && memberOf[p.slice(6)]) {
+    const l = Object.assign(document.createElement('label'), { className: 'toggle' })
+    l.innerHTML = `<input type="checkbox" id="signAs"> Sign as ${memberOf[p.slice(6)]}`
+    box.append(l)
+  }
+  renderHonesty()
+  fit()
+}
+
+function fillPresets() {
+  const who = $<HTMLSelectElement>('who')
+  const opts: [Preset, string][] = [
+    ['public', 'Anyone with lortnoc'],
+    ['passphrase', 'People with the passphrase'],
+    ['human', 'Verified humans (World ID)'],
+    ['human-or-pass', 'Verified humans, or the passphrase'],
+    ...knownSpaces.map((x) => [`space:${x}`, `Members of ${x}`] as [Preset, string]),
+    ['after', 'Everyone, after a date'],
+    ['custom', 'Custom…'],
+  ]
+  who.innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')
+  who.onchange = () => {
+    groups = presetGroups(who.value as Preset)
+    void chrome.storage.local.set({ lastWho: who.value })
+    renderDetail(who.value as Preset)
+  }
+}
 $('go').onclick = () => void go()
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') toParent({ lortnoc: 'close' })
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void go()
 })
-if (location.hash === '#nofield') $('nofield').hidden = false
-Promise.all([ownedSpaces(), memberships()]).then(([own, mem]) => {
+if (location.hash === '#nofield') setStatus('No text box was focused — you will get a Copy button.')
+Promise.all([ownedSpaces(), memberships(), chrome.storage.local.get('lastWho')]).then(([own, mem, last]) => {
   knownSpaces = [...new Set([...Object.keys(own), ...Object.keys(mem).filter((k) => mem[k].memberId)])].sort()
   memberOf = Object.fromEntries(Object.entries(mem).filter(([, m]) => m.memberId).map(([k, m]) => [k, m.memberId!]))
-  const pa = $<HTMLSelectElement>('postAs')
-  pa.innerHTML = `<option value="">Post anonymously</option>` +
-    Object.entries(memberOf).map(([k, id]) => `<option value="${k}">Post as ${id} (verified member of ${k})</option>`).join('')
-  $('postAsRow').hidden = !Object.keys(memberOf).length
-  render()
+  fillPresets()
+  const who = $<HTMLSelectElement>('who')
+  const want = last.lastWho as string | undefined
+  if (want && [...who.options].some((o) => o.value === want)) who.value = want
+  groups = presetGroups(who.value as Preset)
+  renderDetail(who.value as Preset)
 })
-render()
 msgEl.focus()

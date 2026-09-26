@@ -7,7 +7,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 async function health() {
   const h = $('health')
   const r = await sw<HealthData>({ type: 'HEALTH' })
-  if (r.ok && r.data.ready && !r.data.paused) (h.textContent = `codec · ${r.data.model}`), (h.className = 'chip ok')
+  if (r.ok && r.data.ready && !r.data.paused) (h.textContent = 'ready'), (h.className = 'chip ok')
   else (h.textContent = r.ok && r.data.paused ? 'codec paused' : 'codec offline'), (h.className = 'chip warn')
 }
 

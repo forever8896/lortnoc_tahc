@@ -4,24 +4,27 @@
   <meta charset="utf-8">
   <title>lortnoc tahc — everywhere</title>
   <link rel="stylesheet" href="../shared/ui.css">
-  <style>body { width: 320px; background: #08080a; } .card { border: 0; border-radius: 0; }</style>
+  <style>
+    body { width: 300px; background: #08080a; } .card { border: 0; border-radius: 0; }
+    .big { width: 100%; margin-top: 8px; padding: 12px; font-size: 15px; }
+    details { margin-top: 14px; } summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+  </style>
 </head>
 <body>
   <div class="card">
-    <div class="hdr"><div class="title">lortnoc <b>tahc</b> — everywhere</div><span class="chip" id="health">codec …</span></div>
-    <div class="small muted">Write everywhere; only the people you choose can read it. Everyone else sees chatter.</div>
-    <div class="row" style="margin-top:12px">
-      <button class="btn" id="compose">Write hidden</button>
-      <button class="btn btn-ghost" id="scan">Reveal on this page</button>
-    </div>
-    <div class="small muted" style="margin-top:8px">Shortcut: <b id="key">Ctrl+Shift+L</b> in any text box · right-click a post → <b>Reveal</b></div>
+    <div class="hdr"><div class="title">lortnoc <b>tahc</b></div><span class="chip" id="health">…</span></div>
+    <button class="btn big" id="compose">Write hidden</button>
+    <button class="btn btn-ghost big" id="scan">Find hidden posts</button>
+    <div class="small muted" style="margin-top:8px">Or <b id="key">Ctrl+Shift+L</b> in any text box · right-click text → Reveal</div>
     <div class="status" id="status"></div>
-    <div class="eyebrow">Your spaces</div>
-    <div class="small muted" style="margin-bottom:6px">A space is a circle: its posts open for its verified members, and you can ban anyone who misbehaves — for good.</div>
-    <div class="row"><input type="text" id="spaceName" placeholder="new-space-name" spellcheck="false"><button class="btn btn-ghost btn-small" id="createSpace">Create</button></div>
-    <div class="small" id="spaceList" style="margin-top:6px"></div>
-    <div class="eyebrow">Codec</div>
-    <div class="row"><input type="text" id="codec" spellcheck="false"><button class="btn btn-ghost btn-small" id="save">Save</button></div>
+    <details>
+      <summary>Settings</summary>
+      <div class="eyebrow">Your spaces</div>
+      <div class="row"><input type="text" id="spaceName" placeholder="new-space-name" spellcheck="false"><button class="btn btn-ghost btn-small" id="createSpace">Create</button></div>
+      <div class="small" id="spaceList" style="margin-top:6px"></div>
+      <div class="eyebrow">Codec</div>
+      <div class="row"><input type="text" id="codec" spellcheck="false"><button class="btn btn-ghost btn-small" id="save">Save</button></div>
+    </details>
   </div>
   <script type="module" src="./popup.ts"></script>
 </body>
