@@ -4,8 +4,6 @@
 import { canonicalCover, inspect, openMessage } from '../../../shared/webframe.mjs'
 import { fromB64 } from '../../../shared/keys.mjs'
 import { gateReleaser } from '../../../shared/gateclient.mjs'
-import { IDKit, proofOfHuman, selfieCheck, identityCheck } from '@worldcoin/idkit-core'
-import QRCode from 'qrcode'
 import { sw, gatePost } from '../shared/messages'
 import type { GateHealth } from '../shared/messages'
 import { readAuthor } from '../../../shared/member.mjs'
@@ -47,12 +45,20 @@ async function nftProof({ ref, readerPub, policyHash }: { ref: string; readerPub
   return { nonce: c.request.nonce, address: w.data.address, sig: w.data.sig }
 }
 let cancelWorld: (() => void) | null = null
+/** The World ID tab we are waiting on — its widget is told the gate's verdict (see onRelease/onDeny). */
+let worldTab: string | null = null
+const tellWidget = (ok: boolean, deny?: string) => {
+  if (!worldTab) return
+  void chrome.runtime.sendMessage({ type: 'WORLD_WIDGET_VERDICT', id: worldTab, ok, deny }).catch(() => {})
+  worldTab = null
+}
 
 /**
  * World ID for the `human` check: ask the gate for a challenge bound to THIS post + THIS reader key,
- * run IDKit here (an extension-origin page, so the proof never passes through the site), and hand
- * the result back to the gate. Cancelling is the "alternative path": the post simply stays shut,
- * and a passphrase branch (if the author gave one) still works.
+ * then open World's own IDKit widget (IDKitRequestWidget) in an extension tab — src/world/ — with that
+ * signed request. The proof comes back here and goes to the gate; the widget waits for the gate's
+ * verdict. Cancelling (or closing the widget) is the "alternative path": the post stays shut, and a
+ * passphrase branch (if the author gave one) still works.
  */
 async function worldProof({ check, ref, readerPub, policyHash }: { check: string; ref: string; readerPub: string; policyHash: string }) {
   if (check !== 'human') return undefined
@@ -60,63 +66,47 @@ async function worldProof({ check, ref, readerPub, policyHash }: { check: string
   const c = await gatePost('/challenge', { ref, readerPub, policyHash })
   if (!c?.request) throw new Error(c?.deny ?? c?.error ?? 'the gate could not start World ID')
   const q = c.request
-  // Nationality = Identity Check (preview): World App answers only if the passport matches. It takes
-  // no signal — the gate binds the proof to this post + reader through the single-use nonce instead.
-  const preset = q.preset === 'identity' ? identityCheck({ attributes: q.attributes })
-    : q.preset === 'selfie' ? selfieCheck({ signal: q.signal }) : proofOfHuman({ signal: q.signal })
-  const req = await IDKit.request({
-    app_id: q.app_id, action: q.action, rp_context: q.rp_context, allow_legacy_proofs: false, environment: q.environment,
-  }).preset(preset)
+  const id = crypto.randomUUID()
+
   $('world').hidden = false
   $('verifyHuman').hidden = true
-  // The simulator only does Proof of Human; nationality needs World App or World's Sandbox app.
+  // The simulator only does Proof of Human, and only on staging; nationality needs World App or Sandbox.
   $('sim').hidden = q.environment !== 'staging' || q.preset === 'identity'
-  if (q.preset === 'identity')
-    $('worldHow').textContent = `Scan with World App (or World's Sandbox app). It checks your passport's nationality is ${q.attributes?.[0]?.value} — nothing else about you is shared.`
-  await QRCode.toCanvas($<HTMLCanvasElement>('qr'), req.connectorURI, { width: 132, margin: 1 })
+  $('worldHow').textContent = q.preset === 'identity'
+    ? `World ID opened in a new tab. It checks your passport's nationality is ${q.attributes?.[0]?.value} — nothing else is shared.`
+    : "World ID opened in a new tab — scan its code with World App. Only that you're a unique human is shared."
   fit()
-  const abort = new AbortController()
-  cancelWorld = () => abort.abort()
-  $('sim').onclick = async () => {
-    setStatus('Simulator is verifying…')
-    const r = await sw<unknown>({ type: 'WORLD_SIM', connectUrl: req.connectorURI })
-    setStatus(r.ok ? 'Simulator done — waiting for the proof…' : `Simulator: ${r.error}`, r.ok ? '' : 'err')
-  }
-  setStatus('Waiting for World ID…')
-  // Our own poll loop instead of pollUntilCompletion: that one rejects on the first network blip
-  // (measured: ERR_NETWORK_CHANGED mid-wait surfaced as a message-less rejection and killed a real
-  // verification). Here a failed poll is retried; only World App's own verdict or Cancel ends it.
-  const deadline = Date.now() + 180_000
-  let result: unknown = null
-  let misses = 0
-  while (!result) {
-    if (abort.signal.aborted) throw new Error('You cancelled World ID.')
-    if (Date.now() > deadline) throw new Error('World ID timed out — try again.')
-    try {
-      const st = (await req.pollOnce()) as { type: string; result?: unknown; error?: string }
-      misses = 0
-      $('worldHow').dataset.state = st.type // visible to tests and devtools: waiting_for_connection → confirmed
-      if (st.type === 'confirmed') result = st.result
-      else if (st.type === 'failed') throw Object.assign(new Error(`World ID: ${String(st.error ?? 'failed').replace(/_/g, ' ')}`), { final: true })
-    } catch (e) {
-      if ((e as { final?: boolean }).final) throw e
-      if (++misses > 10) throw new Error(`World ID: the connection keeps failing (${e instanceof Error ? e.message : String(e)})`)
+
+  const result = await new Promise<unknown>((resolve, reject) => {
+    const done = () => (chrome.runtime.onMessage.removeListener(on), (cancelWorld = null))
+    const closeTab = () => void sw({ type: 'WORLD_WIDGET_DONE', id })
+    function on(m: { type?: string; id?: string; result?: unknown }) {
+      if (m?.id !== id) return
+      if (m.type === 'WORLD_WIDGET_RESULT') (done(), resolve(m.result))
+      if (m.type === 'WORLD_WIDGET_CLOSED') (done(), reject(new Error('You closed World ID.')))
     }
-    if (!result) await new Promise((r) => setTimeout(r, 1000))
-  }
+    chrome.runtime.onMessage.addListener(on)
+    cancelWorld = () => (done(), closeTab(), reject(new Error('You cancelled World ID.')))
+    void sw({ type: 'WORLD_WIDGET_OPEN', id, request: q }).then((r) => {
+      if (!r.ok) (done(), reject(new Error(`Could not open World ID: ${r.error}`)))
+    })
+    // Staging demo: World's simulator completes the WIDGET's own request (the widget tab reads its
+    // connect link and asks the gate to run the simulator) — so the demo takes the same path as a phone.
+    $('sim').onclick = () => (setStatus('Simulator is verifying…'), void chrome.runtime.sendMessage({ type: 'WORLD_WIDGET_SIMULATE', id }).catch(() => {}))
+  })
+  worldTab = id
   $('world').hidden = true
-  cancelWorld = null
   setStatus('Checking the proof…')
   return result
 }
 
 const release = gateReleaser({
   post: gatePost,
-  onDeny: (d: { deny?: string; retryAt?: number }) => (denied.last = d),
+  onDeny: (d: { deny?: string; retryAt?: number; check?: string }) => ((denied.last = d), d.check === 'human' && tellWidget(false, d.deny)),
   proofFor: (r: { check: string; ref: string; readerPub: string; policyHash: string }) => (r.check === 'nft' ? nftProof(r) : worldProof(r)),
   // Joining a space: bind our member key to the pseudonym the gate derives from our World ID.
   extraFor: async (_check: string, params: { space?: string }) => (params.space ? { memberPub: (await memberKey(params.space)).pub } : {}),
-  onRelease: (r: { member?: { space: string; memberId: string } }) => r.member && void rememberMember(r.member.space, r.member.memberId),
+  onRelease: (r: { member?: { space: string; memberId: string } }) => (tellWidget(true), r.member && void rememberMember(r.member.space, r.member.memberId)),
 })
 let frame: Uint8Array | null = null
 

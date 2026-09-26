@@ -22,7 +22,8 @@ export default defineConfig({
     rollupOptions: {
       // The sheet and the reveal card are extension pages loaded as iframes INTO other sites; they
       // are not reachable from the manifest, so they are listed as inputs explicitly.
-      input: { sheet: page('src/sheet/index.html'), reveal: page('src/reveal/index.html') },
+      // world/ hosts World's IDKit widget in its own tab (opened by the service worker).
+      input: { sheet: page('src/sheet/index.html'), reveal: page('src/reveal/index.html'), world: page('src/world/index.html') },
       output: {
         // Stable filenames — see extension-x/vite.config.ts for the ERR_FILE_NOT_FOUND story.
         entryFileNames: 'assets/[name].js',

@@ -156,7 +156,13 @@ describe('World ID, live (simulator + World API + World Chain)', () => {
     page.on('console', (m) => logs.push(`page: ${m.type()} ${m.text()}`.slice(0, 300)))
     sw.on('console', (m) => logs.push(`sw: ${m.type()} ${m.text()}`.slice(0, 300)))
     const card = await frameOf(page, 'reveal')
+    const widgetTab = ctx.waitForEvent('page', { predicate: (p) => p.url().includes('/src/world/'), timeout: 30_000 })
     await card.click('#verifyHuman', { timeout: 60_000 })
+    // World's OWN widget (IDKitRequestWidget) opens in its tab and shows its QR (in its shadow root)
+    const world = await widgetTab
+    world.on('console', (m) => logs.push(`world: ${m.type()} ${m.text()}`.slice(0, 300)))
+    await world.waitForSelector('.idkit-qr-inner', { timeout: 30_000 })
+    if (process.env.SHOT) await world.screenshot({ path: process.env.SHOT })
     await card.waitForSelector('#sim:not([hidden])', { timeout: 30_000 })
     await card.click('#sim')
     try {
@@ -165,9 +171,13 @@ describe('World ID, live (simulator + World API + World Chain)', () => {
       const status = await card.textContent('#status').catch(() => '?')
       const world = await card.isVisible('#world').catch(() => '?')
       const bridge = await card.getAttribute('#worldHow', 'data-state').catch(() => '?')
-      throw new Error(`never opened — card status: "${status}", World panel visible: ${world}, bridge state: ${bridge}\n${logs.filter((l) => !/preload/.test(l)).join('\n')}`)
+      const wstatus = await (await widgetTab).textContent('#status').catch(() => '?')
+      const link = await (await widgetTab).evaluate(() => document.querySelector('[data-idkit-shadow-host]')?.shadowRoot?.querySelector('a.idkit-deeplink-btn')?.href ?? 'none').catch((e) => 'eval failed ' + e.message)
+      throw new Error(`never opened — card status: "${status}", widget tab: "${wstatus}", widget link: ${String(link).slice(0, 40)}, World panel visible: ${world}, bridge state: ${bridge}\n${logs.filter((l) => !/preload/.test(l)).join('\n')}`)
     }
     assert.equal(await card.textContent('#plain'), 'the circle meets thursday')
+    // the widget saw the gate's verdict, showed success, and closed its own tab
+    await world.waitForEvent('close', { timeout: 30_000 })
     await ctx.close()
   })
 })

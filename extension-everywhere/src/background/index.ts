@@ -119,6 +119,16 @@ chrome.runtime.onMessage.addListener((msg: SwRequest, sender, sendResponse) => {
     buyState().then(sendResponse)
     return true
   }
+  // Card ↔ World ID tab traffic is not for the service worker: stay silent so it reaches them.
+  if (msg.type === 'WORLD_WIDGET_RESULT' || msg.type === 'WORLD_WIDGET_CLOSED' || msg.type === 'WORLD_WIDGET_VERDICT' || msg.type === 'WORLD_WIDGET_SIMULATE') return false
+  if (msg.type === 'WORLD_WIDGET_OPEN') {
+    openWorldTab(msg.id, msg.request, sender.tab?.id).then(sendResponse)
+    return true
+  }
+  if (msg.type === 'WORLD_WIDGET_DONE') {
+    closeWorldTab(msg.id).then(sendResponse)
+    return true
+  }
   if (msg.type === 'WALLET_SIGN') {
     walletSign(sender.tab?.id, msg.message).then(sendResponse)
     return true
@@ -126,6 +136,30 @@ chrome.runtime.onMessage.addListener((msg: SwRequest, sender, sendResponse) => {
   handle(msg).then(sendResponse)
   return true
 })
+
+/**
+ * World's IDKit widget needs a full-size page (it drops the QR below 1024 px), so it runs in its own
+ * extension tab. The gate's signed request is handed over in storage.session (extension-only, gone
+ * when the browser closes); the tab that asked is refocused when the widget is done.
+ */
+async function openWorldTab(id: string, request: unknown, openerTabId?: number): Promise<SwResponse> {
+  if (!/^[0-9a-f-]{36}$/.test(id)) return { ok: false, error: 'bad id' }
+  await chrome.storage.session.set({ [`world:${id}`]: request, [`worldOpener:${id}`]: openerTabId ?? null })
+  const tab = await chrome.tabs.create({ url: chrome.runtime.getURL(`src/world/index.html#${id}`), active: true, openerTabId })
+  await chrome.storage.session.set({ [`worldTab:${id}`]: tab.id })
+  return { ok: true, data: { tabId: tab.id } }
+}
+/** Close THE widget tab recorded at open (never the sender's tab — the card's sender is the site). */
+async function closeWorldTab(id: string): Promise<SwResponse> {
+  const keys = [`worldOpener:${id}`, `worldTab:${id}`, `world:${id}`]
+  const got = await chrome.storage.session.get(keys)
+  await chrome.storage.session.remove(keys)
+  const opener = got[keys[0]] as number | null | undefined
+  const worldTabId = got[keys[1]] as number | undefined
+  if (opener) await chrome.tabs.update(opener, { active: true }).catch(() => {})
+  if (worldTabId) await chrome.tabs.remove(worldTabId).catch(() => {})
+  return { ok: true, data: null }
+}
 
 /**
  * Ask the reader's OWN wallet (injected by MetaMask & co. into the page they are reading) to sign

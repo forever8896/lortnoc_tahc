@@ -34,6 +34,17 @@ export type SwRequest =
   | { type: 'BUY_STATE' }
   | { type: 'SITE_STATE'; origin: string }
   | { type: 'SITE_SET'; origin: string; on: boolean }
+  | { type: 'WORLD_WIDGET_OPEN'; id: string; request: WorldRequest }
+  | { type: 'WORLD_WIDGET_DONE'; id: string }
+  // broadcasts between the reveal card and the World ID tab — the service worker ignores these
+  | { type: 'WORLD_WIDGET_RESULT' | 'WORLD_WIDGET_CLOSED' | 'WORLD_WIDGET_VERDICT' | 'WORLD_WIDGET_SIMULATE'; id: string; [k: string]: unknown }
+
+/** The gate's signed World ID request (gate/world.mjs challenge()), as the widget tab receives it. */
+export type WorldRequest = {
+  app_id: string; action: string; signal: string; environment: string
+  preset: 'poh' | 'selfie' | 'identity'; attributes?: { type: string; value: string }[]
+  rp_context: { rp_id: string; nonce: string; created_at: number; expires_at: number; signature: string }
+}
 
 /** Gate routes the extension may call (the service worker refuses anything else). */
 export const GATE_PATHS = ['/deposit', '/challenge', '/release', '/space', '/member/sign', '/ban', '/dev/simulate'] as const
