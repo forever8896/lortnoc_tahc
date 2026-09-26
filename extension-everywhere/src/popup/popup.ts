@@ -1,8 +1,11 @@
 import { sw } from '../shared/messages'
 import type { HealthData } from '../shared/messages'
+import { icon, hydrateIcons } from '../shared/icons'
+
+hydrateIcons()
 
 // The popup is for what happens ON a page: write hidden, find hidden posts, always on here.
-// Keys, spaces, sites and connection live in the full page (⚙ → src/home/).
+// Keys, spaces, sites and connection live in the full page (the gear, src/home/).
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
 
 async function health() {
@@ -37,12 +40,12 @@ sw<{ passphrases: unknown[]; claims: { human: boolean; selfie: boolean; national
   if (!r.ok) return
   const { passphrases, claims } = r.data
   const parts = [
-    passphrases.length && `🔑 ${passphrases.length}`,
-    (claims?.human || claims?.selfie) && '✓ World ID',
-    claims?.nationalities?.length && `🛂 ${claims.nationalities.join(', ')}`,
-    claims?.wallets?.length && `👛 ${claims.wallets.length}`,
+    passphrases.length && `<span>${icon('key')}${passphrases.length}</span>`,
+    (claims?.human || claims?.selfie) && `<span>${icon('seal')}World ID</span>`,
+    claims?.nationalities?.length && `<span>${icon('passport')}${claims.nationalities.join(', ').replace(/[^A-Za-z, ]/g, '')}</span>`,
+    claims?.wallets?.length && `<span>${icon('wallet')}${claims.wallets.length}</span>`,
   ].filter(Boolean)
-  $('keySummary').textContent = parts.length ? `Your keys · ${parts.join(' · ')}` : 'Your keys · none yet — add some'
+  $('keySummary').innerHTML = parts.length ? parts.join('') : 'No keys yet. Add some.'
 })
 
 // "Always on for this site": Chrome asks for THIS origin only, from this click.

@@ -13,11 +13,22 @@ import { createRoot } from 'react-dom/client'
 import { IDKitRequestWidget, proofOfHuman, selfieCheck, identityCheck } from '@worldcoin/idkit'
 import type { IDKitResult } from '@worldcoin/idkit'
 import type { WorldRequest } from '../shared/messages'
+import { icon, hydrateIcons } from '../shared/icons'
+
+hydrateIcons()
 
 // #<id>[&sim] — `sim`: a staging demo; the simulator answers this widget's request as soon as it has one
 const [id, simFlag] = location.hash.slice(1).split('&')
 const $ = (x: string) => document.getElementById(x)!
-const say = (t: string) => ($('status').textContent = t)
+/** The status line, and the mark's state: waiting (pulse), ok (check), bad (warning). */
+const say = (t: string, state: 'wait' | 'ok' | 'bad' = /refus|expired|failed|error|World ID:|Simulator:/i.test(t) ? 'bad' : 'wait') => {
+  $('status').textContent = t
+  $('status').className = `status ${state === 'ok' ? 'ok' : state === 'bad' ? 'err' : ''}`
+  const m = document.getElementById('mark')
+  if (!m) return
+  m.dataset.state = state
+  m.innerHTML = icon(state === 'ok' ? 'check' : state === 'bad' ? 'warning' : 'fingerprint')
+}
 const broadcast = (m: object) => chrome.runtime.sendMessage(m).catch(() => {})
 let finished = false
 const finish = (after = 0) => {
@@ -48,7 +59,7 @@ const widgetLink = () =>
 async function simulate() {
   let link = widgetLink()
   for (let i = 0; !link && i < 60; i++) (await new Promise((r) => setTimeout(r, 250)), (link = widgetLink()))
-  if (!link) return say('The World ID widget has no request yet — try again in a moment.')
+  if (!link) return say('The World ID widget has no request yet. Try again in a moment.')
   say('World ID simulator is answering…')
   const r = await chrome.runtime.sendMessage({ type: 'WORLD_SIM', connectUrl: link })
   if (!r?.ok) say(`Simulator: ${r?.error ?? 'failed'}`)
@@ -64,8 +75,8 @@ setInterval(() => void chrome.runtime.sendMessage({ type: 'WORLD_WIDGET_PING', i
 async function main() {
   const key = `world:${id}`
   const q = (await chrome.storage.session.get(key))[key] as WorldRequest | undefined
-  if (!q) return say('This verification has expired — go back to the post and press Verify again.')
-  if (q.preset === 'identity') $('what').textContent = `World ID checks your passport's nationality is ${q.attributes?.[0]?.value} — nothing else is shared.`
+  if (!q) return say('This verification has expired. Go back to the post and press Verify again.')
+  if (q.preset === 'identity') $('what').textContent = `Prove your passport says ${q.attributes?.[0]?.value}`
   const preset = q.preset === 'identity' ? identityCheck({ attributes: q.attributes as never, legacy_signal: q.signal })
     : q.preset === 'selfie' ? selfieCheck({ signal: q.signal }) : proofOfHuman({ signal: q.signal })
 
@@ -101,7 +112,7 @@ async function main() {
         }
       },
       onSuccess: () => {
-        say('Verified — back to the post.')
+        say('Verified. Back to the post.', 'ok')
         finish(1200)
       },
       onError: (code: unknown) => void say(`World ID: ${String(code).replace(/_/g, ' ')}`),

@@ -91,7 +91,7 @@ export function toRows(policy) {
     const kk = kind(n)
     if (kk === 'leaf') return [n]
     if (kk === 'or' && n.or.every((c) => kind(c) === 'leaf')) return n.or
-    throw new Error('sealed posts take "a or b, and c or d" rules — nothing nested deeper')
+    throw new Error('sealed posts take "a or b, and c or d" rules, nothing nested deeper')
   }
   const rows = k === 'and' ? policy.and.map(leafList) : [leafList(policy)]
   for (const row of rows) for (const leaf of row) {

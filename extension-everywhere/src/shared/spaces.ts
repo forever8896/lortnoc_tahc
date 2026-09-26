@@ -49,7 +49,7 @@ export async function rememberMember(space: string, memberId: string) {
 /** Ask the gate to countersign a post's HASH as your member name (it never sees the text). */
 export async function attestAsMember(space: string, contentHashHex: string): Promise<{ memberId: string; sig: string }> {
   const m = (await memberships())[space]
-  if (!m?.memberId) throw new Error(`You are not a member of ${space} yet — open one of its posts with World ID first.`)
+  if (!m?.memberId) throw new Error(`You are not a member of ${space} yet. Open one of its posts with World ID first.`)
   const r = await gatePost('/member/sign', {
     space, memberId: m.memberId, contentHash: contentHashHex,
     sig: sign(m.priv, MSG.authorRequest(space, m.memberId, contentHashHex)),
@@ -76,7 +76,7 @@ export async function ensSpaces(): Promise<string[]> {
 }
 export async function addEnsSpace(label: string) {
   const l = label.trim().toLowerCase().replace(/\.space\.lortnoctahc\.eth$/, '')
-  if (!/^[a-z0-9-]{3,32}$/.test(l)) throw new Error('an ENS space label is 3–32 of a-z, 0-9 and -')
+  if (!/^[a-z0-9-]{3,32}$/.test(l)) throw new Error('A space name is 3 to 32 letters, numbers or hyphens.')
   const all = new Set(await ensSpaces())
   all.add(l)
   await chrome.storage.local.set({ [ENS]: [...all].sort() })

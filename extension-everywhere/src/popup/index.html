@@ -2,28 +2,40 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>lortnoc tahc — everywhere</title>
+  <title>lortnoc tahc</title>
   <link rel="stylesheet" href="../shared/ui.css">
   <style>
-    :root, :root body { background: #08080a; } body { width: 300px; } .card { border: 0; border-radius: 0; }
+    :root, :root body { background: var(--bg); } body { width: 312px; } .card { border: 0; border-radius: 0; padding: 16px 16px 14px; }
     .big { width: 100%; margin-top: 8px; padding: 12px; font-size: 15px; }
-    .cog { background: none; border: 1px solid var(--rule); color: var(--muted); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 15px; line-height: 1; }
-    .cog:hover { color: var(--signal); border-color: var(--signal); }
-    .keys { display: flex; justify-content: space-between; gap: 8px; margin-top: 14px; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 12px; background: var(--panel); color: var(--ink); text-decoration: none; font-size: 12.5px; }
-    .keys:hover { border-color: var(--signal); } .keys .go { color: var(--signal); white-space: nowrap; }
+    .big svg.i { font-size: 17px; }
+    .cog { display: grid; place-items: center; background: none; border: 1px solid var(--rule); color: var(--muted); border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 16px;
+      transition: color var(--fast), border-color var(--fast), transform .6s var(--ease); }
+    .cog:hover { color: var(--signal); border-color: var(--signal-line); transform: rotate(90deg); }
+    .hint { margin-top: 10px; font-size: 12px; color: var(--faint); }
+    .hint kbd { font: 500 11px var(--mono); color: var(--muted); border: 1px solid var(--rule); border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px; }
+    .site { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--rule); }
+    .site b { color: var(--ink); font-weight: 500; }
+    .keys { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding: 11px 12px; border: 1px solid var(--rule); border-radius: 12px;
+      background: var(--panel); color: var(--ink); font-size: 12.5px; transition: border-color var(--fast), background var(--fast); }
+    .keys:hover { border-color: var(--signal-line); background: var(--panel-2); }
+    .keys .go { color: var(--signal); display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+    .keys .go svg.i { transition: transform var(--med) var(--ease); } .keys:hover .go svg.i { transform: translateX(3px); }
+    .ks { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 10px; color: var(--muted); }
+    .ks span { display: inline-flex; align-items: center; gap: 5px; } .ks svg.i { color: var(--signal); font-size: 14px; }
+    .big { animation: card-in var(--med) var(--ease) both; } #scan { animation-delay: .05s; }
   </style>
 </head>
 <body>
   <div class="card">
     <div class="hdr">
       <div class="title">lortnoc <b>tahc</b></div>
-      <div class="row" style="gap:6px"><span class="chip" id="health">…</span><button class="cog" id="settings" title="Keys, spaces, sites and settings">⚙</button></div>
+      <div class="row" style="gap:8px"><span class="chip" id="health">checking</span><button class="cog" id="settings" title="Keys, spaces, sites and settings" aria-label="Settings"><i data-icon="gear"></i></button></div>
     </div>
-    <button class="btn big" id="compose">Write hidden</button>
-    <button class="btn btn-ghost big" id="scan">Find hidden posts</button>
-    <div class="small muted" style="margin-top:8px">Or <b id="key">Ctrl+Shift+L</b> in any text box · right-click text → Reveal</div>
-    <label class="toggle" id="siteRow" style="margin-top:12px" hidden><input type="checkbox" id="site"> <span>Always on for <b id="siteName"></b> <span class="muted">— checks every page for posts meant for you</span></span></label>
-    <a href="#" class="keys" id="keys"><span id="keySummary">Your keys…</span><span class="go">Manage →</span></a>
+    <button class="btn big" id="compose"><i data-icon="pencil"></i>Write hidden</button>
+    <button class="btn btn-ghost big" id="scan"><i data-icon="magnifier"></i>Find hidden posts</button>
+    <div class="hint">Or press <kbd id="key">Ctrl+Shift+L</kbd> in any text box. Right-click text to reveal it.</div>
+    <label class="toggle site" id="siteRow" hidden><input type="checkbox" id="site"><span><b>Always on for <span id="siteName"></span></b><br>Checks every page for posts meant for you</span></label>
+    <a href="#" class="keys" id="keys"><span id="keySummary" class="ks">Your keys</span><span class="go">Manage <i data-icon="arrow"></i></span></a>
     <div class="status" id="status"></div>
   </div>
   <script type="module" src="./popup.ts"></script>

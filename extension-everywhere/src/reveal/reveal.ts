@@ -10,6 +10,33 @@ import { readAuthor } from '../../../shared/member.mjs'
 import { memberKey, rememberMember, ownedSpaces, banMember, ensKeys } from '../shared/spaces'
 import { writeBan } from '../shared/ensWrite'
 import type { DecodeData, FrameToContent } from '../shared/messages'
+import { icon, hydrateIcons } from '../shared/icons'
+
+hydrateIcons()
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
+
+/** The decode moment: glyphs settle left to right into the message. The real text is in #plain from
+ *  the first frame (for screen readers and anything reading the DOM); this only draws over it. */
+function decodeEffect(target: HTMLElement, text: string) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches || !text) return
+  const layer = Object.assign(document.createElement('div'), { className: 'plain scramble' })
+  layer.setAttribute('aria-hidden', 'true')
+  target.parentElement!.append(layer)
+  target.classList.add('decoding')
+  const glyphs = 'abcdefghijklmnopqrstuvwxyz' // same widths as the message, so the layout never jumps
+  const total = Math.min(900, 260 + text.length * 14)
+  const t0 = performance.now()
+  const frame = (t: number) => {
+    const k = Math.min(1, (t - t0) / total)
+    const settled = Math.floor(k * text.length)
+    let out = text.slice(0, settled)
+    for (let i = settled; i < text.length; i++) out += /\s/.test(text[i]) ? text[i] : glyphs[(Math.random() * glyphs.length) | 0]
+    layer.textContent = out
+    if (k < 1) requestAnimationFrame(frame)
+    else (layer.remove(), target.classList.remove('decoding'))
+  }
+  requestAnimationFrame(frame)
+}
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
 const toParent = (m: FrameToContent) => parent.postMessage(m, '*')
@@ -79,10 +106,10 @@ async function worldProof({ check, ref, readerPub, policyHash }: { check: string
   $('sim').hidden = true
   const app = q.environment === 'production' ? 'World App' : q.environment === 'sandbox' ? 'the World ID (Sandbox) app' : 'World ID'
   $('worldHow').textContent = wantsSim
-    ? "World ID opened in a new tab — the simulator is answering it (staging demo, no phone)."
+    ? "World ID opened in a new tab. The simulator is answering it (staging demo, no phone)."
     : q.preset === 'identity'
-      ? `World ID opened in a new tab — scan its code with ${app}. It checks your passport's nationality is ${q.attributes?.[0]?.value}; nothing else is shared.`
-      : `World ID opened in a new tab — scan its code with ${app}. Only that you're a unique human is shared.`
+      ? `World ID opened in a new tab. Scan its code with ${app}. It checks your passport's nationality is ${q.attributes?.[0]?.value}; nothing else is shared.`
+      : `World ID opened in a new tab. Scan its code with ${app}. Only that you're a unique human is shared.`
   fit()
 
   const result = await new Promise<unknown>((resolve, reject) => {
@@ -125,11 +152,13 @@ async function show(raw: string, obfuscationOnly: boolean) {
   const g = await sw<GateHealth>({ type: 'GATE_HEALTH' })
   const { text, author } = readAuthor(raw, g.ok ? g.data.signPub : '')
   $('plain').textContent = text
+  decodeEffect($('plain'), text)
   if (author) {
     $('author').hidden = false
-    $('author').textContent = author.verified
-      ? `✓ verified member ${author.memberId} · ${author.space}`
-      : `⚠ claims to be ${author.memberId} of ${author.space} — the signature does not check out`
+    $('author').className = `small author ${author.verified ? 'ok' : 'bad'}`
+    $('author').innerHTML = author.verified
+      ? `${icon('seal')}Verified member <b>${esc(author.memberId)}</b> of ${esc(author.space)}`
+      : `${icon('warning')}Claims to be ${esc(author.memberId)} of ${esc(author.space)}, but the signature does not check out`
     const isEns = author.space.startsWith('@')
     const ensKey = isEns ? (await ensKeys())[author.space.slice(1)] : undefined
     const mine = isEns ? ensKey : (await ownedSpaces())[author.space]
@@ -145,7 +174,7 @@ async function show(raw: string, obfuscationOnly: boolean) {
             b.textContent = 'Writing the ban to ENS…'
             await writeBan(author.space, author.memberId, ensKey.priv)
           } else await banMember(author.space, author.memberId)
-          b.textContent = `${author.memberId} is banned — they cannot rejoin, even with a new account`
+          b.textContent = `${author.memberId} is banned. They cannot rejoin, even with a new account.`
           b.disabled = true
         } catch (e) {
           setStatus(e instanceof Error ? e.message : String(e), 'err')
@@ -154,10 +183,11 @@ async function show(raw: string, obfuscationOnly: boolean) {
     }
   } else if (postSpace) {
     $('author').hidden = false
-    $('author').textContent = `unverified writer — not signed by a member of ${postSpace}`
+    $('author').className = 'small author bad'
+    $('author').innerHTML = `${icon('warning')}Unverified writer: not signed by a member of ${esc(postSpace)}`
   }
   $('note').textContent = obfuscationOnly
-    ? 'Anyone with the extension can read this one — it was hidden, not locked.'
+    ? 'Anyone with the extension can read this one. It was hidden, not locked.'
     : 'Only readers who meet the author’s checks can see this.'
   setStatus('')
   fit()
@@ -182,7 +212,7 @@ async function attempt() {
 
 async function main() {
   const hash = location.hash
-  if (hash === '#none') return setStatus('Nothing on this page opens with your keys. Add passphrases, World ID or a wallet in the extension — posts meant for you then appear by themselves.'), fit()
+  if (hash === '#none') return setStatus('Nothing on this page opens with your keys. Add passphrases, World ID or a wallet in the extension, and posts meant for you appear by themselves.'), fit()
   if (hash.startsWith('#s=')) {
     // A sealed post the keyring already opened (background/sealed.ts) — the text never touched the page.
     const r = await sw<{ text: string; checks: string[]; obfuscationOnly: boolean; members: { space: string }[] }>({ type: 'SEALED_GET', id: hash.slice(3) })
@@ -194,7 +224,7 @@ async function main() {
     for (const id of ['pass', 'identity', 'verifyHuman', 'simHuman', 'proveNft']) $(id).hidden = true
     await show(r.data.text, r.data.obfuscationOnly)
     $('note').textContent = r.data.obfuscationOnly
-      ? 'Anyone with the extension can read this one — it was hidden, not locked.'
+      ? 'Anyone with the extension can read this one. It was hidden, not locked.'
       : `Opened with your keys · ${(r.data.checks ?? []).join(' · ')}. Nobody without them can even tell it is a message.`
     return fit()
   }
@@ -206,14 +236,14 @@ async function main() {
   if (!r.ok) {
     return setStatus(
       r.error === 'not-cover'
-        ? 'This isn’t a lortnoc message — or the site changed it.'
+        ? 'This isn’t a lortnoc message, or the site changed it.'
         : `Couldn’t reach the codec: ${r.error}`,
       'err',
     ), fit()
   }
   frame = fromB64(r.data.ciphertext)
   const info = inspect(frame)
-  if (!info) return setStatus('This is a lortnoc message from another surface (X or Telegram) — open it there.', 'err'), fit()
+  if (!info) return setStatus('This is a lortnoc message from another surface (X or Telegram). Open it there.', 'err'), fit()
   if (info.unsupported) return setStatus('This message needs a newer version of the extension.', 'err'), fit()
 
   $('checks').textContent = `Locked · ${(info.checks ?? []).join(' · ')}`

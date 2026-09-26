@@ -24,7 +24,7 @@ export function createSpaces(db, { secret, signPriv, ensSpaces = null }) {
 
     /** Register a space to an owner key. The signature proves the caller holds that key. */
     register({ space, ownerPub, sig }) {
-      if (!SPACE_RE.test(space ?? '') || space.startsWith('@')) throw httpError(400, 'space names are 3–32 of a-z 0-9 -')
+      if (!SPACE_RE.test(space ?? '') || space.startsWith('@')) throw httpError(400, 'space names are 3 to 32 letters, numbers or hyphens')
       if (!HEX64.test(ownerPub ?? '')) throw httpError(400, 'bad ownerPub')
       if (!verifySig(ownerPub, MSG.register(space, ownerPub), sig ?? '')) throw httpError(403, 'bad signature')
       const row = db.prepare('SELECT owner_pub FROM spaces WHERE space = ?').get(space)

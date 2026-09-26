@@ -2,14 +2,21 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>lortnoc tahc — reveal</title>
+  <title>lortnoc tahc</title>
   <link rel="stylesheet" href="../shared/ui.css">
+  <style>
+    .plain-wrap { position: relative; }
+    .plain.decoding { color: transparent; }
+    .scramble { position: absolute; inset: 0; overflow: hidden; color: var(--signal); animation: none; background: transparent; border-color: transparent; pointer-events: none; }
+    .author { display: flex; align-items: center; gap: 6px; } .author b { font-weight: 500; }
+    .author.ok { color: var(--signal); } .author.bad { color: var(--warn); } .author svg.i { font-size: 15px; }
+  </style>
 </head>
 <body>
   <div class="card">
     <div class="hdr">
       <div class="title">lortnoc <b>tahc</b></div>
-      <button class="x" id="close" title="Close (Esc)">×</button>
+      <button class="x" id="close" title="Close (Esc)" aria-label="Close"><i data-icon="x"></i></button>
     </div>
     <div class="status" id="status">Reading…</div>
     <div id="needs" hidden>
@@ -17,14 +24,14 @@
       <div id="pass" hidden>
         <div class="row">
           <input type="password" id="pw" placeholder="Passphrase" autocomplete="off">
-          <button class="btn btn-small" id="try">Open</button>
+          <button class="btn btn-small" id="try"><i data-icon="unlock"></i>Open</button>
         </div>
       </div>
       <div id="world" hidden>
         <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">
           <div>
             <div style="font-weight:500">Prove you're a real human</div>
-            <div class="small muted" id="worldHow">Scan with World App. Nothing about who you are is shared — only that you're a unique human.</div>
+            <div class="small muted" id="worldHow">Scan with World App. Nothing about who you are is shared, only that you're a unique human.</div>
           </div>
         </div>
         <div class="row" style="margin-top:8px;flex-wrap:wrap">
@@ -32,15 +39,15 @@
           <button class="btn btn-ghost btn-small" id="cancelWorld">Cancel</button>
         </div>
       </div>
-      <button class="btn btn-small" id="verifyHuman" hidden style="margin-top:8px">Verify with World ID</button>
+      <button class="btn btn-small" id="verifyHuman" hidden style="margin-top:8px"><i data-icon="fingerprint"></i>Verify with World ID</button>
       <button class="btn btn-ghost btn-small" id="simHuman" hidden style="margin-top:8px">Try with the World ID simulator (demo)</button>
-      <button class="btn btn-small" id="proveNft" hidden style="margin-top:8px">Prove I hold the NFT</button>
-      <div class="small muted" id="identity" hidden>Named-people posts open with your lortnoc identity — coming with the identity update.</div>
+      <button class="btn btn-small" id="proveNft" hidden style="margin-top:8px"><i data-icon="wallet"></i>Prove I hold the NFT</button>
+      <div class="small muted" id="identity" hidden>Named-people posts open with your lortnoc identity, coming with the identity update.</div>
     </div>
     <div id="out" hidden>
       <div class="small" id="author" hidden style="margin-bottom:6px"></div>
-      <div class="plain" id="plain"></div>
-      <button class="btn btn-ghost btn-small" id="ban" hidden style="margin-top:8px"></button>
+      <div class="plain-wrap"><div class="plain" id="plain"></div></div>
+      <button class="btn btn-ghost btn-small" id="ban" hidden style="margin-top:10px"></button>
       <div class="small muted" id="note" style="margin-top:8px"></div>
     </div>
   </div>

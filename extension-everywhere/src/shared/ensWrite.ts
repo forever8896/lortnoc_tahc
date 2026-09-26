@@ -31,7 +31,7 @@ const pub = () => createPublicClient({ chain: sepolia, transport: http(SEPOLIA_R
 
 async function resolverOf(name: string) {
   const r = await pub().getEnsResolver({ name })
-  if (!r) throw new Error(`${name} has no resolver — does the space exist?`)
+  if (!r) throw new Error(`${name} has no resolver. Does the space exist?`)
   return r
 }
 
@@ -45,7 +45,7 @@ async function send(privHex: `0x${string}`, name: string, data: `0x${string}`) {
   const tip = fees.maxPriorityFeePerGas > 50_000_000n ? fees.maxPriorityFeePerGas : 50_000_000n
   const hash = await w.sendTransaction({ to, data, maxPriorityFeePerGas: tip, maxFeePerGas: fees.maxFeePerGas + tip })
   const r = await c.waitForTransactionReceipt({ hash, timeout: 120_000 })
-  if (r.status !== 'success') throw new Error('the ENS write reverted — is this key the owner or a moderator?')
+  if (r.status !== 'success') throw new Error('The ENS write reverted. Is this key the owner or a moderator?')
   return hash
 }
 

@@ -8,6 +8,13 @@
 import type { FrameToContent, ContentToFrame } from '../shared/messages'
 import { collectBlocks, confirmPosts } from './scan'
 import { insertCover, editableTarget, editableFrom } from './insert'
+import { iconNode } from './icons'
+
+const EASE = 'cubic-bezier(.16,1,.3,1)'
+const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches
+/** Enter with a short rise, unless the reader asked for less motion. */
+const enter = (el: Element, from = 'translateY(4px) scale(.96)') =>
+  still() || el.animate([{ opacity: 0, transform: from }, { opacity: 1, transform: 'none' }], { duration: 380, easing: EASE })
 
 type Action = { action: 'compose' } | { action: 'reveal'; text: string } | { action: 'scan' }
 
@@ -41,6 +48,7 @@ function openFrame(page: 'sheet' | 'reveal', hash = '', anchor?: DOMRect) {
     boxShadow: '0 18px 60px rgba(0,0,0,0.45)', background: 'transparent',
   } as CSSStyleDeclaration)
   document.documentElement.appendChild(f)
+  enter(f, 'translateY(8px) scale(.98)')
   frame = f
 }
 
@@ -63,18 +71,22 @@ function addChip(block: HTMLElement, sealedId?: string) {
   const chip = document.createElement('button')
   chip.type = 'button'
   chip.dataset.lortnocChip = '1'
-  chip.textContent = sealedId ? '🔓 Hidden message for you' : '🔒 Reveal'
-  chip.title = sealedId ? 'lortnoc tahc — your keyring opened this' : 'lortnoc tahc — try to open this'
+  chip.append(iconNode(sealedId ? 'unlock' : 'lock', '13px'), sealedId ? 'Hidden message for you' : 'Reveal')
+  chip.title = sealedId ? 'Hidden message: your keys open it' : 'Try to open this hidden message'
   Object.assign(chip.style, {
-    font: '600 12px/1 system-ui, sans-serif', padding: '4px 8px', margin: '4px 0',
-    borderRadius: '999px', border: '1px solid #12C4BE', background: '#12C4BE', color: '#000', cursor: 'pointer',
+    display: 'inline-flex', alignItems: 'center', gap: '6px', font: '500 12px/1 system-ui, sans-serif', padding: '6px 11px 6px 9px', margin: '6px 0',
+    borderRadius: '999px', border: '1px solid rgba(18,196,190,.55)', background: '#0b0f10', color: '#12C4BE', cursor: 'pointer',
+    boxShadow: '0 4px 14px -6px rgba(18,196,190,.5)', transition: `background .18s, color .18s, transform .18s ${EASE}, box-shadow .3s ${EASE}`,
   } as CSSStyleDeclaration)
+  chip.addEventListener('mouseenter', () => Object.assign(chip.style, { background: '#12C4BE', color: '#001514', transform: 'translateY(-1px)', boxShadow: '0 8px 22px -8px rgba(18,196,190,.8)' }))
+  chip.addEventListener('mouseleave', () => Object.assign(chip.style, { background: '#0b0f10', color: '#12C4BE', transform: 'none', boxShadow: '0 4px 14px -6px rgba(18,196,190,.5)' }))
   chip.addEventListener('click', (ev) => {
     ev.preventDefault()
     ev.stopPropagation()
     openFrame('reveal', sealedId ? `#s=${sealedId}` : `#t=${encodeURIComponent(block.innerText)}`, chip.getBoundingClientRect())
   })
   block.insertAdjacentElement('afterend', chip)
+  enter(chip)
 }
 
 /** A small progress note in the corner — page-visible, but it says nothing about any message. */
@@ -85,21 +97,27 @@ function toast(text: string | null) {
     t = document.createElement('div')
     t.id = 'lortnoc-scan-toast'
     Object.assign(t.style, {
-      position: 'fixed', right: '16px', bottom: '16px', zIndex: Z, padding: '10px 14px', borderRadius: '10px',
-      background: '#08080a', color: '#edeae4', font: '400 13px system-ui, sans-serif', boxShadow: '0 8px 30px rgba(0,0,0,.4)',
+      position: 'fixed', right: '16px', bottom: '16px', zIndex: Z, padding: '10px 14px 10px 12px', borderRadius: '12px',
+      display: 'flex', alignItems: 'center', gap: '9px', border: '1px solid rgba(237,234,228,.12)',
+      background: 'rgba(8,8,10,.92)', color: '#edeae4', font: '400 13px system-ui, sans-serif', boxShadow: '0 18px 40px -12px rgba(0,0,0,.6)',
     } as CSSStyleDeclaration)
+    const i = iconNode('magnifier', '15px')
+    i.style.color = '#12C4BE'
+    if (!still()) i.animate([{ opacity: 1 }, { opacity: 0.35 }, { opacity: 1 }], { duration: 1400, iterations: Infinity })
+    t.append(i, document.createElement('span'))
     document.documentElement.appendChild(t)
+    enter(t, 'translateY(10px)')
   }
-  t.textContent = text
+  t.lastElementChild!.textContent = text
 }
 
 /** Deep scan: collect text blocks here; the service worker filters by shape and asks the codec. */
 async function scan(quiet = false): Promise<number> {
   const blocks = collectBlocks(document.body).filter((b) => !b.dataset.lortnocChip && !b.dataset.lortnocSeen)
   if (!blocks.length) return 0
-  if (!quiet) toast('lortnoc tahc · looking for hidden posts…')
+  if (!quiet) toast('Looking for hidden posts…')
   // quiet (automatic) scans stay silent unless they take a while — the codec needs seconds per post
-  const slow = quiet ? setTimeout(() => toast('lortnoc tahc · checking this page for hidden posts…'), 1200) : undefined
+  const slow = quiet ? setTimeout(() => toast('Checking this page for hidden posts…'), 1200) : undefined
   // mark BEFORE asking: a scan takes seconds, and our own chips/toast trigger the observer meanwhile
   for (const b of blocks) b.dataset.lortnocSeen = '1'
   const got = await confirmPosts(blocks).catch(() => {
@@ -111,7 +129,7 @@ async function scan(quiet = false): Promise<number> {
   const found = [...got.sealed.map((x) => x.el), ...got.legacy]
   clearTimeout(slow)
   if (found.length || !quiet || slow) {
-    toast(found.length ? `lortnoc tahc · ${found.length} hidden ${found.length === 1 ? 'message' : 'messages'} for you` : null)
+    toast(found.length ? `${found.length} hidden ${found.length === 1 ? 'message' : 'messages'} for you` : null)
     setTimeout(() => toast(null), 2500)
   }
   return found.length
@@ -167,12 +185,15 @@ function showPill(box: HTMLElement) {
     pill = document.createElement('button')
     pill.type = 'button'
     pill.dataset.lortnocChip = '1'
-    pill.textContent = '🔒'
-    pill.title = 'Write this hidden — lortnoc tahc'
+    pill.append(iconNode('lock', '15px'))
+    pill.title = 'Write this hidden'
     Object.assign(pill.style, {
       position: 'fixed', zIndex: Z, width: '28px', height: '28px', borderRadius: '50%', border: '0', cursor: 'pointer',
-      background: '#12C4BE', color: '#000', font: '14px/28px system-ui', padding: '0', boxShadow: '0 4px 14px rgba(0,0,0,.3)',
+      placeItems: 'center', background: '#12C4BE', color: '#001514', padding: '0',
+      boxShadow: '0 6px 18px -6px rgba(18,196,190,.75), 0 2px 6px rgba(0,0,0,.25)', transition: `transform .25s ${EASE}`,
     } as CSSStyleDeclaration)
+    pill.addEventListener('mouseenter', () => (pill!.style.transform = 'scale(1.1)'))
+    pill.addEventListener('mouseleave', () => (pill!.style.transform = 'none'))
     // mousedown, not click: keep focus in the box so it stays the target
     pill.addEventListener('mousedown', (e) => {
       e.preventDefault()
@@ -186,7 +207,9 @@ function showPill(box: HTMLElement) {
   const r = box.getBoundingClientRect()
   pill.style.left = `${Math.min(r.right - 34, innerWidth - 36)}px`
   pill.style.top = `${Math.max(4, r.bottom - 34)}px`
-  pill.style.display = 'block'
+  const shown = pill.style.display === 'grid'
+  pill.style.display = 'grid'
+  if (!shown) enter(pill, 'scale(.6)')
 }
 function hidePill() {
   if (pill) pill.style.display = 'none'

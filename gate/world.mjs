@@ -170,7 +170,7 @@ export function createWorld({
       // allows the v3 fallback, and verified by World's API (v3 has no on-chain verifier; the portal checks
       // it through its sequencer: developer-portal web/api/v4/verify/uniqueness-proof/verify-v3.ts).
       const v3 = proof?.protocol_version === '3.0'
-      if (v3 && preset !== 'identity') return deny('protocol', 'World ID 3.0 is accepted only for nationality checks — this one needs 4.0', { got: '3.0' })
+      if (v3 && preset !== 'identity') return deny('protocol', 'World ID 3.0 is accepted only for nationality checks. This one needs 4.0.', { got: '3.0' })
       const r0 = all.find((r) => (v3 ? V3_DOCUMENT_CREDENTIALS.has(r?.identifier)
         : preset === 'identity' ? DOCUMENT_CREDENTIALS.has(r?.identifier) || DOCUMENT_SCHEMAS.has(Number(r?.issuer_schema_id))
         : r?.identifier === CREDENTIAL[preset])) ?? all[0]

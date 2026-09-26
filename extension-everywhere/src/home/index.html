@@ -10,7 +10,6 @@
     :root, :root body { background: var(--bg); }
     body { min-height: 100vh; font-size: 15px; }
     .shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 100vh; }
-    @media (max-width: 860px) { .shell { grid-template-columns: 1fr; } nav.side { position: static !important; height: auto !important; flex-direction: row !important; flex-wrap: wrap; align-items: center; border-right: 0 !important; border-bottom: 1px solid var(--rule); } .side-foot { display: none; } .brand { margin: 0 12px 0 4px !important; } }
 
     /* ---- sidebar ---- */
     nav.side { position: sticky; top: 0; height: 100vh; border-right: 1px solid var(--rule); padding: 28px 16px; display: flex; flex-direction: column; gap: 4px;
@@ -111,25 +110,61 @@
     .item { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--bg); border: 1px solid var(--rule); border-radius: 12px; padding: 10px 12px; font-size: 13.5px; }
     .item button { background: none; border: 0; color: var(--faint); cursor: pointer; font-size: 16px; } .item button:hover { color: var(--bad); }
     .state { font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+    /* ---- motion + polish ---- */
+    nav.side { position: sticky; }
+    .navlink { position: relative; z-index: 1; transition: color var(--fast), background var(--fast); }
+    .navlink.on { background: none; }
+    .navlink svg.i { transition: transform var(--med) var(--ease); } .navlink:hover svg.i { transform: scale(1.12); }
+    .nav-ind { position: absolute; left: 0; top: 0; z-index: 0; border-radius: 12px; background: rgba(18,196,190,.12); box-shadow: inset 0 0 0 1px rgba(18,196,190,.18);
+      transition: transform .45s var(--ease), width .45s var(--ease), height .45s var(--ease); pointer-events: none; }
+    section.view.on { animation: none; }
+    section.view.on .card, section.view.on .hero, section.view.on h1, section.view.on .lede, section.view.on .h-sec, section.view.on .sp, section.view.on .empty {
+      animation: card-in .55s var(--ease) both; animation-delay: calc(var(--i, 0) * 55ms); }
+    .card { position: relative; transition: border-color var(--med) var(--ease), transform var(--med) var(--ease); }
+    .card::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity var(--med) var(--ease);
+      background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 0%), rgba(18,196,190,.09), transparent 45%); }
+    .card:hover { border-color: rgba(237,234,228,.2); } .card:hover::before { opacity: 1; }
+    .card > * { position: relative; }
+    .grid.three .card .badges { flex: 1; align-content: flex-start; }
+    .none { font-size: 13px; color: var(--faint); }
+    .badge { animation: card-in .4s var(--ease) both; } .badge svg.i { font-size: 13px; }
+    .badge button { display: inline-grid; place-items: center; }
+    .ico { transition: transform var(--med) var(--ease), background var(--med); } .card:hover .ico { transform: translateY(-2px) rotate(-6deg); background: rgba(18,196,190,.16); }
+    .ico svg.i { width: 20px; height: 20px; }
+    .feat { transition: border-color var(--fast), background var(--fast), transform var(--med) var(--ease); } .feat:hover { border-color: var(--signal-line); background: var(--signal-soft); transform: translateY(-1px); }
+    .namecard { transition: transform .6s var(--ease), box-shadow .6s var(--ease); will-change: transform; }
+    .hero:hover .namecard { transform: perspective(900px) rotateY(-5deg) rotateX(3deg) translateY(-3px); box-shadow: 0 40px 70px -24px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.06); }
+    .nc-mark svg.i { font-size: 22px; } .nc-mark { font-size: 20px; transition: transform .5s var(--ease); } .hero:hover .nc-mark { transform: rotate(-8deg) scale(1.05); }
+    .num { position: relative; transition: background var(--med) var(--ease), border-color var(--med), color var(--med); }
+    .num svg.i { position: absolute; font-size: 15px; opacity: 0; transform: scale(.4); transition: opacity var(--med), transform var(--med) var(--ease); }
+    .num span { transition: opacity var(--fast); }
+    .step.done .num span { opacity: 0; } .step.done .num svg.i { opacity: 1; transform: none; }
+    .check { transition: color var(--fast); } .check:not(:empty) { animation: fade-up var(--med) var(--ease); }
+    .sp { transition: border-color var(--med), transform var(--med) var(--ease), background var(--med); } .sp:hover { border-color: var(--signal-line); transform: translateY(-2px); background: var(--panel-2); }
+    .item { transition: border-color var(--fast); } .item:hover { border-color: var(--rule-2); }
+    .item button { display: inline-grid; place-items: center; }
+    .item .ok { color: var(--signal); } .item .bad { color: var(--warn); } .item span { display: inline-flex; align-items: center; gap: 6px; }
+    .dot { transition: background var(--med), box-shadow var(--med); } .dot.ok { animation: breathe 3s ease-in-out infinite; }
+
+    @media (max-width: 860px) {
+      .shell { grid-template-columns: 1fr; }
+      nav.side { position: sticky !important; top: 0; z-index: 5; height: auto !important; flex-direction: row !important; flex-wrap: wrap; align-items: center; border-right: 0 !important;
+        border-bottom: 1px solid var(--rule); padding: 14px 16px !important; background: rgba(8,8,10,.86) !important; backdrop-filter: blur(14px); }
+      .side-foot { display: none; }
+      .brand { margin: 0 12px 0 4px !important; }
+      main { padding-top: 28px; }
+    }
+    @media (max-width: 520px) { .brand { width: 100%; margin: 0 0 8px 4px !important; } .hero { padding: 24px 20px; } .step { grid-template-columns: 28px minmax(0, 1fr); gap: 10px; } }
   </style>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute">
-  <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.7-8.7M16 7l3 3M18.5 4.5 21 7"/></symbol>
-  <symbol id="i-spaces" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3 21 8v8l-9 5-9-5V8z"/><path d="m3 8 9 5 9-5M12 13v8"/></symbol>
-  <symbol id="i-cog" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></symbol>
-  <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
-  <symbol id="i-wallet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18M16 14.5h2"/></symbol>
-  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
-  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6"/></symbol>
-  <symbol id="i-ban" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><path d="m6 6 12 12"/></symbol>
-</svg>
 <div class="shell">
   <nav class="side">
+    <span class="nav-ind" aria-hidden="true"></span>
     <div class="brand">lortnoc <b>tahc</b></div>
-    <button class="navlink on" data-v="keys"><svg><use href="#i-key"/></svg>Keys</button>
-    <button class="navlink" data-v="spaces"><svg><use href="#i-spaces"/></svg>Spaces</button>
-    <button class="navlink" data-v="settings"><svg><use href="#i-cog"/></svg>Settings</button>
+    <button class="navlink on" data-v="keys"><i data-icon="key"></i>Keys</button>
+    <button class="navlink" data-v="spaces"><i data-icon="cube"></i>Spaces</button>
+    <button class="navlink" data-v="settings"><i data-icon="gear"></i>Settings</button>
     <div class="side-foot">
       <div class="sfrow"><span class="dot" id="dCodec"></span>Codec</div>
       <div class="sfrow"><span class="dot" id="dGate"></span>Gate</div>
@@ -144,13 +179,13 @@
       <p class="lede">Posts meant for you open by themselves.</p>
       <div class="grid three">
         <div class="card">
-          <div class="card-h"><span class="ico"><svg><use href="#i-key"/></svg></span><div><h2>Passphrases</h2><p class="one">Words you were given</p></div></div>
+          <div class="card-h"><span class="ico"><i data-icon="key"></i></span><div><h2>Passphrases</h2><p class="one">Words you were given</p></div></div>
           <div class="badges" id="passList"></div>
           <div class="row push"><input type="password" id="passIn" placeholder="Add a passphrase" autocomplete="off"><button class="btn btn-small" id="addPass">Add</button></div>
           <div class="msg" id="passMsg"></div>
         </div>
         <div class="card">
-          <div class="card-h"><span class="ico"><svg><use href="#i-globe"/></svg></span><div><h2>World ID</h2><p class="one">Prove once, privately</p></div></div>
+          <div class="card-h"><span class="ico"><i data-icon="fingerprint"></i></span><div><h2>World ID</h2><p class="one">Prove once, privately</p></div></div>
           <div class="badges" id="worldBadges"></div>
           <div class="row wrap"><button class="btn btn-ghost btn-small" id="wHuman">Verified human</button><button class="btn btn-ghost btn-small" id="wSelfie">Selfie</button></div>
           <div class="row"><select id="natSel"></select><button class="btn btn-ghost btn-small" id="wNat">Prove</button></div>
@@ -158,7 +193,7 @@
           <div class="msg" id="worldMsg"></div>
         </div>
         <div class="card">
-          <div class="card-h"><span class="ico"><svg><use href="#i-wallet"/></svg></span><div><h2>Wallets</h2><p class="one">Unlock NFT holder posts</p></div></div>
+          <div class="card-h"><span class="ico"><i data-icon="wallet"></i></span><div><h2>Wallets</h2><p class="one">Unlock NFT holder posts</p></div></div>
           <div class="badges" id="walletList"></div>
           <button class="btn btn-ghost btn-small push" id="wallet">Connect wallet</button>
           <div class="msg" id="walletMsg"></div>
@@ -173,17 +208,17 @@
         <div>
           <div class="eyebrow2">NFT Spaces</div>
           <h2>A private channel for&nbsp;your&nbsp;holders.</h2>
-          <p>Post anywhere on the web. Only wallets holding your collection can read it — to everyone else it's an ordinary post.</p>
+          <p>Post anywhere on the web. Only wallets holding your collection can read it. To everyone else it's an ordinary post.</p>
           <div class="feats">
-            <span class="feat"><svg><use href="#i-lock"/></svg>Holders only</span>
-            <span class="feat"><svg><use href="#i-check"/></svg>Verified members</span>
-            <span class="feat"><svg><use href="#i-ban"/></svg>On-chain bans</span>
+            <span class="feat"><i data-icon="lock"></i>Holders only</span>
+            <span class="feat"><i data-icon="seal"></i>Verified members</span>
+            <span class="feat"><i data-icon="ban"></i>On-chain bans</span>
           </div>
           <div class="price"><b id="priceNow">0.005 ETH</b><s id="priceWas" hidden></s><span id="priceNote">once · yours as an ENS name</span></div>
           <div class="early" id="early" hidden></div>
         </div>
         <div class="namecard">
-          <div class="nc-top"><div class="nc-mark" id="ncMark">◆</div><span class="nc-tag">ENS v2</span></div>
+          <div class="nc-top"><div class="nc-mark" id="ncMark"><i data-icon="cube"></i></div><span class="nc-tag">ENS v2</span></div>
           <div class="nc-name" id="ncName">yourspace<span>.space.lortnoctahc.eth</span></div>
           <div class="nc-rows">
             <div>Readers <b id="ncCol">holders of your collection</b></div>
@@ -196,22 +231,22 @@
       <div class="card builder">
         <div class="steps">
           <div class="step" id="s1">
-            <div class="num">1</div>
+            <div class="num"><span>1</span><i data-icon="check"></i></div>
             <div><h3>Name your space</h3>
               <div class="suffix"><input type="text" id="buyName" placeholder="yourspace" spellcheck="false" autocomplete="off"><span>.space.lortnoctahc.eth</span></div>
               <div class="check" id="nameCheck"></div></div>
           </div>
           <div class="step" id="s2">
-            <div class="num">2</div>
+            <div class="num"><span>2</span><i data-icon="check"></i></div>
             <div><h3>Your NFT collection</h3>
               <div class="row"><select id="nftChain" style="flex:0 0 140px"><option value="1">Ethereum</option><option value="8453">Base</option><option value="10">Optimism</option><option value="11155111">Sepolia</option><option value="84532">Base Sepolia</option></select><input type="text" id="nftAddress" placeholder="Contract address 0x…" spellcheck="false"></div>
               <div class="check" id="colCheck"></div>
               <a href="#" class="quiet" id="useDemoPass">Try it with our demo collection</a></div>
           </div>
           <div class="step" id="s3">
-            <div class="num">3</div>
+            <div class="num"><span>3</span><i data-icon="check"></i></div>
             <div><h3>Create it</h3>
-              <p class="quiet" style="margin:0 0 10px">Paid in ETH on Ethereum mainnet. Your space is yours — its own ENS name, owned by a key only this extension holds.</p>
+              <p class="quiet" style="margin:0 0 10px">Paid in ETH on Ethereum mainnet. Your space is yours: its own ENS name, owned by a key only this extension holds.</p>
               <button class="btn cta" id="buy" disabled>Create space · 0.005 ETH</button>
               <div class="track" id="track"><div>Payment</div><div>ENS name</div><div>Ready</div></div>
               <div class="msg" id="buyState"></div></div>

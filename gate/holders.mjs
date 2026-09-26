@@ -26,7 +26,7 @@ export function parseCaip19(s) {
 
 /** What a reader signs to add a wallet to their keyring (once, not per post). */
 export const connectText = (readerPub, nonce) =>
-  `lortnoc tahc — connect this wallet to your keyring\nreader: ${readerPub}\nnonce: ${nonce}\n\nSigning costs nothing and moves nothing. Posts for holders of your NFTs will open for you.`
+  `lortnoc tahc: connect this wallet to your keyring\nreader: ${readerPub}\nnonce: ${nonce}\n\nSigning costs nothing and moves nothing. Posts for holders of your NFTs will open for you.`
 
 export async function walletSigned({ message, address, sig }) {
   try {
@@ -37,7 +37,7 @@ export async function walletSigned({ message, address, sig }) {
 }
 
 export const challengeText = (spaceName, ref, readerPub, nonce) =>
-  `lortnoc tahc — prove you hold this space's NFT\nspace: ${spaceName}\npost: ${ref}\nreader: ${readerPub}\nnonce: ${nonce}\n\nSigning costs nothing and moves nothing.`
+  `lortnoc tahc: prove you hold this space's NFT\nspace: ${spaceName}\npost: ${ref}\nreader: ${readerPub}\nnonce: ${nonce}\n\nSigning costs nothing and moves nothing.`
 
 export function createHolders({ ensSpaces, balanceOf, now = () => Date.now() } = {}) {
   const balance = balanceOf ?? (async ({ chainId, address }, holder) => {

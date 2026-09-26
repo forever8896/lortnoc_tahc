@@ -1,9 +1,12 @@
-// The full page (the popup's ⚙): Keys, Spaces, Settings. The popup keeps only what is used on a
+// The full page (the popup's gear): Keys, Spaces, Settings. The popup keeps only what is used on a
 // page — write hidden, find hidden posts, always on for this site.
 import { sw, LOCAL, DEFAULT_CODEC_URL, DEFAULT_GATE_URL } from '../shared/messages'
 import type { HealthData, GateHealth } from '../shared/messages'
 import { memberships, ensSpaces, ensKeys } from '../shared/spaces'
 import { COUNTRIES } from '../shared/countries'
+import { icon, hydrateIcons } from '../shared/icons'
+
+hydrateIcons()
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
 const esc = (t: string) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -26,7 +29,27 @@ function go(v: string) {
   document.querySelectorAll<HTMLElement>('.navlink').forEach((n) => n.classList.toggle('on', `v-${n.dataset.v}` === sec.id))
   history.replaceState(null, '', `#${sec.id.slice(2)}`)
   scrollTo(0, 0)
+  // stagger the section in, top to bottom
+  sec.querySelectorAll<HTMLElement>('.card, .hero, h1, .lede, .h-sec, .sp, .empty').forEach((el, i) => el.style.setProperty('--i', String(Math.min(i, 8))))
+  moveInd()
 }
+/** The highlight behind the active nav item glides to it. */
+function moveInd() {
+  const on = document.querySelector<HTMLElement>('.navlink.on')
+  const ind = document.querySelector<HTMLElement>('.nav-ind')
+  if (!on || !ind) return
+  Object.assign(ind.style, { width: `${on.offsetWidth}px`, height: `${on.offsetHeight}px`, transform: `translate(${on.offsetLeft}px, ${on.offsetTop}px)` })
+}
+addEventListener('resize', moveInd)
+document.fonts?.ready.then(moveInd)
+// spotlight: the card lights up where the pointer is
+document.addEventListener('pointermove', (e) => {
+  const c = (e.target as HTMLElement).closest?.<HTMLElement>('.card')
+  if (!c) return
+  const r = c.getBoundingClientRect()
+  c.style.setProperty('--mx', `${e.clientX - r.left}px`)
+  c.style.setProperty('--my', `${e.clientY - r.top}px`)
+})
 document.querySelectorAll<HTMLElement>('.navlink').forEach((n) => (n.onclick = () => go(n.dataset.v!)))
 go(location.hash.slice(1) || 'keys')
 addEventListener('hashchange', () => go(location.hash.slice(1) || 'keys'))
@@ -63,17 +86,17 @@ $('saveGate').onclick = async () => {
 // keys
 // ---------------------------------------------------------------------------
 type View = { passphrases: { id: string; label: string }[]; claims: { human: boolean; selfie: boolean; nationalities: string[]; wallets: string[] } | null }
-const none = (t: string) => `<span class="badge off">${t}</span>`
+const none = (t: string) => `<span class="none">${t}</span>`
 async function renderKeys() {
   const r = await sw<View>({ type: 'KEYRING_VIEW' })
   if (!r.ok) return
   const { passphrases, claims } = r.data
-  $('passList').innerHTML = passphrases.map((p) => `<span class="badge">${esc(p.label)}<button data-id="${p.id}" title="Remove">×</button></span>`).join('') || none('None yet')
+  $('passList').innerHTML = passphrases.map((p) => `<span class="badge">${esc(p.label)}<button data-id="${p.id}" title="Remove">${icon('x')}</button></span>`).join('') || none('None yet')
   $('passList').querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.onclick = async () => (await sw({ type: 'KEYRING_REMOVE_PASS', id: b.dataset.id! }), renderKeys())))
   const w = [claims?.human && 'Verified human', claims?.selfie && 'Selfie', ...(claims?.nationalities ?? []).map((n) => `${countryName(n)} passport`)].filter(Boolean) as string[]
-  $('worldBadges').innerHTML = w.map((x) => `<span class="badge">✓ ${esc(x)}</span>`).join('') || none('Not connected')
+  $('worldBadges').innerHTML = w.map((x) => `<span class="badge">${icon('check')}${esc(x)}</span>`).join('') || none('Not connected')
   const wallets = claims?.wallets ?? []
-  $('walletList').innerHTML = wallets.map((a) => `<span class="badge">✓ ${short(a)}</span>`).join('') || none('None yet')
+  $('walletList').innerHTML = wallets.map((a) => `<span class="badge">${icon('check')}${short(a)}</span>`).join('') || none('None yet')
   $('forget').hidden = !w.length && !wallets.length
   const last = (await chrome.storage.local.get('keyringLastError')).keyringLastError as { at: number; error: string } | null
   if (last && Date.now() - last.at < 15 * 60_000 && !$('worldMsg').textContent) say('worldMsg', last.error, 'err')
@@ -132,7 +155,7 @@ async function withWalletTab<T>(run: (tabId: number) => Promise<T>): Promise<T> 
   }
 }
 $('wallet').onclick = async () => {
-  say('walletMsg', 'Sign in your wallet — free, nothing moves.')
+  say('walletMsg', 'Sign in your wallet. It is free and nothing moves.')
   try {
     const r = await withWalletTab((tabId) => sw({ type: 'WALLET_CONNECT', tabId }))
     r.ok ? say('walletMsg', 'Connected.', 'ok') : say('walletMsg', r.error, 'err')
@@ -183,17 +206,17 @@ const check = (id: string, text: string, kind: 'ok' | 'bad' | '' = '') => Object
 const checkName = debounce(async () => {
   const l = label()
   $('ncName').innerHTML = `${esc(l || 'yourspace')}<span>.space.lortnoctahc.eth</span>`
-  $('ncMark').textContent = (l[0] ?? '◆').toUpperCase()
+  $('ncMark').innerHTML = l ? esc(l[0].toUpperCase()) : icon('cube')
   ok.name = false
   mark('s1', false)
   if (!l) return void check('nameCheck', '')
   check('nameCheck', 'Checking…')
   const r = await sw<{ valid: boolean; available?: boolean }>({ type: 'SPACE_AVAILABLE', label: l })
   if (l !== label()) return // typed on meanwhile
-  if (!r.ok) return void check('nameCheck', 'Could not check — try again.', 'bad')
-  if (!r.data.valid) return void check('nameCheck', '3–32 letters, numbers or -', 'bad')
+  if (!r.ok) return void check('nameCheck', 'Could not check. Try again.', 'bad')
+  if (!r.data.valid) return void check('nameCheck', '3 to 32 letters, numbers or hyphens', 'bad')
   ok.name = !!r.data.available
-  check('nameCheck', ok.name ? `✓ ${l}.space.lortnoctahc.eth is available` : '✗ Taken — try another name', ok.name ? 'ok' : 'bad')
+  check('nameCheck', ok.name ? `${l}.space.lortnoctahc.eth is available` : 'Taken. Try another name.', ok.name ? 'ok' : 'bad')
   mark('s1', ok.name)
 }, 400)
 $('buyName').addEventListener('input', () => void checkName())
@@ -209,7 +232,7 @@ const checkCol = debounce(async () => {
   check('colCheck', 'Checking the contract…')
   const r = await sw({ type: 'COLLECTION_CHECK', token: token() })
   ok.col = r.ok
-  check('colCheck', r.ok ? `✓ NFT collection on ${chain}` : r.error, r.ok ? 'ok' : 'bad')
+  check('colCheck', r.ok ? `NFT collection on ${chain}` : r.error, r.ok ? 'ok' : 'bad')
   mark('s2', ok.col)
 }, 500)
 $('nftAddress').addEventListener('input', () => void checkCol())
@@ -241,10 +264,10 @@ $('demoMint').onclick = async () => {
   const r = await sw<{ minted: { to: string; tx?: string; error?: string }[] }>({ type: 'DEMO_MINT', to })
   $<HTMLButtonElement>('demoMint').disabled = false
   if (!r.ok) return void say('demoMsg', r.error, 'err')
-  $('demoOut').innerHTML = r.data.minted.map((m) => `<div class="item"><span>${m.tx ? '✓' : '✗'} ${short(m.to)}</span>${m.tx
+  $('demoOut').innerHTML = r.data.minted.map((m) => `<div class="item"><span class="${m.tx ? 'ok' : 'bad'}">${icon(m.tx ? 'check' : 'x')}${short(m.to)}</span>${m.tx
     ? `<a class="quiet" href="https://sepolia.etherscan.io/tx/${m.tx}" target="_blank" rel="noopener">view</a>` : `<span class="quiet">${esc(m.error ?? '')}</span>`}</div>`).join('')
   const n = r.data.minted.filter((m) => m.tx).length
-  say('demoMsg', n ? `${n} ${n === 1 ? 'pass' : 'passes'} on the way — they arrive in about 15 seconds.` : 'Nothing was minted.', n ? 'ok' : 'err')
+  say('demoMsg', n ? `${n} ${n === 1 ? 'pass' : 'passes'} on the way. They arrive in about 15 seconds.` : 'Nothing was minted.', n ? 'ok' : 'err')
 }
 
 /** Payment → ENS name → Ready, from the service worker's purchase state. */
@@ -257,10 +280,11 @@ async function renderBuy() {
   const cells = [...$('track').children] as HTMLElement[]
   const stage = !st ? -1 : st.step === 'done' ? 3 : st.step.startsWith('paid') ? 1 : st.step === 'failed' ? -2 : 0
   cells.forEach((c, i) => (c.className = stage === 3 || i < stage ? 'done' : i === stage ? 'on' : ''))
+  $('buy').classList.toggle('busy', stage === 0 || stage === 1)
   if (!st) return
-  if (st.step === 'done') say('buyState', `✓ ${st.name} is yours. Lock posts to "NFT holders of ${st.label}.space".`, 'ok')
+  if (st.step === 'done') say('buyState', `${st.name} is yours. Lock posts to "NFT holders of ${st.label}.space".`, 'ok')
   else if (st.step === 'failed') say('buyState', `${st.label}: ${st.error ?? 'failed'}`, 'err')
-  else if (st.step.startsWith('paid')) say('buyState', `Paid. Registering ${st.label}.space.lortnoctahc.eth on ENS — about a minute.`, 'busy')
+  else if (st.step.startsWith('paid')) say('buyState', `Paid. Registering ${st.label}.space.lortnoctahc.eth on ENS. About a minute.`, 'busy')
   else say('buyState', `${st.label}: ${st.step}`, 'busy')
 }
 // the service worker writes each step to storage — follow it live, wherever the purchase was started
@@ -315,7 +339,7 @@ async function renderSpaces() {
     const role = keys[l] ? (keys[l].role === 'owner' ? 'Owner' : 'Moderator') : mem[`@${l}`]?.memberId ? 'Member' : 'Yours'
     const id = mem[`@${l}`]?.memberId
     return `<div class="sp"><div class="n"><b>${esc(l)}</b><span>.space</span></div><div class="role ${keys[l] ? '' : 'm'}">${role}</div>${id ? `<div class="mono">${esc(id)}</div>` : ''}</div>`
-  }).join('') || '<div class="empty">No spaces yet — create one above, or open a space’s post to join it.</div>'
+  }).join('') || '<div class="empty">No spaces yet. Create one above, or open a space’s post to join it.</div>'
 }
 
 // ---------------------------------------------------------------------------
@@ -324,7 +348,7 @@ async function renderSpaces() {
 async function renderSites() {
   const r = await sw<string[]>({ type: 'SITE_LIST' })
   const sites = r.ok ? r.data : []
-  $('siteList').innerHTML = sites.map((o) => `<div class="item"><span>${esc(new URL(o).host)}</span><button data-o="${esc(o)}" title="Turn off">×</button></div>`).join('')
+  $('siteList').innerHTML = sites.map((o) => `<div class="item"><span>${esc(new URL(o).host)}</span><button data-o="${esc(o)}" title="Turn off">${icon('x')}</button></div>`).join('')
     || '<div class="quiet">No sites yet.</div>'
   $('siteList').querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.onclick = async () => (await sw({ type: 'SITE_SET', origin: b.dataset.o!, on: false }), renderSites())))
 }

@@ -43,7 +43,7 @@ export async function checkCollection(token: string): Promise<string | null> {
   const address = m[2] as `0x${string}`
   // viem returns undefined for "no code here" — so a network failure gets its own sentinel
   const code = await c.getCode({ address }).catch(() => 'unreachable' as const)
-  if (code === 'unreachable') return `Could not reach ${chain.name} to check the collection — try again.`
+  if (code === 'unreachable') return `Could not reach ${chain.name} to check the collection. Try again.`
   if (!code || code === '0x') return `There is no contract at ${address} on ${chain.name}. Check the chain and the address.`
   const is721 = await c.readContract({ address, abi: ERC165, functionName: 'supportsInterface', args: ['0x80ac58cd'] }).catch(() => false)
   if (!is721) return `The contract at ${address} on ${chain.name} is not an ERC-721 NFT collection.`
@@ -147,7 +147,7 @@ export async function buySpace(req: { label: string; token: string; chainId: 1 |
     await setState({ label, step: 'failed', error: tx?.error ?? 'no transaction', owner })
     return { ok: false, error: tx?.error ?? 'no transaction' }
   }
-  await setState({ label, step: 'paid — creating the ENS name', txHash: tx.hash, owner })
+  await setState({ label, step: 'paid, creating the ENS name', txHash: tx.hash, owner })
   // the wallet's part is over — close its tab now; the Spaces page follows the rest live
   await chrome.tabs.remove(tabId).catch(() => {})
 
@@ -168,6 +168,6 @@ export async function buySpace(req: { label: string; token: string; chainId: 1 |
     }
     await new Promise((z) => setTimeout(z, 6000))
   }
-  await setState({ label, step: 'failed', error: 'the relayer did not finish — the payment is on-chain; retry later', txHash: tx.hash, owner })
+  await setState({ label, step: 'failed', error: 'the relayer did not finish. Your payment is on-chain; retry later.', txHash: tx.hash, owner })
   return { ok: false, error: 'relayer timeout' }
 }

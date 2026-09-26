@@ -12,6 +12,9 @@ import { sw, gatePost } from '../shared/messages'
 import { contentHash, withAuthor } from '../../../shared/member.mjs'
 import { memberships, attestAsMember, ensSpaces, ensKeys } from '../shared/spaces'
 import type { EncodeData, ContentToFrame, FrameToContent, GateHealth } from '../shared/messages'
+import { icon, hydrateIcons } from '../shared/icons'
+
+hydrateIcons()
 
 type CheckDraft =
   | { check: 'public' }
@@ -161,7 +164,7 @@ function spaceField(d: { space: string }): HTMLElement[] {
     if (!l) return void (st.textContent = '')
     const r = await sw<{ exists: boolean }>({ type: 'SPACE_INFO', label: l })
     if (l !== i.value.trim().toLowerCase()) return
-    st.textContent = !r.ok ? '' : r.data.exists ? '✓' : '✗ no such space'
+    st.innerHTML = !r.ok ? '' : r.data.exists ? icon('check') : 'no such space'
     st.style.color = r.ok && r.data.exists ? 'var(--signal)' : 'var(--warn)'
   }
   i.oninput = () => {
@@ -217,10 +220,10 @@ function pillEl(d: CheckDraft, remove: () => void): HTMLElement {
   else if (d.check === 'passphrase') {
     const i = input(d.passphrase, (v) => ((d.passphrase = v), (i.size = Math.max(12, v.length)), renderHonesty()))
     i.size = Math.max(12, d.passphrase.length)
-    const again = Object.assign(document.createElement('button'), { className: 'mini', textContent: '↻', title: 'New random words' })
+    const again = Object.assign(document.createElement('button'), { className: 'mini spin', innerHTML: icon('refresh'), title: 'New random words' })
     again.onclick = () => ((d.passphrase = generatePassphrase()), (i.value = d.passphrase), (i.size = Math.max(12, d.passphrase.length)), renderHonesty())
-    const copy = Object.assign(document.createElement('button'), { className: 'mini', textContent: '⧉', title: 'Copy — send it to your readers another way' })
-    copy.onclick = () => void navigator.clipboard.writeText(d.passphrase).then(() => (copy.textContent = '✓'))
+    const copy = Object.assign(document.createElement('button'), { className: 'mini', innerHTML: icon('copy'), title: 'Copy, to send it to your readers another way' })
+    copy.onclick = () => void navigator.clipboard.writeText(d.passphrase).then(() => ((copy.innerHTML = icon('check')), (copy.style.color = 'var(--signal)')))
     el.append(label('know'), i, again, copy)
   } else if (d.check === 'after') {
     const i = Object.assign(document.createElement('input'), { type: 'datetime-local', value: d.when })
@@ -243,7 +246,7 @@ function pillEl(d: CheckDraft, remove: () => void): HTMLElement {
     const i = input(d.keys, (v) => (d.keys = v), 'messaging keys, comma-separated')
     el.append(label('be one of'), i)
   }
-  const rm = Object.assign(document.createElement('button'), { className: 'mini', textContent: '×', title: 'Remove' })
+  const rm = Object.assign(document.createElement('button'), { className: 'mini', innerHTML: icon('x'), title: 'Remove' })
   rm.onclick = remove
   el.append(rm)
   return el
@@ -286,12 +289,12 @@ function renderHonesty() {
   }
   // The sentence first (what readers need), then ONE honesty note (what it protects against).
   const say = h.obfuscationOnly
-    ? 'Hidden, not private — anyone with lortnoc can read it.'
+    ? 'Hidden, not private.'
     : h.offlineGuessable
-      ? '🔒 Share the passphrase privately. Keep the generated words — a guessable one can be cracked.'
+      ? 'Share the passphrase privately. Keep the generated words: a guessable one can be cracked.'
       : h.gateCanRead
-        ? '🔒 Locked. The lortnoc gate holds part of the key — add a passphrase if that matters.'
-        : '🔒 Only the people you chose can read it.'
+        ? 'Locked. The lortnoc gate holds part of the key; add a passphrase if that matters.'
+        : 'Only the people you chose can read it.'
   $('honesty').textContent = `${summary()} ${say}`
 }
 
@@ -304,6 +307,7 @@ async function go() {
   if (!text.trim()) return setStatus('Write something first.', 'err')
   const btn = $<HTMLButtonElement>('go')
   btn.disabled = true
+  btn.classList.add('busy')
   try {
     setStatus('Locking it…')
     // every space named in the rules must exist on ENS (and an NFT rule needs its collection set)
@@ -320,7 +324,7 @@ async function go() {
     const gated = [...new Set([...JSON.stringify(policy).matchAll(/"check":"(after|human|nft)"/g)].map((m) => m[1]))]
     if (gated.length) {
       const g = await sw<GateHealth>({ type: 'GATE_HEALTH' })
-      if (!g.ok) throw new Error(`The gate is unreachable (${g.error}) — needed for timed, World ID and NFT messages.`)
+      if (!g.ok) throw new Error(`The gate is unreachable (${g.error}). It is needed for timed, World ID and NFT messages.`)
       const missing = gated.filter((c) => !g.data.checks.includes(c))
       if (missing.length) throw new Error(`This gate does not run the ${missing.join(', ')} check.`)
       gateSeal = gateSealer({ gatePub: g.data.pub, post: gatePost })
@@ -346,10 +350,13 @@ async function go() {
     toParent({ lortnoc: 'insert', text: lastCover })
     // Plaintext is done with: clear it from this frame's memory and DOM.
     msgEl.value = ''
+    btn.classList.add('done')
+    setTimeout(() => btn.classList.remove('done'), 500)
   } catch (e) {
     setStatus(e instanceof Error ? e.message : String(e), 'err')
   } finally {
     btn.disabled = false
+    btn.classList.remove('busy')
   }
 }
 
@@ -466,7 +473,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') toParent({ lortnoc: 'close' })
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void go()
 })
-if (location.hash === '#nofield') setStatus('Tip: click the box you want to post in — any time before you press Hide & insert.')
+if (location.hash === '#nofield') setStatus('Tip: click the box you want to post in, any time before you press Hide & insert.')
 Promise.all([memberships(), chrome.storage.local.get('lastWho'), ensSpaces(), ensKeys()]).then(([mem, last, ens, keys]) => {
   // Your spaces, with nothing to manage: bought here (keys), joined by reading (memberships), or added.
   ensList = [...new Set([...ens, ...Object.keys(keys), ...Object.keys(mem).filter((k) => k.startsWith('@')).map((k) => k.slice(1))])].sort()

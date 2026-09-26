@@ -70,7 +70,7 @@ export async function openCandidates(frames: { i: number; frame: Uint8Array }[])
 
 export async function sealedGet(id: string): Promise<SwResponse> {
   const v = (await chrome.storage.session.get(`sealed:${id}`))[`sealed:${id}`]
-  return v ? { ok: true, data: v } : { ok: false, error: 'gone — find hidden posts again' }
+  return v ? { ok: true, data: v } : { ok: false, error: 'Gone. Find hidden posts again.' }
 }
 
 /** Joining a space through a sealed post: the keyring's member key signs "post as my member name". */
@@ -155,7 +155,7 @@ export function onWidgetMessage(m: { type?: string; id?: string; result?: unknow
   void chrome.storage.session.get(`connect:${m.id}`).then((g) => {
     const p = g[`connect:${m.id}`] as Pending | undefined
     if (!p) return
-    report(`connect:${p.sid}`, 'worker restarted — finishing from saved state', null)
+    report(`connect:${p.sid}`, 'worker restarted, finishing from saved state', null)
     void finishConnect(p, m as { type: string; result?: unknown })
   })
 }
@@ -172,7 +172,7 @@ async function finishConnect(p: Pending, m: { type: string; result?: unknown }):
     environment: r?.environment, protocol: r?.protocol_version, identity_attested: r?.identity_attested, credentials: (r?.responses ?? []).map((x) => x.identifier),
   })
   const v = await gate('/connect/world', { sid: p.sid, readerPub: p.readerPub, proof: m.result, token: p.token }).catch((e) => ({ error: String(e) }))
-  report(flow, v?.token ? 'gate accepted — keyring updated' : 'gate refused', !!v?.token, v?.token ? { claims: v.claims } : { why: v?.deny ?? v?.error })
+  report(flow, v?.token ? 'gate accepted, keyring updated' : 'gate refused', !!v?.token, v?.token ? { claims: v.claims } : { why: v?.deny ?? v?.error })
   // World's widget shows success only if the gate really accepted it
   void chrome.runtime.sendMessage({ type: 'WORLD_WIDGET_VERDICT', id: p.id, ok: !!v?.token, deny: v?.deny ?? v?.error }).catch(() => {})
   return remember(await granted(v))

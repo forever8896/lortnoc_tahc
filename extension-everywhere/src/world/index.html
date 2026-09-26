@@ -2,17 +2,31 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>World ID — lortnoc tahc</title>
+  <title>World ID · lortnoc tahc</title>
   <link rel="stylesheet" href="../shared/ui.css">
   <style>
-    body { background: var(--bg); min-height: 100vh; display: grid; place-items: center; }
-    .wrap { max-width: 460px; text-align: center; padding: 24px; }
+    :root, :root body { background: var(--bg); }
+    body { min-height: 100vh; display: grid; place-items: center; background: radial-gradient(60% 50% at 50% 0%, rgba(18,196,190,.10), transparent 70%), var(--bg) !important; }
+    .wrap { width: min(440px, calc(100vw - 32px)); text-align: center; padding: 34px 28px 26px; border: 1px solid var(--rule); border-radius: 22px; background: rgba(17,17,22,.8);
+      box-shadow: 0 40px 80px -40px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.04); animation: card-in var(--med) var(--ease) both; }
+    .mark { width: 64px; height: 64px; margin: 0 auto 18px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; color: var(--signal);
+      background: var(--signal-soft); border: 1px solid var(--signal-line); position: relative; }
+    .mark::before { content: ''; position: absolute; inset: -1px; border-radius: 50%; border: 1px solid var(--signal); opacity: 0; }
+    .mark[data-state=wait]::before { animation: ring 1.8s var(--ease) infinite; }
+    @keyframes ring { from { transform: scale(1); opacity: .7; } to { transform: scale(1.55); opacity: 0; } }
+    .mark[data-state=ok] { background: var(--signal); color: var(--signal-ink); animation: pop .5s var(--ease); }
+    .mark[data-state=bad] { color: var(--warn); background: rgba(240,160,106,.1); border-color: rgba(240,160,106,.4); }
+    .title { font-size: 13px; color: var(--muted); font-weight: 400; margin-bottom: 6px; }
+    h1 { font-weight: 400; font-size: 21px; letter-spacing: -.01em; margin: 0 0 10px; }
+    .wrap p { margin: 0 0 8px; }
+    .status { margin-top: 16px; font-size: 13.5px; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="title" style="font-size:20px">lortnoc <b>tahc</b></div>
-    <p class="muted" id="what">Verifying with World ID to open a hidden post.</p>
+    <div class="mark" id="mark" data-state="wait"><i data-icon="fingerprint"></i></div>
+    <div class="title">lortnoc <b>tahc</b></div>
+    <h1 id="what">Verify with World ID</h1>
     <p class="small muted">This tab closes itself when you're done. Nothing about who you are reaches the post's author or the site.</p>
     <p class="status" id="status"></p>
   </div>
