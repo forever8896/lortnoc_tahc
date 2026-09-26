@@ -48,6 +48,15 @@ export async function checkCollection(token: string): Promise<string | null> {
   return null
 }
 
+/** Is <label>.space.lortnoctahc.eth still free? (A space always has addr = owner, so a resolving
+ *  address means taken.) Used live by the full page as the buyer types. */
+export async function spaceAvailable(label: string): Promise<SwResponse> {
+  if (!/^[a-z0-9-]{3,32}$/.test(label) || label.startsWith('-') || label.endsWith('-')) return { ok: true, data: { valid: false } }
+  const taken = await createPublicClient({ chain: sepolia, transport: http('https://ethereum-sepolia-rpc.publicnode.com') })
+    .getEnsAddress({ name: `${label}.space.lortnoctahc.eth` }).catch(() => undefined)
+  return taken === undefined ? { ok: false, error: 'could not check' } : { ok: true, data: { valid: true, available: !taken } }
+}
+
 export async function buySpace(req: { label: string; token: string; chainId: 1 | 11155111; tabId: number }): Promise<SwResponse> {
   const { label, token, chainId, tabId } = req
   if (!/^[a-z0-9-]{3,32}$/.test(label) || label.startsWith('-') || label.endsWith('-')) return { ok: false, error: 'bad space name' }

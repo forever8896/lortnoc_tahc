@@ -6,7 +6,7 @@ import { CODER, DEFAULT_CODEC_URL, DEFAULT_GATE_URL, LOCAL, GATE_PATHS } from '.
 import type { SwRequest, SwResponse } from '../shared/messages'
 import { looksLikeCover, canonicalCover } from '../../../shared/webframe.mjs'
 import { fromB64 } from '../../../shared/keys.mjs'
-import { buySpace, buyState } from './buy'
+import { buySpace, buyState, spaceAvailable, checkCollection } from './buy'
 import { openCandidates, sealedGet, keyringView, addPassphrase, removePassphrase, forgetConnected, worldConnect, walletConnect, onWidgetMessage } from './sealed'
 
 const TIMEOUT = 30_000 // gpt2 takes seconds; fail closed rather than hang
@@ -123,6 +123,8 @@ chrome.runtime.onMessage.addListener((msg: SwRequest, sender, sendResponse) => {
     buySpace(msg).then(sendResponse)
     return true
   }
+  if (msg.type === 'SPACE_AVAILABLE') return void spaceAvailable(msg.label).then(sendResponse), true
+  if (msg.type === 'COLLECTION_CHECK') return void checkCollection(msg.token).then((bad) => sendResponse({ ok: !bad, error: bad ?? undefined })), true
   if (msg.type === 'BUY_STATE') {
     buyState().then(sendResponse)
     return true

@@ -32,6 +32,8 @@ export type SwRequest =
   | { type: 'WALLET_SIGN'; message: string }
   | { type: 'BUY_SPACE'; label: string; token: string; chainId: 1 | 11155111; tabId: number }
   | { type: 'BUY_STATE' }
+  | { type: 'SPACE_AVAILABLE'; label: string }
+  | { type: 'COLLECTION_CHECK'; token: string }
   | { type: 'SITE_STATE'; origin: string }
   | { type: 'SITE_SET'; origin: string; on: boolean }
   | { type: 'SITE_LIST' }
