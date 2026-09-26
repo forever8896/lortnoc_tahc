@@ -226,6 +226,21 @@ describe('extension-everywhere, three profiles on a comment section', () => {
       await ctx.close()
     }
   })
+
+  test('profile 4 gets the key AFTER the page was scanned: the post opens on that open page, no reload', { timeout: 120_000 }, async (t) => {
+    if (skip || !passphrase) return t.skip(skip ?? 'no comment posted')
+    const { ctx, sw } = await profile()
+    const page = await ctx.newPage()
+    await page.goto(siteUrl)
+    await trigger(sw, { action: 'scan' })
+    const card = await frameOf(page, 'reveal')
+    await card.waitForFunction(() => /Nothing on this page opens/.test(document.getElementById('status').textContent), null, { timeout: 60_000 })
+    // What a post needs is decided when it is READ, never when it was written: adding a key (here a
+    // passphrase; a wallet or World ID works the same way) re-checks the posts that stayed shut.
+    await addPass(ctx, sw, passphrase)
+    await page.waitForSelector('button:has-text("Hidden message")', { timeout: 60_000 })
+    await ctx.close()
+  })
 })
 
 /** What the popup's "Your keys → Add" does. */

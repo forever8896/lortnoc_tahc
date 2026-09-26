@@ -49,11 +49,12 @@ export function createHolders({ ensSpaces, balanceOf, now = () => Date.now() } =
 
   const held = new Map() // `${space}|${address}` → { at, yes } — balances change, so only briefly
   return {
-    /** Does `address` hold the NFT collection that `space`'s ENS record names? (cached 60 s) */
+    /** Does `address` hold the NFT collection that `space`'s ENS record names? (cached: yes 60 s, no 10 s) */
     async holds(space, address) {
       const k = `${space}|${address.toLowerCase()}`
       const hit = held.get(k)
-      if (hit && now() - hit.at < 60_000) return hit.yes
+      // a holder is remembered for a minute; a non-holder only briefly, so a pass that JUST arrived counts
+      if (hit && now() - hit.at < (hit.yes ? 60_000 : 10_000)) return hit.yes
       const sp = await ensSpaces?.get(space)
       const col = sp?.exists ? parseCaip19(sp.token) : null
       const yes = !!col && BigInt(await balance(col, getAddress(address))) > 0n

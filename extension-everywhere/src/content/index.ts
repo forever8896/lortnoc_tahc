@@ -117,6 +117,19 @@ async function scan(quiet = false): Promise<number> {
   return found.length
 }
 
+// The keyring grew (a wallet, World ID, a passphrase): posts on this page that stayed shut may open
+// now — a post never depends on what the reader had when it was WRITTEN, only on what they hold now.
+// Re-check them, but only on a page that was scanned at all.
+chrome.storage.onChanged.addListener((ch, area) => {
+  if (area !== 'local' || !ch.keyring) return
+  const sig = (k?: { token?: string; claims?: unknown; pass?: unknown[] }) => JSON.stringify([k?.token, k?.claims, k?.pass?.length])
+  if (sig(ch.keyring.oldValue) === sig(ch.keyring.newValue)) return
+  const shut = document.querySelectorAll<HTMLElement>('[data-lortnoc-seen]:not([data-lortnoc-chip])')
+  if (!shut.length) return
+  shut.forEach((el) => delete el.dataset.lortnocSeen)
+  void scan(true)
+})
+
 /** "Always on" sites: find hidden posts on load, and again when new posts appear (feeds, replies). */
 function autoScan() {
   void scan(true)
