@@ -56,14 +56,15 @@ function onFrameMessage(e: MessageEvent) {
   }
 }
 
-function addChip(block: HTMLElement) {
-  if (block.dataset.lortnocChip) return // one Reveal per post
+/** A post the keyring opened: its text waits in the extension (never in this page) until clicked. */
+function addChip(block: HTMLElement, sealedId?: string) {
+  if (block.dataset.lortnocChip) return // one button per post
   block.dataset.lortnocChip = '1'
   const chip = document.createElement('button')
   chip.type = 'button'
   chip.dataset.lortnocChip = '1'
-  chip.textContent = '🔒 Reveal'
-  chip.title = 'lortnoc tahc — try to open this'
+  chip.textContent = sealedId ? '🔓 Hidden message for you' : '🔒 Reveal'
+  chip.title = sealedId ? 'lortnoc tahc — your keyring opened this' : 'lortnoc tahc — try to open this'
   Object.assign(chip.style, {
     font: '600 12px/1 system-ui, sans-serif', padding: '4px 8px', margin: '4px 0',
     borderRadius: '999px', border: '1px solid #12C4BE', background: '#12C4BE', color: '#000', cursor: 'pointer',
@@ -71,7 +72,7 @@ function addChip(block: HTMLElement) {
   chip.addEventListener('click', (ev) => {
     ev.preventDefault()
     ev.stopPropagation()
-    openFrame('reveal', `#t=${encodeURIComponent(block.innerText)}`, chip.getBoundingClientRect())
+    openFrame('reveal', sealedId ? `#s=${sealedId}` : `#t=${encodeURIComponent(block.innerText)}`, chip.getBoundingClientRect())
   })
   block.insertAdjacentElement('afterend', chip)
 }
@@ -101,14 +102,16 @@ async function scan(quiet = false): Promise<number> {
   const slow = quiet ? setTimeout(() => toast('lortnoc tahc · checking this page for hidden posts…'), 1200) : undefined
   // mark BEFORE asking: a scan takes seconds, and our own chips/toast trigger the observer meanwhile
   for (const b of blocks) b.dataset.lortnocSeen = '1'
-  const found = await confirmPosts(blocks).catch(() => {
+  const got = await confirmPosts(blocks).catch(() => {
     for (const b of blocks) delete b.dataset.lortnocSeen // codec hiccup: let the next scan retry them
-    return [] as HTMLElement[]
+    return { legacy: [] as HTMLElement[], sealed: [] as { el: HTMLElement; id: string }[] }
   })
-  found.forEach(addChip)
+  got.sealed.forEach(({ el, id }) => addChip(el, id))
+  got.legacy.forEach((el) => addChip(el))
+  const found = [...got.sealed.map((x) => x.el), ...got.legacy]
   clearTimeout(slow)
   if (found.length || !quiet || slow) {
-    toast(found.length ? `lortnoc tahc · found ${found.length} hidden` : null)
+    toast(found.length ? `lortnoc tahc · ${found.length} hidden ${found.length === 1 ? 'message' : 'messages'} for you` : null)
     setTimeout(() => toast(null), 2500)
   }
   return found.length
@@ -132,6 +135,8 @@ function run(a: Action) {
     const r = getSelection()?.rangeCount ? getSelection()!.getRangeAt(0).getBoundingClientRect() : undefined
     openFrame('reveal', `#t=${encodeURIComponent(a.text)}`, r)
   } else if (a.action === 'scan') {
+    // a manual scan re-checks everything not yet opened — the keyring may have changed since
+    document.querySelectorAll<HTMLElement>('[data-lortnoc-seen]:not([data-lortnoc-chip])').forEach((el) => delete el.dataset.lortnocSeen)
     // blocks with a chip were already found (e.g. by the automatic scan) — only "none" if there are none
     void scan().then((n) => n || document.querySelector('[data-lortnoc-chip]:not(button)') || openFrame('reveal', '#none'))
   }

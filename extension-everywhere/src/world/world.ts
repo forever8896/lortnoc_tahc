@@ -57,6 +57,10 @@ chrome.runtime.onMessage.addListener((m) => {
   if (m?.type === 'WORLD_WIDGET_SIMULATE' && m.id === id) void simulate()
 })
 
+// While this tab is open the service worker may be waiting on it (connecting the keyring): a ping
+// every 10 s keeps an idle MV3 worker from being stopped mid-verification.
+setInterval(() => void chrome.runtime.sendMessage({ type: 'WORLD_WIDGET_PING', id }).catch(() => {}), 10_000)
+
 async function main() {
   const key = `world:${id}`
   const q = (await chrome.storage.session.get(key))[key] as WorldRequest | undefined

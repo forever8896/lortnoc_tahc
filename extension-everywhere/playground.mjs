@@ -148,47 +148,42 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--rule);border-b
     <div class="flow" style="margin-top:12px">
       <div class="step"><span class="n">1</span><div><b>You write.</b> <span class="muted">The extension locks your message and splits the key. The gate gets one piece — never your text.</span></div></div>
       <div class="step"><span class="n">2</span><div><b>You post.</b> <span class="muted">The site only ever sees ordinary-looking words.</span></div></div>
-      <div class="step"><span class="n">3</span><div><b>A reader proves the rule.</b> <span class="muted">The time has passed · World ID · a wallet signature for the NFT.</span></div></div>
-      <div class="step"><span class="n">4</span><div><b>The gate hands over its piece.</b> <span class="muted">The reader's extension opens the message. No proof, no piece.</span></div></div>
+      <div class="step"><span class="n">3</span><div><b>Readers connect their keys once.</b> <span class="muted">World ID · a passport's nationality · a wallet. The post itself never says which it needs.</span></div></div>
+      <div class="step"><span class="n">4</span><div><b>The gate hands over its piece to those who qualify.</b> <span class="muted">Their extension opens the message; for everyone else it stays an ordinary reply.</span></div></div>
     </div>
     <div class="small muted" style="margin-top:12px">Honest limit: whoever runs the gate holds that piece. Add a passphrase to a rule and the gate alone can't read it.</div>
     <div class="eyebrow" style="margin-top:14px">It holds right now</div><div class="held" id="held"><span class="chip">—</span></div>
   </div>
 
   <div class="eyebrow">Try it</div>
-  <div class="card small" style="margin-bottom:8px"><b>First, once:</b> extension icon → switch on <b>Always on for localhost</b>. Hidden replies then get a <b>🔒 Reveal</b> button by themselves, and a 🔒 appears on the reply box. Without it: extension icon → <b>Find hidden posts</b> after each page load.</div>
+  <div class="card small" style="margin-bottom:8px"><b>How reading works now:</b> a hidden reply says nothing about itself — not even that it is a message. Your extension quietly tries <b>your keys</b> on every reply; only replies meant for you get a <b>🔓 Hidden message for you</b> button. Keys live in the extension popup → <b>Your keys</b>. Tip: switch on <b>Always on for localhost</b> there too, and replies are checked on every load.</div>
   <div class="try">
     <details class="t" open><summary><b>1 · Hide a message</b><span class="tag">no setup</span></summary><ol>
-      <li>Click the reply box on the left, press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd>.</li>
-      <li>Write your real message. <i>Who can read it</i>: <b>Anyone with lortnoc</b>.</li>
-      <li><b>Hide &amp; insert</b>, then <b>Post reply</b>. It reads like a normal reply.</li>
-      <li>Extension icon → <b>Find hidden posts</b> → <b>Reveal</b>.</li></ol></details>
-    <details class="t"><summary><b>2 · Only people with the passphrase</b><span class="tag">no setup</span></summary><ol>
-      <li>Pick <b>People with the passphrase</b>. Copy the five words it made.</li>
-      <li>Post it. Reveal it: the card asks for the passphrase.</li>
-      <li>Wrong words stay shut; the right ones open it.</li></ol></details>
+      <li>Click the reply box, press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd>.</li>
+      <li>Write your message. <i>Who can read it</i>: <b>Anyone with lortnoc</b>. <b>Hide &amp; insert</b> → <b>Post reply</b>.</li>
+      <li>It reads like a normal reply. Extension → <b>Find hidden posts</b>: it is a message for you.</li></ol></details>
+    <details class="t"><summary><b>2 · Only people with the passphrase</b><span class="tag">keys</span></summary><ol>
+      <li>Pick <b>People with the passphrase</b>, copy the five words, post it. (Your own keyring gets them, so you still see it.)</li>
+      <li>Remove them under <b>Your keys</b> → Find hidden posts: the reply is just a reply now. No button, no hint.</li>
+      <li>Add the words back → it appears again.</li></ol></details>
     <details class="t"><summary><b>3 · Opens later</b><span class="tag">gate</span></summary><ol>
-      <li>Pick <b>Everyone, after a date</b> and set it two minutes ahead.</li>
-      <li>Reveal it now: <i>Locked until …</i>. Reveal again after the time: it opens.</li></ol></details>
+      <li>Pick <b>Everyone, after a date</b>, two minutes ahead. Post it.</li>
+      <li>Until then it is invisible to everyone. After the time, Find hidden posts: there it is.</li></ol></details>
     <details class="t"><summary><b>4 · Only verified humans</b><span class="tag">gate · World ID</span></summary><ol>
-      <li>Pick <b>Verified humans (World ID)</b> and post.</li>
-      <li>Reveal → <b>Verify with World ID</b>. World's own widget opens in a tab.</li>
-      <li>Scan it with the <b>World ID (Sandbox)</b> app on your phone.</li>
-      <li>No phone? Press <b>Try with the World ID simulator (demo)</b> instead — same widget, answered by World's simulator.</li>
-      <li>The widget shows success, closes itself, and the post opens.</li></ol></details>
+      <li>Pick <b>Verified humans (World ID)</b> and post. Without World ID connected, nobody sees it — you neither.</li>
+      <li><b>Your keys → World ID → Verified human</b>: World's widget opens; scan with the <b>World ID (Sandbox)</b> app. No phone: <b>Human · simulator</b>.</li>
+      <li>Once, not per post. Find hidden posts: every verified-humans reply is there.</li></ol></details>
     <details class="t"><summary><b>5 · Citizens of a country</b><span class="tag">gate · passport</span></summary><ol>
-      <li>Pick <b>Citizens of a country</b> and choose one, e.g. Denmark.</li>
-      <li>Reveal → Verify: World ID checks the passport's nationality and shares nothing else.</li>
-      <li>Needs the World ID (Sandbox) app with a passport credential — the simulator can't do passports, so there is no simulator button here.</li></ol></details>
+      <li>Pick <b>Citizens of a country</b> → Denmark, post.</li>
+      <li><b>Your keys → World ID → Nationality: Denmark → Prove</b>, scan with the Sandbox app (needs a Danish passport there — the simulator can't do passports).</li>
+      <li>Danish posts appear; posts for other countries stay invisible.</li></ol></details>
     <details class="t"><summary><b>6 · NFT holders of a space</b><span class="tag">gate · ENS · wallet</span></summary><ol>
-      <li>Extension → Settings → <b>Buy a space</b> → <i>Use the demo pass</i>, pay 0.005 Sepolia ETH.</li>
-      <li>You now own <b>name.space.lortnoctahc.eth</b>. Pick <b>NFT holders of name.space</b>.</li>
-      <li>A reader presses <b>Prove I hold the NFT</b> and signs with their wallet (nothing is sent).</li>
-      <li>On a member-signed reply, you get a <b>Ban</b> button — it writes to the space's ENS record.</li></ol></details>
+      <li>Settings → <b>Buy a space</b> (demo pass on Sepolia) → pick <b>NFT holders of name.space</b>, post.</li>
+      <li><b>Your keys → Connect the wallet on this page</b>: one signature, nothing moves. Holders see it; others see a reply.</li>
+      <li>On a member-signed reply the owner gets <b>Ban</b> — written to the space's ENS record; the posts vanish for that member.</li></ol></details>
     <details class="t"><summary><b>7 · Mix rules</b><span class="tag">builder</span></summary><ol>
-      <li>Pick any preset, press <b>Edit rules</b>.</li>
-      <li>“Readers must [know the passphrase] <b>or</b> [be a verified human] <b>and</b> [wait until …]”.</li>
-      <li>The sentence underneath says exactly who can read it.</li></ol></details>
+      <li>Any preset → <b>Edit rules</b>: “Readers must [know the passphrase] <b>or</b> [be a verified human] <b>and</b> [wait until …]”.</li>
+      <li>The sentence underneath says exactly who will see it.</li></ol></details>
   </div>
 </aside>
 

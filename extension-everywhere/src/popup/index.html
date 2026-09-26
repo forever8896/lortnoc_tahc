@@ -8,6 +8,11 @@
     body { width: 300px; background: #08080a; } .card { border: 0; border-radius: 0; }
     .big { width: 100%; margin-top: 8px; padding: 12px; font-size: 15px; }
     details { margin-top: 14px; } summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+    .keys { background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 10px 12px; }
+    .krow { display: flex; justify-content: space-between; align-items: baseline; margin: 10px 0 6px; font-size: 13px; }
+    .krow:first-child { margin-top: 0; } .krow b { font-weight: 500; }
+    .row.wrap { flex-wrap: wrap; } .ok { color: var(--signal); }
+    .chips .chip button { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0 0 0 4px; }
   </style>
 </head>
 <body>
@@ -17,6 +22,25 @@
     <button class="btn btn-ghost big" id="scan">Find hidden posts</button>
     <div class="small muted" style="margin-top:8px">Or <b id="key">Ctrl+Shift+L</b> in any text box · right-click text → Reveal</div>
     <label class="toggle" id="siteRow" style="margin-top:12px" hidden><input type="checkbox" id="site"> <span>Always on for <b id="siteName"></b> <span class="muted">— a 🔒 appears when you click a text box</span></span></label>
+    <div class="eyebrow" style="margin-top:16px">Your keys</div>
+    <div class="small muted" style="margin-bottom:8px">Hidden posts meant for you open by themselves. Everything else stays ordinary text — nobody can tell what a post needs.</div>
+    <div class="keys">
+      <div class="krow"><b>Passphrases</b><span class="small muted" id="passCount"></span></div>
+      <div class="chips" id="passList"></div>
+      <div class="row"><input type="password" id="passIn" placeholder="add a passphrase you were given" autocomplete="off"><button class="btn btn-ghost btn-small" id="addPass">Add</button></div>
+
+      <div class="krow"><b>World ID</b><span class="small" id="worldState"></span></div>
+      <div class="row wrap">
+        <button class="btn btn-ghost btn-small" id="wHuman">Verified human</button>
+        <button class="btn btn-ghost btn-small" id="wSelfie">Selfie Check</button>
+        <button class="btn btn-ghost btn-small" id="wSim" hidden title="World's simulator answers — no phone (staging demo)">Human · simulator</button>
+      </div>
+      <div class="row" style="margin-top:6px"><select id="natSel" style="flex:1"></select><button class="btn btn-ghost btn-small" id="wNat">Prove</button></div>
+
+      <div class="krow"><b>Wallets</b><span class="small" id="walletState"></span></div>
+      <button class="btn btn-ghost btn-small" id="wallet">Connect the wallet on this page</button>
+      <div class="small" style="margin-top:8px"><a href="#" id="forget">Forget connected World ID &amp; wallets</a></div>
+    </div>
     <div class="status" id="status"></div>
     <details>
       <summary>Settings</summary>

@@ -29,10 +29,12 @@ export function collectBlocks(root: HTMLElement, minWords = 25): HTMLElement[] {
   return blocks.filter((el) => !blocks.some((o) => o !== el && el.contains(o))).slice(0, MAX_BLOCKS)
 }
 
-/** Ask the service worker which of these blocks are really lortnoc posts. */
-export async function confirmPosts(blocks: HTMLElement[]): Promise<HTMLElement[]> {
+/** Ask the service worker which of these blocks are posts THIS reader can open (sealed, opened with
+ *  their keyring) — and which are older posts that show their rule (legacy: Reveal as before). */
+export async function confirmPosts(blocks: HTMLElement[]): Promise<{ legacy: HTMLElement[]; sealed: { el: HTMLElement; id: string }[] }> {
   const r = (await chrome.runtime.sendMessage({ type: 'FIND_POSTS', texts: blocks.map((b) => b.innerText) })) as
-    | { ok: true; data: { found: number[] } }
+    | { ok: true; data: { found: number[]; opened?: { i: number; id: string }[] } }
     | { ok: false }
-  return r?.ok ? r.data.found.map((i) => blocks[i]) : []
+  if (!r?.ok) return { legacy: [], sealed: [] }
+  return { legacy: r.data.found.map((i) => blocks[i]), sealed: (r.data.opened ?? []).map(({ i, id }) => ({ el: blocks[i], id })) }
 }

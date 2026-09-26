@@ -182,7 +182,22 @@ async function attempt() {
 
 async function main() {
   const hash = location.hash
-  if (hash === '#none') return setStatus('No hidden posts found on this page. If you know one is there, select its text and right-click → Reveal.'), fit()
+  if (hash === '#none') return setStatus('Nothing on this page opens with your keys. Add passphrases, World ID or a wallet in the extension — posts meant for you then appear by themselves.'), fit()
+  if (hash.startsWith('#s=')) {
+    // A sealed post the keyring already opened (background/sealed.ts) — the text never touched the page.
+    const r = await sw<{ text: string; checks: string[]; obfuscationOnly: boolean; members: { space: string }[] }>({ type: 'SEALED_GET', id: hash.slice(3) })
+    if (!r.ok) return setStatus(r.error, 'err'), fit()
+    postSpace = (r.data.checks ?? []).find((c: string) => c.includes(' · members of '))?.split(' · members of ')[1]
+      ?? (r.data.checks ?? []).find((c: string) => c.startsWith('Holders of '))?.replace(/^Holders of |'s NFT$/g, '') ?? ''
+    $('checks').textContent = `Opened with your keyring · ${(r.data.checks ?? []).join(' · ')}`
+    $('needs').hidden = false
+    for (const id of ['pass', 'identity', 'verifyHuman', 'simHuman', 'proveNft']) $(id).hidden = true
+    await show(r.data.text, r.data.obfuscationOnly)
+    $('note').textContent = r.data.obfuscationOnly
+      ? 'Anyone with the extension can read this one — it was hidden, not locked.'
+      : `Opened with your keys · ${(r.data.checks ?? []).join(' · ')}. Nobody without them can even tell it is a message.`
+    return fit()
+  }
   const raw = hash.startsWith('#t=') ? decodeURIComponent(hash.slice(3)) : ''
   const cover = canonicalCover(raw)
   if (!cover) return setStatus('Nothing to reveal here.', 'err'), fit()

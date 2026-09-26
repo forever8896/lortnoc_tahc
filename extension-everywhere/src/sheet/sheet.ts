@@ -2,11 +2,12 @@
 // It builds a policy from groups (AND of ORs, PRD §16.6), seals the message with shared/webframe,
 // has the codec turn the bytes into cover text, and hands ONLY the cover to the content script.
 import { COUNTRIES } from '../shared/countries'
-import { sealMessage, presentCover } from '../../../shared/webframe.mjs'
+import { presentCover } from '../../../shared/webframe.mjs'
+import { sealPost } from '../../../shared/sealed.mjs'
 import { honesty } from '../../../shared/policy.mjs'
 import { generatePassphrase } from '../../../shared/checks/passphrase.mjs'
 import { toB64, fromHex } from '../../../shared/keys.mjs'
-import { gateDepositor } from '../../../shared/gateclient.mjs'
+import { gateSealer } from '../../../shared/gateclient.mjs'
 import { sw, gatePost } from '../shared/messages'
 import { contentHash, withAuthor } from '../../../shared/member.mjs'
 import { ownedSpaces, memberships, attestAsMember, ensSpaces } from '../shared/spaces'
@@ -117,7 +118,6 @@ function rules(): [Rule, string, () => CheckDraft][] {
     ...(ensList.length ? [['nft', "hold a space's NFT", () => ({ check: 'nft', space: `@${ensList[0]}` })] as [Rule, string, () => CheckDraft]] : []),
     ['after', 'wait until a date', () => fresh('after')],
     ['public', 'have lortnoc (anyone with it)', () => fresh('public')],
-    ['recipients', 'be one of these people (keys)', () => fresh('recipients')],
   ]
 }
 /** A <select> whose first option is the prompt; picking a rule calls `on` with a fresh draft. */
@@ -283,7 +283,7 @@ async function go() {
   try {
     setStatus('Locking it…')
     const policy = buildPolicy()
-    let deposit
+    let gateSeal
     // Checks whose key share the gate holds. Each must be one this gate actually runs.
     const gated = [...new Set([...JSON.stringify(policy).matchAll(/"check":"(after|human|nft)"/g)].map((m) => m[1]))]
     if (gated.length) {
@@ -291,7 +291,7 @@ async function go() {
       if (!g.ok) throw new Error(`The gate is unreachable (${g.error}) — needed for timed, World ID and NFT messages.`)
       const missing = gated.filter((c) => !g.data.checks.includes(c))
       if (missing.length) throw new Error(`This gate does not run the ${missing.join(', ')} check.`)
-      deposit = gateDepositor({ gatePub: g.data.pub, post: gatePost })
+      gateSeal = gateSealer({ gatePub: g.data.pub, post: gatePost })
     }
     let body = text
     const asSpace = ($('signAs') as HTMLInputElement | null)?.checked ? ($('signSpace') as HTMLSelectElement).value : ''
@@ -299,7 +299,11 @@ async function go() {
       setStatus(`Signing as your member name in ${asSpace}…`)
       body = withAuthor(text, { space: asSpace, ...(await attestAsMember(asSpace, contentHash(text))) })
     }
-    const frame = await sealMessage(body, policy, { deposit })
+    // Sealed: the post carries no marker and no readable rule — only people whose keys open it will
+    // even see that it is a message (shared/sealed.mjs).
+    const frame = await sealPost(body, policy, { gateSeal })
+    // The author's own passphrases join their keyring, so they still see their own post.
+    for (const d of groups.flat()) if (d.check === 'passphrase') void sw({ type: 'KEYRING_ADD_PASS', passphrase: d.passphrase })
     setStatus('Turning it into ordinary text…')
     const r = await sw<EncodeData>({ type: 'ENCODE', ciphertextB64: toB64(frame) })
     if (!r.ok) throw new Error(r.error)

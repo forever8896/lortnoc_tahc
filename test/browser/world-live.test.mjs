@@ -109,8 +109,44 @@ const frameOf = async (page, name) => {
   throw new Error(`no ${name} frame`)
 }
 
-describe('World ID, live (simulator + World API + World Chain)', () => {
-  test('writer locks a comment to verified humans', { timeout: 180_000 }, async (t) => {
+/** What the popup's "Your keys → World ID" does, with World's simulator answering (staging demo).
+ *  World's own widget opens in a tab, the simulator completes it, the gate verifies (World API +
+ *  World Chain) and remembers the credential; returns the keyring's claims. */
+async function connectWorldSim(p) {
+  const ext = await p.ctx.newPage()
+  await ext.goto(`chrome-extension://${p.sw.__extId}/src/popup/index.html`)
+  const widget = p.ctx.waitForEvent('page', { predicate: (x) => x.url().includes('/src/world/'), timeout: 30_000 })
+  const done = ext.evaluate(() => chrome.runtime.sendMessage({ type: 'WORLD_CONNECT', kind: 'poh', simulate: true }))
+  const w = await widget
+  await w.waitForSelector('.idkit-qr-inner', { timeout: 30_000 }) // World's own IDKitRequestWidget
+  const r = await done
+  await ext.close()
+  return r
+}
+/** What a reader sees after a scan: the number of posts that opened for them (0 = the page is plain). */
+async function scanOpens(p) {
+  const page = await p.ctx.newPage()
+  await page.goto(siteUrl)
+  await trigger(p.sw, { action: 'scan' })
+  const t0 = Date.now()
+  for (;;) {
+    const n = await page.locator('button:has-text("Hidden message")').count()
+    const none = page.frames().find((f) => f.url().includes('/src/reveal/'))
+    if (n || (none && /Nothing on this page opens/.test(await none.textContent('#status').catch(() => '')))) return { page, n }
+    if (Date.now() - t0 > 90_000) return { page, n: 0 }
+    await page.waitForTimeout(500)
+  }
+}
+async function readFirst(page, which = 'first') {
+  await page.locator('button:has-text("Hidden message")')[which]().click()
+  const card = await frameOf(page, 'reveal')
+  await card.waitForSelector('#out:not([hidden])', { timeout: 30_000 })
+  return card
+}
+
+describe('World ID keyring, live (World widget + simulator + World API + World Chain)', () => {
+  let reader
+  test('writer locks a comment to verified humans — sealed, nothing on it says so', { timeout: 180_000 }, async (t) => {
     if (skip) return t.skip(skip)
     const { ctx, sw } = await profile()
     const page = await ctx.newPage()
@@ -128,62 +164,28 @@ describe('World ID, live (simulator + World API + World Chain)', () => {
     await ctx.close()
   })
 
-  test('cancelling World ID keeps it shut (the alternative path)', { timeout: 180_000 }, async (t) => {
+  test('without World ID connected, the page is plain: no button, no hint', { timeout: 180_000 }, async (t) => {
     if (skip || !comments.length) return t.skip(skip ?? 'nothing posted')
-    const { ctx, sw } = await profile()
-    const page = await ctx.newPage()
-    await page.goto(siteUrl)
-    await trigger(sw, { action: 'scan' })
-    await page.click('button:has-text("Reveal")')
-    const card = await frameOf(page, 'reveal')
-    await card.click('#verifyHuman', { timeout: 60_000 })
-    await card.waitForSelector('#world:not([hidden])', { timeout: 30_000 })
-    await card.click('#cancelWorld')
-    await card.waitForSelector('.status.err', { timeout: 30_000 })
-    assert.match(await card.textContent('#status'), /cancelled/i)
-    assert.equal(await card.isHidden('#out'), true)
-    await ctx.close()
+    reader = await profile()
+    assert.equal((await scanOpens(reader)).n, 0)
   })
 
-  test('a verified human reads it', { timeout: 240_000 }, async (t) => {
-    if (skip || !comments.length) return t.skip(skip ?? 'nothing posted')
-    const { ctx, sw } = await profile()
-    const page = await ctx.newPage()
-    await page.goto(siteUrl)
-    await trigger(sw, { action: 'scan' })
-    await page.click('button:has-text("Reveal")')
-    const logs = []
-    page.on('console', (m) => logs.push(`page: ${m.type()} ${m.text()}`.slice(0, 300)))
-    sw.on('console', (m) => logs.push(`sw: ${m.type()} ${m.text()}`.slice(0, 300)))
-    const card = await frameOf(page, 'reveal')
-    const widgetTab = ctx.waitForEvent('page', { predicate: (p) => p.url().includes('/src/world/'), timeout: 30_000 })
-    await card.click('#simHuman', { timeout: 60_000 })
-    // World's OWN widget (IDKitRequestWidget) opens in its tab and shows its QR (in its shadow root)
-    const world = await widgetTab
-    world.on('console', (m) => logs.push(`world: ${m.type()} ${m.text()}`.slice(0, 300)))
-    await world.waitForSelector('.idkit-qr-inner', { timeout: 30_000 })
-    if (process.env.SHOT) await world.screenshot({ path: process.env.SHOT })
-    try {
-      await card.waitForSelector('#out:not([hidden])', { timeout: 150_000 })
-    } catch (e) {
-      const status = await card.textContent('#status').catch(() => '?')
-      const world = await card.isVisible('#world').catch(() => '?')
-      const bridge = await card.getAttribute('#worldHow', 'data-state').catch(() => '?')
-      const wstatus = await (await widgetTab).textContent('#status').catch(() => '?')
-      const link = await (await widgetTab).evaluate(() => document.querySelector('[data-idkit-shadow-host]')?.shadowRoot?.querySelector('a.idkit-deeplink-btn')?.href ?? 'none').catch((e) => 'eval failed ' + e.message)
-      throw new Error(`never opened — card status: "${status}", widget tab: "${wstatus}", widget link: ${String(link).slice(0, 40)}, World panel visible: ${world}, bridge state: ${bridge}\n${logs.filter((l) => !/preload/.test(l)).join('\n')}`)
-    }
+  test('connect World ID once (World widget, simulator) — then the post appears and opens', { timeout: 300_000 }, async (t) => {
+    if (skip || !reader) return t.skip(skip ?? 'no reader')
+    const r = await connectWorldSim(reader)
+    assert.equal(r.ok, true, JSON.stringify(r))
+    assert.equal(r.data.human, true)
+    const { page, n } = await scanOpens(reader)
+    assert.equal(n, 1)
+    const card = await readFirst(page)
     assert.equal(await card.textContent('#plain'), 'the circle meets thursday')
-    // the widget saw the gate's verdict, showed success, and closed its own tab
-    await world.waitForEvent('close', { timeout: 30_000 })
-    await ctx.close()
+    assert.match(await card.textContent('#note'), /Verified human/)
   })
 })
 
-describe('spaces: join with World ID, sign as a member, get banned — live', () => {
-  // World's simulator is ONE fake human, so the owner never verifies here (they would become the same
-  // member they are about to ban). The member signs a post readable by anyone; the owner reads it,
-  // sees the verified pseudonym, and bans it. The member then cannot get back in.
+describe('spaces through the keyring: join, sign as a member, get banned — live', () => {
+  // World's simulator is ONE fake human, so the owner never connects World ID here (they would become
+  // the member they are about to ban). The member signs a post anyone can read; the owner bans it.
   const SPACE = 'wl-' + Date.now().toString(36)
   let owner, member
 
@@ -211,68 +213,37 @@ describe('spaces: join with World ID, sign as a member, get banned — live', ()
     await page.waitForSelector('.c')
   })
 
-  test('a member joins with World ID and signs a post as their pseudonym', { timeout: 240_000 }, async (t) => {
+  test('a member connects World ID, the members-only post opens, and they sign a post as their pseudonym', { timeout: 300_000 }, async (t) => {
     if (skip || !owner) return t.skip(skip ?? 'no space')
     member = await profile()
-    const page = await member.ctx.newPage()
-    const step = (m) => console.log(`    · ${m}`)
-    let card
-    try {
-    await page.goto(siteUrl)
-    step('scan')
-    await trigger(member.sw, { action: 'scan' })
-    await page.click('button:has-text("Reveal")', { timeout: 60_000 })
-    card = await frameOf(page, 'reveal')
-    step('verify')
-    await card.click('#simHuman', { timeout: 60_000 })
-    await card.waitForSelector('#out:not([hidden])', { timeout: 150_000 })
-    assert.equal(await card.textContent('#plain'), 'members meet at the library')
-    step('opened; now writing as a member')
-    // now a member: sign a post readable by anyone
+    assert.equal((await connectWorldSim(member)).ok, true)
+    const { page, n } = await scanOpens(member)
+    assert.equal(n, 1)
+    assert.equal(await (await readFirst(page)).textContent('#plain'), 'members meet at the library')
     await page.keyboard.press('Escape')
-    step('escape done')
     await page.click('#c', { timeout: 20_000 })
-    step('box clicked')
     await trigger(member.sw, { action: 'compose' })
-    step('compose triggered')
     const sheet = await frameOf(page, 'sheet')
-    step('sheet open')
     await sheet.waitForSelector('#signAs', { timeout: 10_000 })
-    step('signAs shown')
     await sheet.selectOption('#who', 'public')
     await sheet.check('#signAs')
     await sheet.fill('#msg', 'i am about to misbehave')
     await sheet.click('#go')
     await sheet.waitForSelector('.status.ok', { timeout: 90_000 })
-    step('posting')
     await page.click('button:has-text("Post")')
     await page.waitForFunction(() => document.querySelectorAll('.c').length === 2)
-    } catch (e) {
-      const status = await card?.textContent('#status').catch(() => '?')
-      throw new Error(`${e.message.split('\n')[0]} — card status: "${status}"`)
-    }
   })
 
-  test('the owner sees the verified member and bans them; they cannot get back in', { timeout: 300_000 }, async (t) => {
+  test('the owner sees the verified member and bans them; the members-only post vanishes for them', { timeout: 300_000 }, async (t) => {
     if (skip || !member) return t.skip(skip ?? 'no member')
-    const page = await owner.ctx.newPage()
-    await page.goto(siteUrl)
-    await trigger(owner.sw, { action: 'scan' })
-    await page.waitForFunction(() => [...document.querySelectorAll('button')].filter((b) => b.textContent.includes('Reveal')).length === 2, null, { timeout: 60_000 })
-    await page.locator('button:has-text("Reveal")').last().click()
-    const card = await frameOf(page, 'reveal')
-    await card.waitForSelector('#out:not([hidden])', { timeout: 60_000 })
+    const { page, n } = await scanOpens(owner)
+    assert.equal(n, 1, 'the owner sees the public post (the members-only one needs World ID they did not connect)')
+    const card = await readFirst(page)
     assert.match(await card.textContent('#author'), /✓ verified member member-[0-9a-f]{12}/)
     await card.click('#ban')
     await card.waitForFunction(() => /is banned/.test(document.getElementById('ban').textContent), null, { timeout: 30_000 })
-    // the member tries the members-only post again — same human, same nullifier → refused
-    const mp = await member.ctx.newPage()
-    await mp.goto(siteUrl)
-    await trigger(member.sw, { action: 'scan' })
-    await mp.locator('button:has-text("Reveal")').first().click({ timeout: 60_000 })
-    const again = await frameOf(mp, 'reveal')
-    await again.click('#simHuman', { timeout: 60_000 })
-    await again.waitForFunction(() => /banned/i.test(document.getElementById('status').textContent), null, { timeout: 150_000 })
-    assert.equal(await again.isHidden('#out'), true)
+    const again = await scanOpens(member)
+    assert.equal(again.n, 1, 'only the public post is left for them')
+    assert.equal(await (await readFirst(again.page)).textContent('#plain').then((x) => x.includes('library')), false)
   })
 })

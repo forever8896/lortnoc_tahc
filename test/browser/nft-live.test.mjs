@@ -3,7 +3,7 @@
 //
 //   NFT_LIVE=1 node --test test/browser/nft-live.test.mjs
 //
-// The story a judge sees, with nothing faked but the wallet popup:
+// The story a judge sees, with nothing faked but the wallet popup (sealed posts + keyring):
 //   0. a space is bought on Sepolia LortnocSpaces → the relayer mints <label>.space.lortnoctahc.eth
 //      with eth.lortnoc.space.token = the LortnocDemoPass collection; the holder and the owner get a pass
 //   1. a writer locks a comment to "NFT holders of <label>.space"
@@ -171,22 +171,42 @@ async function write(p, text, who, { signAs = false } = {}) {
   await page.waitForSelector('.c')
   await page.close()
 }
-/** Reveal the Nth hidden comment and press "Prove I hold the NFT". Returns the card frame + page. */
-async function proveOn(p, nth) {
+/** "Your keys → Connect the wallet on this page": the page's window.ethereum signs the gate's message once. */
+async function connectWallet(p) {
+  const page = await p.ctx.newPage()
+  await page.goto(siteUrl)
+  const ext = await p.ctx.newPage()
+  await ext.goto(`chrome-extension://${p.sw.__extId}/src/popup/index.html`)
+  const r = await ext.evaluate(async () => {
+    const [tab] = (await chrome.tabs.query({ url: 'http://127.0.0.1/*' })).sort((a, b) => b.id - a.id)
+    return chrome.runtime.sendMessage({ type: 'WALLET_CONNECT', tabId: tab.id })
+  })
+  await ext.close()
+  await page.close()
+  return r
+}
+/** Scan the page; how many posts opened for this reader (0 = the page is plain to them). */
+async function scanOpens(p) {
   const page = await p.ctx.newPage()
   await page.goto(siteUrl)
   await trigger(p.sw, { action: 'scan' })
-  await page.locator('button:has-text("Reveal")').nth(nth).click()
+  const t0 = Date.now()
+  for (;;) {
+    const n = await page.locator('button:has-text("Hidden message")').count()
+    const none = page.frames().find((f) => f.url().includes('/src/reveal/'))
+    if ((n && n >= comments.length - 0) || (none && /Nothing on this page opens/.test(await none.textContent('#status').catch(() => '')))) return { page, n }
+    if (Date.now() - t0 > 60_000) return { page, n }
+    await page.waitForTimeout(500)
+  }
+}
+async function openNth(page, i) {
+  await page.locator('button:has-text("Hidden message")').nth(i).click()
   const card = await frameOf(page, 'reveal')
-  await card.waitForSelector('#proveNft:not([hidden])', { timeout: 60_000 })
-  // clear whatever the first (proof-less) attempt left, so the wait below sees only THIS attempt
-  await card.evaluate(() => Object.assign(document.querySelector('#status'), { className: 'status', textContent: '' }))
-  await card.click('#proveNft')
-  await card.waitForFunction(() => document.querySelector('#plain').textContent || document.querySelector('.status.err'), null, { timeout: 90_000 })
-  return { page, card }
+  await card.waitForSelector('#out:not([hidden])', { timeout: 30_000 })
+  return card
 }
 
-describe('NFT-gated ENS space, live, through the extension', () => {
+describe('NFT-gated ENS space through the keyring, live', () => {
   let holder
   test('a writer locks a comment to the space NFT holders', { timeout: 300_000 }, async (t) => {
     if (skip) return t.skip(skip)
@@ -195,18 +215,21 @@ describe('NFT-gated ENS space, live, through the extension', () => {
     assert.equal(comments.length, 1)
   })
 
-  test('a wallet without the pass is refused', { timeout: 180_000 }, async (t) => {
+  test('a wallet without the pass connects — the page stays plain for it', { timeout: 180_000 }, async (t) => {
     if (skip || !comments.length) return t.skip(skip ?? 'nothing posted')
-    const { card } = await proveOn(await profile(space.stranger), 0)
-    assert.match(await card.textContent('.status'), /doesn.t hold/)
-    assert.ok(await card.locator('#out').isHidden())
+    const stranger = await profile(space.stranger)
+    assert.equal((await connectWallet(stranger)).ok, true)
+    assert.equal((await scanOpens(stranger)).n, 0)
   })
 
-  test('the holder proves the NFT, reads it, and posts signed as a member', { timeout: 300_000 }, async (t) => {
+  test('the holder connects their wallet once: the post appears, they join, and post signed as a member', { timeout: 300_000 }, async (t) => {
     if (skip || !comments.length) return t.skip(skip ?? 'nothing posted')
     holder = await profile(space.holder)
-    const { card } = await proveOn(holder, 0)
-    assert.equal(await card.textContent('#plain'), 'holders: the drop is at nine')
+    const c = await connectWallet(holder)
+    assert.deepEqual(c.data.wallets, [space.holder.address.toLowerCase()])
+    const { page, n } = await scanOpens(holder)
+    assert.equal(n, 1)
+    assert.equal(await (await openNth(page, 0)).textContent('#plain'), 'holders: the drop is at nine')
     const mem = await holder.sw.evaluate(() => chrome.storage.local.get('spaceMemberships'))
     holder.memberId = mem.spaceMemberships?.[`@${space.label}`]?.memberId
     assert.match(holder.memberId ?? '', /^member-[0-9a-f]{12}$/)
@@ -214,22 +237,23 @@ describe('NFT-gated ENS space, live, through the extension', () => {
     assert.equal(comments.length, 2)
   })
 
-  test('the owner sees the verified member and bans them through ENS', { timeout: 300_000 }, async (t) => {
+  test('the owner (also a holder) sees the verified member and bans them through ENS', { timeout: 300_000 }, async (t) => {
     if (skip || !holder?.memberId) return t.skip(skip ?? 'no member')
     const owner = await profile(space.owner, { ensSpaceKeys: { [space.label]: { priv: space.ownerPriv, address: space.owner.address, role: 'owner' } } })
-    const { card } = await proveOn(owner, 1)
-    assert.equal(await card.textContent('#plain'), 'signed by a holder', `card: ${await card.textContent('.status')}`)
+    assert.equal((await connectWallet(owner)).ok, true)
+    const { page, n } = await scanOpens(owner)
+    assert.equal(n, 2)
+    const card = await openNth(page, 1)
+    assert.equal(await card.textContent('#plain'), 'signed by a holder')
     assert.match(await card.textContent('#author'), new RegExp(`verified member ${holder.memberId}`))
     await card.click('#ban')
     await card.waitForFunction(() => /is banned/.test(document.querySelector('#ban').textContent) || document.querySelector('.status.err'), null, { timeout: 180_000 })
     assert.match(await card.textContent('#ban'), /is banned/)
   })
 
-  test('the banned holder is refused', { timeout: 180_000 }, async (t) => {
+  test('the banned holder: the space posts are gone for them', { timeout: 180_000 }, async (t) => {
     if (skip || !holder?.memberId) return t.skip(skip ?? 'no member')
     await new Promise((r) => setTimeout(r, 21_000)) // the gate caches ENS reads for 20 s
-    const { card } = await proveOn(holder, 0)
-    assert.match(await card.textContent('.status'), /banned/, `plain: ${await card.textContent('#plain')}`)
-    assert.ok(await card.locator('#out').isHidden())
+    assert.equal((await scanOpens(holder)).n, 0)
   })
 })

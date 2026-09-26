@@ -36,8 +36,15 @@ export type SwRequest =
   | { type: 'SITE_SET'; origin: string; on: boolean }
   | { type: 'WORLD_WIDGET_OPEN'; id: string; request: WorldRequest; simulate?: boolean }
   | { type: 'WORLD_WIDGET_DONE'; id: string }
+  | { type: 'SEALED_GET'; id: string }
+  | { type: 'KEYRING_VIEW' }
+  | { type: 'KEYRING_ADD_PASS'; passphrase: string }
+  | { type: 'KEYRING_REMOVE_PASS'; id: string }
+  | { type: 'KEYRING_FORGET' }
+  | { type: 'WORLD_CONNECT'; kind: 'poh' | 'selfie' | 'nationality'; country?: string; simulate?: boolean }
+  | { type: 'WALLET_CONNECT'; tabId: number }
   // broadcasts between the reveal card and the World ID tab — the service worker ignores these
-  | { type: 'WORLD_WIDGET_RESULT' | 'WORLD_WIDGET_CLOSED' | 'WORLD_WIDGET_VERDICT' | 'WORLD_WIDGET_SIMULATE'; id: string; [k: string]: unknown }
+  | { type: 'WORLD_WIDGET_RESULT' | 'WORLD_WIDGET_CLOSED' | 'WORLD_WIDGET_VERDICT' | 'WORLD_WIDGET_SIMULATE' | 'WORLD_WIDGET_PING'; id: string; [k: string]: unknown }
 
 /** The gate's signed World ID request (gate/world.mjs challenge()), as the widget tab receives it. */
 export type WorldRequest = {
@@ -47,7 +54,7 @@ export type WorldRequest = {
 }
 
 /** Gate routes the extension may call (the service worker refuses anything else). */
-export const GATE_PATHS = ['/deposit', '/challenge', '/release', '/space', '/member/sign', '/ban', '/dev/simulate'] as const
+export const GATE_PATHS = ['/seal', '/deposit', '/challenge', '/release', '/space', '/member/sign', '/ban', '/dev/simulate'] as const
 export type GatePath = (typeof GATE_PATHS)[number]
 
 export type SwResponse<T = unknown> = { ok: true; data: T } | { ok: false; error: string; status?: number }

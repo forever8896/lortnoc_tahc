@@ -2,7 +2,7 @@
 // a local "cooking blog" with a comment box, a real local codec, three browser profiles.
 //
 //   profile 1 writes a comment locked with a passphrase (the sheet), posts it
-//   profile 2 scans the page, clicks Reveal, types the passphrase → reads the message
+//   profile 2 has the passphrase in its keyring → the post appears as a message for them → reads it
 //   profile 3 types the wrong passphrase → still chatter
 //
 // And the property the design exists for (PRD §14 G7): while profile 1 writes, the PAGE never
@@ -192,44 +192,50 @@ describe('extension-everywhere, three profiles on a comment section', () => {
     await ctx.close()
   })
 
-  test('profile 2 scans, reveals, types the passphrase and reads it', { timeout: 120_000 }, async (t) => {
+  test('profile 2 has the passphrase in its keyring: the post appears as a message for them', { timeout: 120_000 }, async (t) => {
     if (skip || !passphrase) return t.skip(skip ?? 'no comment posted')
     const { ctx, sw } = await profile()
+    await addPass(ctx, sw, passphrase.toUpperCase()) // case never makes it wrong
     const page = await ctx.newPage()
     await page.goto(siteUrl)
     await trigger(sw, { action: 'scan' })
-    await page.waitForSelector('button:has-text("Reveal")', { timeout: 60_000 })
+    await page.waitForSelector('button:has-text("Hidden message")', { timeout: 60_000 })
     await page.waitForTimeout(3000) // let the deep scan finish every candidate
-    // The decoy passes the SHAPE filter but is not ours: the codec must reject it → exactly one chip.
-    assert.equal(await page.locator('button:has-text("Reveal")').count(), 1, 'only the real post gets a chip')
-    await page.click('button:has-text("Reveal")')
+    // The decoy passes the SHAPE filter but is not ours: nothing opens it → exactly one chip.
+    assert.equal(await page.locator('button[data-lortnoc-chip]').count(), 1, 'only the real post gets a chip')
+    await page.click('button:has-text("Hidden message")')
     const card = await frameOf(page, 'reveal')
-    await card.waitForSelector('#pw:not([hidden])', { state: 'visible', timeout: 60_000 })
-    assert.match(await card.textContent('#checks'), /Passphrase/)
-    await card.fill('#pw', passphrase.toUpperCase()) // case never makes it wrong
-    await card.click('#try')
     await card.waitForSelector('#out:not([hidden])', { timeout: 30_000 })
     assert.equal(await card.textContent('#plain'), SECRET + '!')
+    assert.match(await card.textContent('#note'), /Passphrase/)
     assert.ok(!(await page.content()).includes('market'), 'the revealed text stays out of the page DOM')
     await ctx.close()
   })
 
-  test('profile 3, wrong passphrase: still chatter', { timeout: 120_000 }, async (t) => {
+  test('profile 3 — no keys, or the wrong passphrase: the post is just a comment, no hint at all', { timeout: 120_000 }, async (t) => {
     if (skip || !passphrase) return t.skip(skip ?? 'no comment posted')
-    const { ctx, sw } = await profile()
-    const page = await ctx.newPage()
-    await page.goto(siteUrl)
-    await trigger(sw, { action: 'scan' })
-    await page.click('button:has-text("Reveal")')
-    const card = await frameOf(page, 'reveal')
-    await card.waitForSelector('#pw', { state: 'visible', timeout: 60_000 })
-    await card.fill('#pw', 'blue door')
-    await card.click('#try')
-    await card.waitForSelector('.status.err')
-    assert.equal(await card.isHidden('#out'), true)
-    await ctx.close()
+    for (const pass of [null, 'blue door']) {
+      const { ctx, sw } = await profile()
+      if (pass) await addPass(ctx, sw, pass)
+      const page = await ctx.newPage()
+      await page.goto(siteUrl)
+      await trigger(sw, { action: 'scan' })
+      const card = await frameOf(page, 'reveal') // the "nothing here opens with your keys" card
+      await card.waitForFunction(() => /Nothing on this page opens/.test(document.getElementById('status').textContent), null, { timeout: 60_000 })
+      assert.equal(await page.locator('button[data-lortnoc-chip]').count(), 0, 'not even a Reveal: nothing says it is a message')
+      await ctx.close()
+    }
   })
 })
+
+/** What the popup's "Your keys → Add" does. */
+async function addPass(ctx, sw, passphrase) {
+  const ext = await ctx.newPage()
+  await ext.goto(`chrome-extension://${sw.__extId}/src/popup/index.html`)
+  const r = await ext.evaluate((p) => chrome.runtime.sendMessage({ type: 'KEYRING_ADD_PASS', passphrase: p }), passphrase)
+  assert.equal(r.ok, true)
+  await ext.close()
+}
 
 /** datetime-local value for `h` hours from now, as the sheet's input expects (browser local time). */
 const localIn = (page, h) => page.evaluate((h) => {
@@ -263,15 +269,17 @@ describe('timed messages through a real gate', () => {
       const rp = await reader.ctx.newPage()
       await rp.goto(siteUrl)
       await trigger(reader.sw, { action: 'scan' })
-      await rp.click('button:has-text("Reveal")')
-      const card = await frameOf(rp, 'reveal')
       if (opens) {
+        // its time has come: it appears for everyone with the extension — no keys needed
+        await rp.click('button:has-text("Hidden message")', { timeout: 60_000 })
+        const card = await frameOf(rp, 'reveal')
         await card.waitForSelector('#out:not([hidden])', { timeout: 60_000 })
         assert.equal(await card.textContent('#plain'), 'the tasting starts at noon')
       } else {
-        await card.waitForSelector('.status.err', { timeout: 60_000 })
-        assert.match(await card.textContent('#status'), /Locked until/)
-        assert.equal(await card.isHidden('#out'), true)
+        // not yet: it is not even there — no "locked" button that says a message is waiting
+        const card = await frameOf(rp, 'reveal')
+        await card.waitForFunction(() => /Nothing on this page opens/.test(document.getElementById('status').textContent), null, { timeout: 60_000 })
+        assert.equal(await rp.locator('button[data-lortnoc-chip]').count(), 0)
       }
       await reader.ctx.close()
     })
@@ -337,7 +345,7 @@ describe('"Always on for this site": the focus pill', () => {
     assert.ok((await page.inputValue('#c')).length > 50)
     // Posting reloads the page; on an Always-on site the hidden post is found with NO click
     await page.click('button:has-text("Post")')
-    await page.locator('button:has-text("Reveal")').first().waitFor({ state: 'visible', timeout: 30_000 })
+    await page.locator('button:has-text("Hidden message")').first().waitFor({ state: 'visible', timeout: 30_000 })
     // Same page on a hostname that was NOT switched on: no script, no pill.
     const other = await ctx.newPage()
     await other.goto(siteUrl.replace('127.0.0.1', 'localhost'))

@@ -1,6 +1,8 @@
 import { sw, LOCAL, DEFAULT_CODEC_URL } from '../shared/messages'
 import type { HealthData } from '../shared/messages'
 import { createSpace, ownedSpaces, memberships, ensSpaces, addEnsSpace } from '../shared/spaces'
+import { COUNTRIES } from '../shared/countries'
+import type { GateHealth } from '../shared/messages'
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
 
@@ -117,3 +119,62 @@ $('useDemoPass').onclick = (e) => {
 }
 void renderBuy()
 setInterval(() => void renderBuy(), 3000)
+
+// ---------------------------------------------------------------------------
+// Your keys — the keyring (background/sealed.ts does the work; it survives this popup closing)
+// ---------------------------------------------------------------------------
+type View = { passphrases: { id: string; label: string }[]; claims: { human: boolean; selfie: boolean; nationalities: string[]; wallets: string[] } | null }
+const countryName = (a: string) => COUNTRIES.find(([c]) => c === a)?.[1] ?? a
+const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+
+async function renderKeys() {
+  const r = await sw<View>({ type: 'KEYRING_VIEW' })
+  if (!r.ok) return
+  const { passphrases, claims } = r.data
+  $('passList').innerHTML = passphrases.map((p) => `<span class="chip ok">🔑 ${esc(p.label)}<button data-id="${p.id}" title="Remove">×</button></span>`).join('')
+  $('passCount').textContent = passphrases.length ? '' : 'none yet'
+  $('passList').querySelectorAll('button').forEach((b) => (b.onclick = async () => (await sw({ type: 'KEYRING_REMOVE_PASS', id: b.dataset.id! }), renderKeys())))
+  const w = [claims?.human && 'verified human', claims?.selfie && 'selfie', ...(claims?.nationalities ?? []).map((n) => `${countryName(n)} passport`)].filter(Boolean)
+  $('worldState').innerHTML = w.length ? `<span class="ok">✓ ${w.join(' · ')}</span>` : '<span class="muted">not connected</span>'
+  $('walletState').innerHTML = claims?.wallets?.length ? `<span class="ok">✓ ${claims.wallets.map((a) => a.slice(0, 6) + '…' + a.slice(-4)).join(', ')}</span>` : '<span class="muted">none</span>'
+  $('forget').hidden = !w.length && !claims?.wallets?.length
+}
+$<HTMLSelectElement>('natSel').innerHTML = '<option value="">Nationality (passport)…</option>' + COUNTRIES.map(([a, n]) => `<option value="${a}">${n}</option>`).join('')
+$('addPass').onclick = async () => {
+  const i = $<HTMLInputElement>('passIn')
+  if (!i.value.trim()) return
+  $('status').textContent = 'Adding…'
+  const r = await sw({ type: 'KEYRING_ADD_PASS', passphrase: i.value })
+  i.value = ''
+  $('status').textContent = r.ok ? 'Added. Press Find hidden posts to look again.' : r.error
+  void renderKeys()
+}
+$<HTMLInputElement>('passIn').addEventListener('keydown', (e) => e.key === 'Enter' && $('addPass').click())
+// World ID opens World's widget in a tab — this popup closes then; the service worker finishes it.
+const connect = (kind: 'poh' | 'selfie' | 'nationality', country?: string, simulate = false) => {
+  $('status').textContent = 'World ID opens in a new tab…'
+  void chrome.runtime.sendMessage({ type: 'WORLD_CONNECT', kind, country, simulate })
+}
+$('wHuman').onclick = () => connect('poh')
+$('wSelfie').onclick = () => connect('selfie')
+$('wSim').onclick = () => connect('poh', undefined, true)
+$('wNat').onclick = () => {
+  const c = $<HTMLSelectElement>('natSel').value
+  if (!c) return void ($('status').textContent = 'Choose the nationality on your passport first.')
+  connect('nationality', c)
+}
+$('wallet').onclick = async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  if (!tab?.id || !/^https?:/.test(tab.url ?? '')) return void ($('status').textContent = 'Open any web page where your wallet works, then try again.')
+  $('status').textContent = 'Sign the message in your wallet — it costs nothing and moves nothing.'
+  const r = await sw({ type: 'WALLET_CONNECT', tabId: tab.id })
+  $('status').textContent = r.ok ? 'Wallet connected. Press Find hidden posts to look again.' : r.error
+  void renderKeys()
+}
+$('forget').onclick = async (e) => {
+  e.preventDefault()
+  await sw({ type: 'KEYRING_FORGET' })
+  void renderKeys()
+}
+sw<GateHealth>({ type: 'GATE_HEALTH' }).then((g) => ($('wSim').hidden = !(g.ok && g.data.world?.envs?.includes('staging'))))
+void renderKeys()

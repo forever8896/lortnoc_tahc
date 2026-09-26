@@ -4,9 +4,10 @@
 import contentScript from '../content/index.ts?script'
 import { CODER, DEFAULT_CODEC_URL, DEFAULT_GATE_URL, LOCAL, GATE_PATHS } from '../shared/messages'
 import type { SwRequest, SwResponse } from '../shared/messages'
-import { looksLikeCover, canonicalCover, inspect } from '../../../shared/webframe.mjs'
+import { looksLikeCover, canonicalCover } from '../../../shared/webframe.mjs'
 import { fromB64 } from '../../../shared/keys.mjs'
 import { buySpace, buyState } from './buy'
+import { openCandidates, sealedGet, keyringView, addPassphrase, removePassphrase, forgetConnected, worldConnect, walletConnect, onWidgetMessage } from './sealed'
 
 const TIMEOUT = 30_000 // gpt2 takes seconds; fail closed rather than hang
 
@@ -50,16 +51,19 @@ async function handle(msg: SwRequest): Promise<SwResponse> {
   if (msg.type === 'FIND_POSTS') {
     // Deep scan, step 1 (shape, free) then step 2 (codec + frame check), a few at a time.
     const candidates = msg.texts.map((t, i) => ({ t, i })).filter(({ t }) => looksLikeCover(t)).slice(0, 40)
-    const found: number[] = []
+    const frames: { i: number; frame: Uint8Array }[] = []
     const queue = [...candidates]
     const worker = async () => {
       for (let c = queue.shift(); c; c = queue.shift()) {
         const r = await handle({ type: 'DECODE', coverText: canonicalCover(c.t) }).catch(() => null)
-        if (r?.ok && inspect(fromB64((r.data as { ciphertext: string }).ciphertext))) found.push(c.i)
+        if (r?.ok) frames.push({ i: c.i, frame: fromB64((r.data as { ciphertext: string }).ciphertext) })
       }
     }
     await Promise.all([worker(), worker(), worker()])
-    return { ok: true, data: { found: found.sort((a, b) => a - b) } }
+    // Step 3: sealed posts open only with the keyring (nothing else can tell they are posts);
+    // older posts that show their rule get a Reveal as before.
+    const { opened, legacy } = await openCandidates(frames)
+    return { ok: true, data: { found: legacy.sort((a, b) => a - b), opened } }
   }
   if (msg.type === 'WORLD_SIM') {
     // STAGING DEMO ONLY. World's simulator rejects calls with an extension Origin, so the gate —
@@ -120,7 +124,23 @@ chrome.runtime.onMessage.addListener((msg: SwRequest, sender, sendResponse) => {
     return true
   }
   // Card ↔ World ID tab traffic is not for the service worker: stay silent so it reaches them.
-  if (msg.type === 'WORLD_WIDGET_RESULT' || msg.type === 'WORLD_WIDGET_CLOSED' || msg.type === 'WORLD_WIDGET_VERDICT' || msg.type === 'WORLD_WIDGET_SIMULATE') return false
+  if (msg.type === 'WORLD_WIDGET_RESULT' || msg.type === 'WORLD_WIDGET_CLOSED' || msg.type === 'WORLD_WIDGET_VERDICT' || msg.type === 'WORLD_WIDGET_SIMULATE' || msg.type === 'WORLD_WIDGET_PING') {
+    onWidgetMessage(msg) // a keyring connection waiting in this worker (the reveal card listens too)
+    return false
+  }
+  if (msg.type === 'SEALED_GET') return void sealedGet(msg.id).then(sendResponse), true
+  if (msg.type === 'KEYRING_VIEW') return void keyringView().then(sendResponse), true
+  if (msg.type === 'KEYRING_ADD_PASS') return void addPassphrase(msg.passphrase).then(sendResponse), true
+  if (msg.type === 'KEYRING_REMOVE_PASS') return void removePassphrase(msg.id).then(sendResponse), true
+  if (msg.type === 'KEYRING_FORGET') return void forgetConnected().then(sendResponse), true
+  if (msg.type === 'WORLD_CONNECT') {
+    worldConnect(msg.kind, msg.country, !!msg.simulate, (id, request, simulate) => openWorldTab(id, request, undefined, simulate)).then(sendResponse)
+    return true
+  }
+  if (msg.type === 'WALLET_CONNECT') {
+    walletConnect((message) => walletSign(msg.tabId, message)).then(sendResponse)
+    return true
+  }
   if (msg.type === 'WORLD_WIDGET_OPEN') {
     openWorldTab(msg.id, msg.request, sender.tab?.id, msg.simulate).then(sendResponse)
     return true
