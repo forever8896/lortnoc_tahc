@@ -24,7 +24,8 @@ import { hkdf } from '@noble/hashes/hkdf.js'
 import { toHex, fromHex } from './keys.mjs'
 
 const enc = new TextEncoder()
-export const SPACE_RE = /^[a-z0-9-]{3,32}$/
+/** A gate space (`lentil-club`) or an ENS space (`@lentil-club` = lentil-club.space.lortnoctahc.eth). */
+export const SPACE_RE = /^@?[a-z0-9-]{3,32}$/
 
 /** An Ed25519 keypair — member keys and space-owner keys. */
 export function genSigner() {

@@ -8,7 +8,7 @@ import { toB64, fromHex } from '../../../shared/keys.mjs'
 import { gateDepositor } from '../../../shared/gateclient.mjs'
 import { sw, gatePost } from '../shared/messages'
 import { contentHash, withAuthor } from '../../../shared/member.mjs'
-import { ownedSpaces, memberships, attestAsMember } from '../shared/spaces'
+import { ownedSpaces, memberships, attestAsMember, ensSpaces } from '../shared/spaces'
 import type { EncodeData, ContentToFrame, FrameToContent, GateHealth } from '../shared/messages'
 
 type CheckDraft =
@@ -17,6 +17,7 @@ type CheckDraft =
   | { check: 'recipients'; keys: string }
   | { check: 'after'; when: string }
   | { check: 'human'; preset: 'poh' | 'selfie'; space: string }
+  | { check: 'nft'; space: string }
 
 const LABELS: Record<CheckDraft['check'], string> = {
   public: 'Anyone with the extension',
@@ -24,6 +25,7 @@ const LABELS: Record<CheckDraft['check'], string> = {
   recipients: 'Named people',
   after: 'Opens after a time',
   human: 'Verified humans (World ID)',
+  nft: 'NFT holders of an ENS space',
 }
 /** datetime-local value for `h` hours from now, in the user's own time zone */
 const localIn = (h: number) => {
@@ -35,22 +37,26 @@ const fresh = (check: CheckDraft['check']): CheckDraft =>
   : check === 'passphrase' ? { check, passphrase: generatePassphrase(), hint: '' }
   : check === 'after' ? { check, when: localIn(1) }
   : check === 'human' ? { check, preset: 'poh', space: '' }
+  : check === 'nft' ? { check, space: '' }
   : { check, keys: '' }
 
 let groups: CheckDraft[][] = [[fresh('public')]]
 
 /** The ready-made choices. "custom" reveals the full builder (AND of ORs). */
-type Preset = 'public' | 'passphrase' | 'human' | 'human-or-pass' | 'after' | `space:${string}` | 'custom'
+type Preset = 'public' | 'passphrase' | 'human' | 'human-or-pass' | 'after' | `space:${string}` | `nft:${string}` | 'custom'
 function presetGroups(p: Preset): CheckDraft[][] {
   if (p === 'passphrase') return [[fresh('passphrase')]]
   if (p === 'human') return [[fresh('human')]]
   if (p === 'human-or-pass') return [[fresh('human'), fresh('passphrase')]]
   if (p === 'after') return [[fresh('after')]]
   if (p.startsWith('space:')) return [[{ check: 'human', preset: 'poh', space: p.slice(6) }]]
+  if (p.startsWith('nft:')) return [[{ check: 'nft', space: p.slice(4) }]]
   return [[fresh('public')]]
 }
 /** Spaces you own or joined — offered in the World ID check and for "post as member". */
 let knownSpaces: string[] = []
+/** ENS spaces you use (labels) — added in the popup's Settings. */
+let ensList: string[] = []
 let memberOf: Record<string, string> = {}
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
@@ -73,6 +79,10 @@ function leaf(d: CheckDraft) {
   if (d.check === 'public') return { check: 'public' }
   if (d.check === 'passphrase') return { check: 'passphrase', passphrase: d.passphrase, ...(d.hint.trim() ? { hint: d.hint.trim() } : {}) }
   if (d.check === 'human') return { check: 'human', preset: d.preset, ...(d.space ? { space: d.space } : {}) }
+  if (d.check === 'nft') {
+    if (!d.space) throw new Error('Pick the ENS space whose NFT readers must hold.')
+    return { check: 'nft', space: d.space }
+  }
   if (d.check === 'after') {
     const t = new Date(d.when).getTime()
     if (!Number.isFinite(t)) throw new Error('Pick when it should open.')
@@ -157,6 +167,12 @@ function checkEl(d: CheckDraft, remove: () => void): HTMLElement {
     const i = Object.assign(document.createElement('input'), { type: 'datetime-local', value: d.when })
     i.oninput = () => ((d.when = i.value), renderHonesty())
     fields.append(i, note('Nobody can open it before then — held by the lortnoc gate. Combine with a passphrase so the gate alone can never read it.'))
+  } else if (d.check === 'nft') {
+    const sel = document.createElement('select')
+    sel.innerHTML = `<option value="">Pick an ENS space…</option>` + ensList.map((x) => `<option value="@${x}">${x}.space</option>`).join('')
+    sel.value = d.space
+    sel.onchange = () => (d.space = sel.value)
+    fields.append(sel, note("Readers sign with the wallet holding the space's NFT. The collection is the space's ENS record."))
   } else {
     const ta = document.createElement('textarea')
     ta.placeholder = 'Messaging keys (hex), one per line — ENS names come with the ENS update'
@@ -214,8 +230,7 @@ async function go() {
       deposit = gateDepositor({ gatePub: g.data.pub, post: gatePost })
     }
     let body = text
-    const who = $<HTMLSelectElement>('who').value
-    const asSpace = who.startsWith('space:') && ($('signAs') as HTMLInputElement | null)?.checked ? who.slice(6) : ''
+    const asSpace = ($('signAs') as HTMLInputElement | null)?.checked ? ($('signSpace') as HTMLSelectElement).value : ''
     if (asSpace) {
       setStatus(`Signing as your member name in ${asSpace}…`)
       body = withAuthor(text, { space: asSpace, ...(await attestAsMember(asSpace, contentHash(text))) })
@@ -284,9 +299,14 @@ function renderDetail(p: Preset) {
     i.oninput = () => (after.when = i.value)
     box.append(i)
   }
-  if (p.startsWith('space:') && memberOf[p.slice(6)]) {
+  // Members may sign ANY post as their pseudonym (so a space owner can see who wrote it and ban
+  // them). Shown only to members; defaults to the space of the chosen lock, else the first one.
+  const mine = Object.keys(memberOf)
+  if (mine.length) {
+    const pre = p.startsWith('space:') && memberOf[p.slice(6)] ? p.slice(6) : mine[0]
     const l = Object.assign(document.createElement('label'), { className: 'toggle' })
-    l.innerHTML = `<input type="checkbox" id="signAs"> Sign as ${memberOf[p.slice(6)]}`
+    l.innerHTML = `<input type="checkbox" id="signAs"> Sign as <select id="signSpace">${mine
+      .map((sp) => `<option value="${sp}"${sp === pre ? ' selected' : ''}>${memberOf[sp]} · ${sp}</option>`).join('')}</select>`
     box.append(l)
   }
   renderHonesty()
@@ -301,6 +321,10 @@ function fillPresets() {
     ['human', 'Verified humans (World ID)'],
     ['human-or-pass', 'Verified humans, or the passphrase'],
     ...knownSpaces.map((x) => [`space:${x}`, `Members of ${x}`] as [Preset, string]),
+    ...ensList.flatMap((x) => [
+      [`space:@${x}`, `Verified humans of ${x}.space`],
+      [`nft:@${x}`, `NFT holders of ${x}.space`],
+    ] as [Preset, string][]),
     ['after', 'Everyone, after a date'],
     ['custom', 'Custom…'],
   ]
@@ -317,8 +341,9 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void go()
 })
 if (location.hash === '#nofield') setStatus('Tip: click the box you want to post in — any time before you press Hide & insert.')
-Promise.all([ownedSpaces(), memberships(), chrome.storage.local.get('lastWho')]).then(([own, mem, last]) => {
-  knownSpaces = [...new Set([...Object.keys(own), ...Object.keys(mem).filter((k) => mem[k].memberId)])].sort()
+Promise.all([ownedSpaces(), memberships(), chrome.storage.local.get('lastWho'), ensSpaces()]).then(([own, mem, last, ens]) => {
+  ensList = ens
+  knownSpaces = [...new Set([...Object.keys(own), ...Object.keys(mem).filter((k) => mem[k].memberId && !k.startsWith('@'))])].sort()
   memberOf = Object.fromEntries(Object.entries(mem).filter(([, m]) => m.memberId).map(([k, m]) => [k, m.memberId!]))
   fillPresets()
   const who = $<HTMLSelectElement>('who')

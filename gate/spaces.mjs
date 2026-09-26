@@ -12,7 +12,7 @@ import { httpError } from './core-errors.mjs'
 const HEX64 = /^[0-9a-f]{64}$/
 const MEMBER_RE = /^member-[0-9a-f]{12}$/
 
-export function createSpaces(db, { secret, signPriv }) {
+export function createSpaces(db, { secret, signPriv, ensSpaces = null }) {
   db.exec(`CREATE TABLE IF NOT EXISTS spaces (space TEXT PRIMARY KEY, owner_pub TEXT NOT NULL, created_at INTEGER NOT NULL)`)
   db.exec(`CREATE TABLE IF NOT EXISTS members (space TEXT, member_id TEXT, nullifier TEXT NOT NULL, member_pub TEXT,
     joined_at INTEGER NOT NULL, banned INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (space, member_id))`)
@@ -24,7 +24,7 @@ export function createSpaces(db, { secret, signPriv }) {
 
     /** Register a space to an owner key. The signature proves the caller holds that key. */
     register({ space, ownerPub, sig }) {
-      if (!SPACE_RE.test(space ?? '')) throw httpError(400, 'space names are 3–32 of a-z 0-9 -')
+      if (!SPACE_RE.test(space ?? '') || space.startsWith('@')) throw httpError(400, 'space names are 3–32 of a-z 0-9 -')
       if (!HEX64.test(ownerPub ?? '')) throw httpError(400, 'bad ownerPub')
       if (!verifySig(ownerPub, MSG.register(space, ownerPub), sig ?? '')) throw httpError(403, 'bad signature')
       const row = db.prepare('SELECT owner_pub FROM spaces WHERE space = ?').get(space)
@@ -49,12 +49,14 @@ export function createSpaces(db, { secret, signPriv }) {
     },
 
     /** Countersign a post by a member — the gate sees only the content HASH, never the text. */
-    attest({ space, memberId, contentHash, sig }) {
+    async attest({ space, memberId, contentHash, sig }) {
       if (!SPACE_RE.test(space ?? '') || !MEMBER_RE.test(memberId ?? '') || !HEX64.test(contentHash ?? ''))
         throw httpError(400, 'bad request')
       const m = db.prepare('SELECT member_pub, banned FROM members WHERE space = ? AND member_id = ?').get(space, memberId)
       if (!m) return { deny: 'not a member of this space' }
       if (m.banned) return { deny: 'You are banned from this space.' }
+      // ENS spaces: the ban list is the space's ENS record, read live.
+      if (space.startsWith('@') && (await ensSpaces?.isBanned(space, memberId))) return { deny: 'You are banned from this space.' }
       if (!m.member_pub || !verifySig(m.member_pub, MSG.authorRequest(space, memberId, contentHash), sig ?? ''))
         return { deny: 'not signed by this member' }
       return { sig: sign(signPriv, MSG.attestation(space, memberId, contentHash)) }

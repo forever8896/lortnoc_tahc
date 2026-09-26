@@ -23,6 +23,15 @@
       <div class="eyebrow">Your spaces</div>
       <div class="row"><input type="text" id="spaceName" placeholder="new-space-name" spellcheck="false"><button class="btn btn-ghost btn-small" id="createSpace">Create</button></div>
       <div class="small" id="spaceList" style="margin-top:6px"></div>
+      <div class="eyebrow">ENS spaces</div>
+      <div class="row"><input type="text" id="ensName" placeholder="name  (→ name.space.lortnoctahc.eth)" spellcheck="false"><button class="btn btn-ghost btn-small" id="addEns">Add</button></div>
+      <div class="small" id="ensList" style="margin-top:6px"></div>
+      <div class="eyebrow">Buy a space · 0.005 ETH</div>
+      <div class="small muted" style="margin-bottom:6px">A real ENS name for your community, gated by your NFT collection. Your wallet on this page pays.</div>
+      <input type="text" id="buyName" placeholder="name" spellcheck="false" style="margin-bottom:6px">
+      <input type="text" id="buyToken" placeholder="NFT: eip155:11155111/erc721:0x…" spellcheck="false" style="margin-bottom:6px">
+      <div class="row"><select id="buyChain"><option value="11155111">Sepolia (demo)</option><option value="1">Ethereum mainnet</option></select><button class="btn btn-small" id="buy">Buy</button></div>
+      <div class="small" id="buyState" style="margin-top:6px"></div>
       <div class="eyebrow">Codec</div>
       <div class="row"><input type="text" id="codec" spellcheck="false"><button class="btn btn-ghost btn-small" id="save">Save</button></div>
     </details>

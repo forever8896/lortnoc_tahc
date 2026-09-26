@@ -6,6 +6,7 @@ import { CODER, DEFAULT_CODEC_URL, DEFAULT_GATE_URL, LOCAL, GATE_PATHS } from '.
 import type { SwRequest, SwResponse } from '../shared/messages'
 import { looksLikeCover, canonicalCover, inspect } from '../../../shared/webframe.mjs'
 import { fromB64 } from '../../../shared/keys.mjs'
+import { buySpace, buyState } from './buy'
 
 const TIMEOUT = 30_000 // gpt2 takes seconds; fail closed rather than hang
 
@@ -108,11 +109,55 @@ async function handle(msg: SwRequest): Promise<SwResponse> {
   }
 }
 
-chrome.runtime.onMessage.addListener((msg: SwRequest, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg: SwRequest, sender, sendResponse) => {
   if (!msg || typeof msg !== 'object' || !('type' in msg)) return false
+  if (msg.type === 'BUY_SPACE') {
+    buySpace(msg).then(sendResponse)
+    return true
+  }
+  if (msg.type === 'BUY_STATE') {
+    buyState().then(sendResponse)
+    return true
+  }
+  if (msg.type === 'WALLET_SIGN') {
+    walletSign(sender.tab?.id, msg.message).then(sendResponse)
+    return true
+  }
   handle(msg).then(sendResponse)
   return true
 })
+
+/**
+ * Ask the reader's OWN wallet (injected by MetaMask & co. into the page they are reading) to sign
+ * the gate's challenge. Wallets inject window.ethereum into web pages, not into extension pages,
+ * so this runs in the page's MAIN world for one call. The message is the gate's challenge — public,
+ * bound to this reader's one-time key — and signing moves nothing.
+ */
+export async function walletSign(tabId: number | undefined, message: string): Promise<SwResponse> {
+  if (!tabId) return { ok: false, error: 'no page to ask the wallet from' }
+  try {
+    const [r] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      args: [message],
+      func: async (m: string) => {
+        const eth = (window as unknown as { ethereum?: { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum
+        if (!eth) return { error: 'No wallet found in this browser (MetaMask, Rabby, …).' }
+        try {
+          const [address] = (await eth.request({ method: 'eth_requestAccounts' })) as string[]
+          const sig = (await eth.request({ method: 'personal_sign', params: [m, address] })) as string
+          return { address, sig }
+        } catch (e) {
+          return { error: (e as { message?: string })?.message ?? 'The wallet declined.' }
+        }
+      },
+    })
+    const v = r?.result as { address?: string; sig?: string; error?: string } | undefined
+    return v?.sig ? { ok: true, data: v } : { ok: false, error: v?.error ?? 'no answer from the wallet' }
+  } catch (e) {
+    return { ok: false, error: `could not reach the page: ${String(e)}` }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Entry points

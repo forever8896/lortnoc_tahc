@@ -7,6 +7,8 @@
 export const DEFAULT_CODEC_URL = 'https://lortnoc-codec.fly.dev'
 /** The gate holds shares for attested checks (time lock, World ID, tokens). Local until hosted. */
 export const DEFAULT_GATE_URL = 'http://localhost:8790'
+/** Turns a paid space purchase into its ENS name (relayer POST /space, PRD §23.2). */
+export const RELAYER_URL = 'https://lortnoc-relayer.fly.dev'
 
 /**
  * Named on EVERY request, never inherited (CLAUDE.md §4). Every extension calls the same codec
@@ -27,6 +29,9 @@ export type SwRequest =
   | { type: 'GATE'; path: GatePath; body: unknown }
   | { type: 'WORLD_SIM'; connectUrl: string }
   | { type: 'FIND_POSTS'; texts: string[] }
+  | { type: 'WALLET_SIGN'; message: string }
+  | { type: 'BUY_SPACE'; label: string; token: string; chainId: 1 | 11155111; tabId: number }
+  | { type: 'BUY_STATE' }
   | { type: 'SITE_STATE'; origin: string }
   | { type: 'SITE_SET'; origin: string; on: boolean }
 

@@ -72,7 +72,7 @@ describe('spaces and bans', () => {
     const { memberId } = alice.log.member
     const text = 'bring bread on thursday'
     const h = contentHash(text)
-    const att = s.gate.spaces.attest({ space: SPACE, memberId, contentHash: h, sig: sign(alice.key.priv, MSG.authorRequest(SPACE, memberId, h)) })
+    const att = await s.gate.spaces.attest({ space: SPACE, memberId, contentHash: h, sig: sign(alice.key.priv, MSG.authorRequest(SPACE, memberId, h)) })
     assert.ok(att.sig)
     const good = readAuthor(withAuthor(text, { space: SPACE, memberId, sig: att.sig }), s.gate.signPub)
     assert.deepEqual(good, { text, author: { space: SPACE, memberId, verified: true } })
@@ -81,7 +81,7 @@ describe('spaces and bans', () => {
     assert.equal(forged.author.verified, false)
     // and Mallory cannot get the gate to sign as Alice without Alice's member key
     const mallorySigner = genSigner()
-    const bad = s.gate.spaces.attest({ space: SPACE, memberId, contentHash: h, sig: sign(mallorySigner.priv, MSG.authorRequest(SPACE, memberId, h)) })
+    const bad = await s.gate.spaces.attest({ space: SPACE, memberId, contentHash: h, sig: sign(mallorySigner.priv, MSG.authorRequest(SPACE, memberId, h)) })
     assert.equal(bad.deny, 'not signed by this member')
   })
 
@@ -97,7 +97,7 @@ describe('spaces and bans', () => {
     assert.match(newAccount.log.denials.at(-1), /banned from this space/)
     // …and cannot post as a verified member any more
     const h = contentHash('x')
-    const att = s.gate.spaces.attest({ space: SPACE, memberId, contentHash: h, sig: sign(mallory.key.priv, MSG.authorRequest(SPACE, memberId, h)) })
+    const att = await s.gate.spaces.attest({ space: SPACE, memberId, contentHash: h, sig: sign(mallory.key.priv, MSG.authorRequest(SPACE, memberId, h)) })
     assert.match(att.deny, /banned/)
     // everyone else is unaffected
     const alice = s.reader(ALICE)
@@ -135,6 +135,60 @@ describe('spaces and bans', () => {
     const f = await sealMessage('x', { check: 'human', space: 'nobody-owns-this' }, { deposit })
     const alice = s.reader(ALICE)
     assert.equal(await alice.open(f), null)
-    assert.match(alice.log.denials.at(-1), /not registered/)
+    assert.match(alice.log.denials.at(-1), /does not exist/)
+  })
+})
+
+describe('ENS spaces (@name → name.space.lortnoctahc.eth) — ENS read faked, gate + checks real', async () => {
+  const { createEnsSpaces } = await import('../../gate/ens-spaces.mjs')
+  const ENS = new Map() // name → { owner, token, bans }
+  const ensSpaces = createEnsSpaces({ read: async (name) => ENS.get(name) ?? { owner: null, token: null, bans: null } })
+
+  function ensSetup() {
+    const gate = createGate({ world: fakeWorld(), ensSpaces })
+    const post = async (path, body) => (path === '/deposit' ? gate.deposit(body) : path === '/challenge' ? gate.challenge(body) : gate.release(body))
+    const deposit = gateDepositor({ gatePub: gate.pub, post })
+    const reader = (nullifier) => {
+      const key = genSigner()
+      const log = { member: null, denials: [] }
+      const release = gateReleaser({ post, proofFor: proofFor({ response: { nullifier } }), extraFor: () => ({ memberPub: key.pub }),
+        onRelease: (r) => (log.member = r.member ?? log.member), onDeny: (d) => log.denials.push(d.deny) })
+      return { key, log, open: (f) => openMessage(f, { release }) }
+    }
+    return { gate, deposit, reader }
+  }
+
+  test('a member joins an ENS space; the ENS ban record keeps them out, and stops them signing', async () => {
+    const s = ensSetup()
+    ENS.set('garden.space.lortnoctahc.eth', { owner: '0x' + '11'.repeat(20), token: '', bans: '' })
+    ensSpaces.forget('@garden')
+    const f = await sealMessage('seeds swap sunday', { check: 'human', space: '@garden' }, { deposit: s.deposit })
+    assert.match(inspect(f).checks[0], /members of garden\.space\.lortnoctahc\.eth/)
+    const m = s.reader(MALLORY)
+    assert.equal(await m.open(f), 'seeds swap sunday')
+    const { memberId } = m.log.member
+    // the owner (or a moderator) writes the ban into ENS
+    ENS.set('garden.space.lortnoctahc.eth', { owner: '0x' + '11'.repeat(20), token: '', bans: `member-000000000000, ${memberId}` })
+    ensSpaces.forget('@garden')
+    const again = s.reader(MALLORY)
+    assert.equal(await again.open(await sealMessage('next', { check: 'human', space: '@garden' }, { deposit: s.deposit })), null)
+    assert.match(again.log.denials.at(-1), /banned/)
+    const h = contentHash('x')
+    const att = await s.gate.spaces.attest({ space: '@garden', memberId, contentHash: h, sig: sign(m.key.priv, MSG.authorRequest('@garden', memberId, h)) })
+    assert.match(att.deny, /banned/)
+  })
+
+  test('an ENS space that does not exist (no registry owner) cannot be joined', async () => {
+    const s = ensSetup()
+    const f = await sealMessage('x', { check: 'human', space: '@nobody' }, { deposit: s.deposit })
+    const r = s.reader(ALICE)
+    assert.equal(await r.open(f), null)
+    assert.match(r.log.denials.at(-1), /does not exist/)
+  })
+
+  test('an ENS name can never be registered as a free gate space', () => {
+    const s = ensSetup()
+    const k = genSigner()
+    assert.throws(() => s.gate.spaces.register({ space: '@garden', ownerPub: k.pub, sig: sign(k.priv, MSG.register('@garden', k.pub)) }), /space names/)
   })
 })

@@ -9,7 +9,8 @@ import QRCode from 'qrcode'
 import { sw, gatePost } from '../shared/messages'
 import type { GateHealth } from '../shared/messages'
 import { readAuthor } from '../../../shared/member.mjs'
-import { memberKey, rememberMember, ownedSpaces, banMember } from '../shared/spaces'
+import { memberKey, rememberMember, ownedSpaces, banMember, ensKeys } from '../shared/spaces'
+import { writeBan } from '../shared/ensWrite'
 import type { DecodeData, FrameToContent } from '../shared/messages'
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
@@ -32,6 +33,19 @@ const denied: { last: { deny?: string; retryAt?: number } | null } = { last: nul
 let postSpace = ''
 /** The reader chose to verify with World ID in this card (a click — never automatic). */
 let wantsHuman = false
+/** …or to prove NFT ownership with their wallet (a click — never automatic). */
+let wantsNft = false
+
+async function nftProof({ ref, readerPub, policyHash }: { ref: string; readerPub: string; policyHash: string }) {
+  if (!wantsNft) return null
+  const c = await gatePost('/challenge', { ref, readerPub, policyHash })
+  if (!c?.request) throw new Error(c?.deny ?? c?.error ?? 'the gate could not start the NFT check')
+  setStatus('Sign the message in your wallet…')
+  const w = await sw<{ address: string; sig: string }>({ type: 'WALLET_SIGN', message: c.request.message })
+  if (!w.ok) throw new Error(w.error)
+  setStatus('Checking the collection…')
+  return { nonce: c.request.nonce, address: w.data.address, sig: w.data.sig }
+}
 let cancelWorld: (() => void) | null = null
 
 /**
@@ -93,7 +107,7 @@ async function worldProof({ check, ref, readerPub, policyHash }: { check: string
 const release = gateReleaser({
   post: gatePost,
   onDeny: (d: { deny?: string; retryAt?: number }) => (denied.last = d),
-  proofFor: worldProof,
+  proofFor: (r: { check: string; ref: string; readerPub: string; policyHash: string }) => (r.check === 'nft' ? nftProof(r) : worldProof(r)),
   // Joining a space: bind our member key to the pseudonym the gate derives from our World ID.
   extraFor: async (_check: string, params: { space?: string }) => (params.space ? { memberPub: (await memberKey(params.space)).pub } : {}),
   onRelease: (r: { member?: { space: string; memberId: string } }) => r.member && void rememberMember(r.member.space, r.member.memberId),
@@ -112,14 +126,21 @@ async function show(raw: string, obfuscationOnly: boolean) {
     $('author').textContent = author.verified
       ? `✓ verified member ${author.memberId} · ${author.space}`
       : `⚠ claims to be ${author.memberId} of ${author.space} — the signature does not check out`
-    const mine = (await ownedSpaces())[author.space]
+    const isEns = author.space.startsWith('@')
+    const ensKey = isEns ? (await ensKeys())[author.space.slice(1)] : undefined
+    const mine = isEns ? ensKey : (await ownedSpaces())[author.space]
     if (mine && author.verified) {
       const b = $<HTMLButtonElement>('ban')
       b.hidden = false
-      b.textContent = `Ban ${author.memberId} from ${author.space}`
+      b.textContent = `Ban ${author.memberId} from ${isEns ? `${author.space.slice(1)}.space` : author.space}`
       b.onclick = async () => {
         try {
-          await banMember(author.space, author.memberId)
+          if (ensKey) {
+            // ENS space: the ban is written into the space's own ENS record, on-chain and public.
+            b.disabled = true
+            b.textContent = 'Writing the ban to ENS…'
+            await writeBan(author.space, author.memberId, ensKey.priv)
+          } else await banMember(author.space, author.memberId)
           b.textContent = `${author.memberId} is banned — they cannot rejoin, even with a new account`
           b.disabled = true
         } catch (e) {
@@ -142,13 +163,13 @@ async function attempt() {
   if (!frame) return
   const info = inspect(frame)!
   denied.last = null
-  const needsGate = info.needs?.includes('after') || info.needs?.includes('human')
+  const needsGate = ['after', 'human', 'nft'].some((c) => info.needs?.includes(c))
   const text = await openMessage(frame, { passphrases: tried, ...(needsGate ? { release } : {}) })
   if (text !== null) return void (await show(text, !!(info.honesty as { obfuscationOnly?: boolean } | undefined)?.obfuscationOnly))
   // (read through a cast: TS cannot see the onDeny callback assigning it during openMessage)
   const deny = denied.last as { retryAt?: number; deny?: string; check?: string } | null
   if (deny?.retryAt) setStatus(`Locked until ${new Date(deny.retryAt).toLocaleString()}.`, 'err')
-  else if (deny?.check === 'human' && deny.deny) setStatus(deny.deny, 'err')
+  else if ((deny?.check === 'human' || deny?.check === 'nft') && deny.deny) setStatus(deny.deny, 'err')
   else if (tried.length) setStatus('That didn’t open it.', 'err')
   $('verifyHuman').hidden = !info.needs?.includes('human') || !$('world').hidden
   fit()
@@ -180,7 +201,9 @@ async function main() {
   $('pass').hidden = !info.needs?.includes('passphrase')
   $('identity').hidden = !info.needs?.includes('recipients')
   $('verifyHuman').hidden = !info.needs?.includes('human')
-  postSpace = (info.checks ?? []).find((c: string) => c.includes(' · members of '))?.split(' · members of ')[1] ?? ''
+  $('proveNft').hidden = !info.needs?.includes('nft')
+  postSpace = (info.checks ?? []).find((c: string) => c.includes(' · members of '))?.split(' · members of ')[1]
+    ?? (info.checks ?? []).find((c: string) => c.startsWith('Holders of '))?.replace(/^Holders of |'s NFT$/g, '') ?? ''
   setStatus('')
   await attempt() // a public post, or a passphrase already typed in this card, opens straight away
   if ($('out').hidden && !$('pass').hidden) $<HTMLInputElement>('pw').focus()
@@ -199,6 +222,10 @@ $('try').onclick = () => void tryPassphrase()
 $('verifyHuman').onclick = () => {
   wantsHuman = true
   void attempt().finally(() => (wantsHuman = false))
+}
+$('proveNft').onclick = () => {
+  wantsNft = true
+  void attempt().finally(() => (wantsNft = false))
 }
 $('cancelWorld').onclick = () => {
   cancelWorld?.()

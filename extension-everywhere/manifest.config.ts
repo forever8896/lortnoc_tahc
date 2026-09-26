@@ -28,7 +28,7 @@ export default defineManifest({
   permissions: ['storage', 'activeTab', 'scripting', 'contextMenus'],
   // World ID: IDKit talks to World's bridge. (The staging simulator is reached via the gate.)
   host_permissions: ['http://localhost/*', 'http://127.0.0.1/*', 'https://lortnoc-codec.fly.dev/*',
-    'https://bridge.worldcoin.org/*'],
+    'https://bridge.worldcoin.org/*', 'https://ethereum-sepolia-rpc.publicnode.com/*', 'https://lortnoc-relayer.fly.dev/*'],
   // Per-site opt-in ("Always on for this site"): asked for one origin at a time from the popup,
   // never at install. Only such sites run the content script without a click.
   optional_host_permissions: ['https://*/*', 'http://*/*'],

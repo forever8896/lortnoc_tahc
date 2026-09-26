@@ -33,9 +33,9 @@ export default {
   flags: { gateHoldsShare: true, worldSeesCounts: true },
   validate(node) {
     if (node.preset !== undefined && !PRESETS.includes(node.preset)) throw new Error('human: unknown preset')
-    if (node.space !== undefined && !/^[a-z0-9-]{3,32}$/.test(node.space)) throw new Error('human: bad space name')
+    if (node.space !== undefined && !/^@?[a-z0-9-]{3,32}$/.test(node.space)) throw new Error('human: bad space name')
   },
-  describe: (p) => LABEL[p.preset ?? 'poh'] + (p.space ? ` · members of ${p.space}` : ''),
+  describe: (p) => LABEL[p.preset ?? 'poh'] + (p.space ? ` · members of ${p.space.startsWith('@') ? `${p.space.slice(1)}.space.lortnoctahc.eth` : p.space}` : ''),
   encodeParams(node) {
     const space = enc.encode(node.space ?? '')
     return [PRESETS.indexOf(node.preset ?? 'poh'), space.length, ...space]
@@ -43,7 +43,7 @@ export default {
   decodeParams(bytes, at) {
     const preset = PRESETS[bytes[at]]
     const n = bytes[at + 1]
-    if (!preset || n > 32 || at + 2 + n > bytes.length) throw new Error('human: bad params')
+    if (!preset || n > 33 || at + 2 + n > bytes.length) throw new Error('human: bad params')
     const space = n ? dec.decode(bytes.subarray(at + 2, at + 2 + n)) : undefined
     return { params: { preset, ...(space ? { space } : {}), fromWire: true }, at: at + 2 + n }
   },
@@ -60,10 +60,12 @@ export default {
   },
   // Gate side — `services.world` is gate/world.mjs; absent when World is not configured.
   gate: {
-    challenge(stored, req, state, services) {
+    async challenge(stored, req, state, services) {
       if (!services.world) return { deny: 'World ID is not configured on this gate' }
       const { preset, space } = stored.params
-      if (space && !services.spaces?.exists(space)) return { deny: `the space "${space}" is not registered on this gate` }
+      const known = !space ? true
+        : space.startsWith('@') ? await services.ensSpaces?.exists(space) : services.spaces?.exists(space)
+      if (!known) return { deny: `the space "${space}" does not exist` }
       const action = services.world.actionFor(stored.ref, space)
       return { request: services.world.challenge(stored.ref, req.readerPub, state, preset, action) }
     },
@@ -78,6 +80,8 @@ export default {
       // In a space: the banned stay out; everyone else is (re)admitted under their stable pseudonym.
       const m = services.spaces.admit(space, v.nullifier, req.memberPub)
       if (m.deny) return m
+      // ENS spaces: the ban list is the space's own ENS record — owner- and moderator-written.
+      if (space.startsWith('@') && (await services.ensSpaces?.isBanned(space, m.memberId))) return { deny: 'You are banned from this space.' }
       return { ok: true, member: { space, memberId: m.memberId } }
     },
   },

@@ -21,6 +21,8 @@ import { fileURLToPath } from 'node:url'
 import { readFileSync, existsSync } from 'node:fs'
 import { createGate } from './core.mjs'
 import { createWorld } from './world.mjs'
+import { createEnsSpaces } from './ens-spaces.mjs'
+import { createHolders } from './holders.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT ?? 8790)
@@ -38,7 +40,8 @@ const world = createWorld({
   signingKey: process.env.RP_SIGNING_KEY, stagingToken: process.env.WORLD_STAGING_TOKEN,
   rpcs: process.env.WORLDCHAIN_RPCS?.split(','),
 })
-const gate = createGate({ dbPath: DB, keyHex: process.env.GATE_KEY, world })
+const ensSpaces = createEnsSpaces()
+const gate = createGate({ dbPath: DB, keyHex: process.env.GATE_KEY, world, ensSpaces, holders: createHolders({ ensSpaces }) })
 const ORIGINS = (process.env.GATE_ORIGINS ?? '*').split(',')
 
 const WINDOW = 60_000, LIMIT = 60
@@ -77,9 +80,9 @@ createServer(async (req, res) => {
     }
     const body = JSON.parse(raw || '{}')
     if (req.url === '/deposit') return send(res, 200, gate.deposit(body), origin)
-    if (req.url === '/challenge') return send(res, 200, gate.challenge(body), origin)
+    if (req.url === '/challenge') return send(res, 200, await gate.challenge(body), origin)
     if (req.url === '/space') return send(res, 200, gate.spaces.register(body), origin)
-    if (req.url === '/member/sign') return send(res, 200, gate.spaces.attest(body), origin)
+    if (req.url === '/member/sign') return send(res, 200, await gate.spaces.attest(body), origin)
     if (req.url === '/ban') return send(res, 200, gate.spaces.ban(body), origin)
     // staging demo helper: the gate plays courier to World's simulator (see world.mjs simulate)
     if (req.url === '/dev/simulate') return send(res, 200, world ? await world.simulate(body.connectUrl) : { deny: 'no World ID' }, origin)

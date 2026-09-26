@@ -14,7 +14,7 @@ export default defineConfig({
   // node_modules so the bundle carries one copy, not one per directory that imports them.
   // NOT deduped: IDKit (World ID) depends on @noble/hashes v1 (subpath './sha3'), our shared/ code on
   // v2 ('./sha3.js'). Forcing one copy broke the build; each package gets the major it was built for.
-  resolve: { dedupe: ['@noble/ciphers', '@noble/curves', '@scure/bip39'] },
+  resolve: { dedupe: ['@noble/ciphers', '@scure/bip39'] }, // curves: viem needs v1 ('./abstract/utils'), shared/ v2
   build: {
     target: 'esnext',
     // OUT_DIR lets tests/agents build a private copy without touching the dist/ a human has loaded.

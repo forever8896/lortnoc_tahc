@@ -65,3 +65,32 @@ export async function banMember(space: string, memberId: string, unban = false) 
   if (r?.banned === undefined) throw new Error(r?.error ?? 'the gate refused')
   return r.banned as boolean
 }
+
+// ---------------------------------------------------------------------------
+// ENS spaces you use (<label>.space.lortnoctahc.eth). Only the label is kept — ENS is the source of
+// truth for owner, collection and bans; the gate reads them live.
+// ---------------------------------------------------------------------------
+const ENS = 'ensSpaces'
+export async function ensSpaces(): Promise<string[]> {
+  return ((await chrome.storage.local.get(ENS))[ENS] as string[]) ?? []
+}
+export async function addEnsSpace(label: string) {
+  const l = label.trim().toLowerCase().replace(/\.space\.lortnoctahc\.eth$/, '')
+  if (!/^[a-z0-9-]{3,32}$/.test(l)) throw new Error('an ENS space label is 3–32 of a-z, 0-9 and -')
+  const all = new Set(await ensSpaces())
+  all.add(l)
+  await chrome.storage.local.set({ [ENS]: [...all].sort() })
+}
+
+/** EVM keys for ENS spaces this extension OWNS (bought here) or MODERATES — they sign the on-chain
+ *  ban-list writes. Kept only in this extension's storage. */
+const ENS_KEYS = 'ensSpaceKeys'
+type EnsKey = { priv: `0x${string}`; address: `0x${string}`; role: 'owner' | 'moderator' }
+export async function ensKeys(): Promise<Record<string, EnsKey>> {
+  return ((await chrome.storage.local.get(ENS_KEYS))[ENS_KEYS] as Record<string, EnsKey>) ?? {}
+}
+export async function saveEnsKey(label: string, key: EnsKey) {
+  const all = await ensKeys()
+  all[label] = key
+  await chrome.storage.local.set({ [ENS_KEYS]: all })
+}

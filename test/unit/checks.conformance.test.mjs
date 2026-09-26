@@ -9,17 +9,24 @@ import { genKeyPair } from '../../shared/keys.mjs'
 import { createGate } from '../../gate/core.mjs'
 import { gateDepositor, gateReleaser } from '../../shared/gateclient.mjs'
 import { fakeWorld, proofFor } from '../lib/world-fake.mjs'
+import { fakeChain, wallet, nftProofFor, COLLECTION } from '../lib/nft-fake.mjs'
 
 const FAST = [{ t: 1, m: 64, p: 1 }, { t: 1, m: 128, p: 1 }]
 const MSG = new TextEncoder().encode('conformance')
 const me = genKeyPair(), other = genKeyPair()
 
 // One real gate for every attested check, called in-process.
-const gate = createGate({ world: fakeWorld() })
+const chain = fakeChain()
+chain.ens.set('club.space.lortnoctahc.eth', { owner: '0x' + '11'.repeat(20), token: COLLECTION, bans: '' })
+const holder = wallet()
+chain.balances.set(holder.address.toLowerCase(), 1n)
+const gate = createGate({ world: fakeWorld(), ensSpaces: chain.ensSpaces, holders: chain.holders })
 const post = async (path, body) =>
   path === '/deposit' ? gate.deposit(body) : path === '/challenge' ? gate.challenge(body) : gate.release(body)
 const deposit = gateDepositor({ gatePub: gate.pub, post })
-const release = gateReleaser({ post, proofFor: proofFor() })
+const worldProof = proofFor()
+const holderProof = nftProofFor(holder)
+const release = gateReleaser({ post, proofFor: async (r) => (r.check === 'nft' ? holderProof(r) : worldProof(r)) })
 const HOUR = 3600_000
 
 /** Per check: a spec, inputs that satisfy it, inputs that must not, and secrets that must never
@@ -42,6 +49,12 @@ const FIXTURES = {
     spec: { preset: 'poh' },
     passing: { release },
     failing: {}, // no proof → no share
+    secrets: [],
+  },
+  nft: {
+    spec: { space: '@club' },
+    passing: { release },
+    failing: {},
     secrets: [],
   },
   recipients: {

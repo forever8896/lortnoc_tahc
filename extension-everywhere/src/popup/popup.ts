@@ -1,6 +1,6 @@
 import { sw, LOCAL, DEFAULT_CODEC_URL } from '../shared/messages'
 import type { HealthData } from '../shared/messages'
-import { createSpace, ownedSpaces, memberships } from '../shared/spaces'
+import { createSpace, ownedSpaces, memberships, ensSpaces, addEnsSpace } from '../shared/spaces'
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
 
@@ -76,3 +76,36 @@ chrome.tabs.query({ active: true, currentWindow: true }).then(async ([tab]) => {
     $('status').textContent = box.checked ? 'On. Reload the page, then click a text box.' : 'Off for this site.'
   }
 })
+
+async function renderEns() {
+  const l = await ensSpaces()
+  $('ensList').innerHTML = l.map((x) => `<div>◆ <b>${x}</b><span class="muted">.space.lortnoctahc.eth</span></div>`).join('') || '<span class="muted">none yet</span>'
+}
+$('addEns').onclick = async () => {
+  try {
+    await addEnsSpace($<HTMLInputElement>('ensName').value)
+    $<HTMLInputElement>('ensName').value = ''
+    void renderEns()
+  } catch (e) {
+    $('status').textContent = e instanceof Error ? e.message : String(e)
+  }
+}
+void renderEns()
+
+async function renderBuy() {
+  const r = await chrome.runtime.sendMessage({ type: 'BUY_STATE' })
+  const st = r?.data
+  $('buyState').textContent = st ? `${st.label}: ${st.step}${st.error ? ` — ${st.error}` : ''}${st.name ? ` → ${st.name}` : ''}` : ''
+}
+$('buy').onclick = async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  if (!tab?.id || !/^https?:/.test(tab.url ?? '')) return void ($('buyState').textContent = 'Open any web page (where your wallet works) first.')
+  const label = $<HTMLInputElement>('buyName').value.trim().toLowerCase()
+  const token = $<HTMLInputElement>('buyToken').value.trim()
+  const chainId = Number($<HTMLSelectElement>('buyChain').value) as 1 | 11155111
+  $('buyState').textContent = 'Check your wallet…'
+  // runs in the service worker — it keeps going when this popup closes for the wallet
+  void chrome.runtime.sendMessage({ type: 'BUY_SPACE', label, token, chainId, tabId: tab.id })
+}
+void renderBuy()
+setInterval(() => void renderBuy(), 3000)

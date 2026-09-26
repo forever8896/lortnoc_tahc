@@ -1,0 +1,76 @@
+// NFT holder checks for ENS spaces (shared/checks/nft.mjs). The collection comes from the space's
+// ENS record (gate/ens-spaces.mjs), never from the post.
+//
+// challenge → a message naming the space, the post reference, the reader key and a single-use nonce.
+// verify    → recover the signer (EIP-191), the nonce was issued for this reader and is unused,
+//             then ERC-721/1155/20 balanceOf(signer) > 0 on the collection's chain.
+import { createPublicClient, http, verifyMessage, getAddress } from 'viem'
+import { mainnet, sepolia, base, baseSepolia } from 'viem/chains'
+
+const CHAINS = { 1: mainnet, 11155111: sepolia, 8453: base, 84532: baseSepolia }
+const RPC = {
+  1: 'https://ethereum-rpc.publicnode.com',
+  11155111: 'https://ethereum-sepolia-rpc.publicnode.com',
+  8453: 'https://base-rpc.publicnode.com',
+  84532: 'https://base-sepolia-rpc.publicnode.com',
+}
+const BALANCE_ABI = [{ type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] }]
+
+/** CAIP-19: eip155:<chainId>/erc721:<address> (erc20 also accepted). */
+export function parseCaip19(s) {
+  const m = /^eip155:(\d+)\/(erc721|erc20):(0x[0-9a-fA-F]{40})$/.exec(String(s ?? '').trim())
+  return m ? { chainId: Number(m[1]), standard: m[2], address: getAddress(m[3]) } : null
+}
+
+export const challengeText = (spaceName, ref, readerPub, nonce) =>
+  `lortnoc tahc — prove you hold this space's NFT\nspace: ${spaceName}\npost: ${ref}\nreader: ${readerPub}\nnonce: ${nonce}\n\nSigning costs nothing and moves nothing.`
+
+export function createHolders({ ensSpaces, balanceOf, now = () => Date.now() } = {}) {
+  const balance = balanceOf ?? (async ({ chainId, address }, holder) => {
+    const chain = CHAINS[chainId]
+    if (!chain) throw new Error(`unsupported chain ${chainId}`)
+    const c = createPublicClient({ chain, transport: http(RPC[chainId], { timeout: 10_000 }) })
+    return c.readContract({ address, abi: BALANCE_ABI, functionName: 'balanceOf', args: [holder] })
+  })
+
+  return {
+    async challenge(stored, readerPub, state) {
+      const sp = await ensSpaces?.get(stored.params.space)
+      if (!sp?.exists) return { deny: `the space "${stored.params.space}" does not exist` }
+      if (!parseCaip19(sp.token)) return { deny: 'this space has no NFT collection set' }
+      const nonce = crypto.randomUUID()
+      state.set(`nonce:${nonce}`, JSON.stringify({ readerPub, at: now() }))
+      return { request: { message: challengeText(sp.name, stored.ref, readerPub, nonce), nonce, collection: sp.token } }
+    },
+
+    /** @returns {Promise<{ok: true, address: string} | {deny: string}>} */
+    async verify(stored, req, state) {
+      const p = req.proof
+      if (!p?.nonce || !p?.address || !p?.sig) return { deny: 'no wallet signature' }
+      const issued = state.get(`nonce:${p.nonce}`)
+      if (!issued) return { deny: 'challenge was not issued by this gate' }
+      const n = JSON.parse(issued)
+      if (n.used) return { deny: 'challenge already used' }
+      if (n.readerPub !== req.readerPub) return { deny: 'challenge was requested by a different reader' }
+      if (now() - n.at > 10 * 60_000) return { deny: 'challenge expired' }
+      state.set(`nonce:${p.nonce}`, JSON.stringify({ ...n, used: true }))
+      const sp = await ensSpaces.get(stored.params.space)
+      const col = parseCaip19(sp?.token)
+      if (!col) return { deny: 'this space has no NFT collection set' }
+      const message = challengeText(sp.name, stored.ref, req.readerPub, p.nonce)
+      let ok = false
+      try {
+        ok = await verifyMessage({ address: getAddress(p.address), message, signature: p.sig })
+      } catch {}
+      if (!ok) return { deny: 'the signature is not from that wallet' }
+      let bal = 0n
+      try {
+        bal = BigInt(await balance(col, getAddress(p.address)))
+      } catch (e) {
+        return { deny: `could not read the collection (${e.message ?? e})` }
+      }
+      if (bal <= 0n) return { deny: "that wallet doesn't hold this space's NFT" }
+      return { ok: true, address: getAddress(p.address) }
+    },
+  }
+}

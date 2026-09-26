@@ -112,13 +112,33 @@ async function profile() {
   if (!swk) swk = await ctx.waitForEvent('serviceworker')
   await swk.evaluate(([codecUrl, gateUrl]) => chrome.storage.local.set({ codecUrl, gateUrl }),
     [`http://127.0.0.1:${CODEC_PORT}`, `http://127.0.0.1:${GATE_PORT}`])
+  swk.__ctx = ctx
+  swk.__extId = new URL(swk.url()).host
   return { ctx, sw: swk }
 }
 
 /** What the shortcut / popup does: inject the content script into this tab, send the action. */
+
+/** The CURRENT service worker. MV3 stops an idle worker after ~30 s and starts a new one on the next
+ *  event; a handle to the old one hangs forever (measured: a live test stalled right after a long
+ *  World ID wait). So never reuse a stored handle — wake the worker and take the live one. */
+async function liveSw(ctx, extId) {
+  let w = ctx.serviceWorkers().at(-1)
+  if (w) {
+    const alive = await Promise.race([w.evaluate(() => 1).then(() => true), new Promise((r) => setTimeout(() => r(false), 3000))])
+    if (alive) return w
+  }
+  const wake = await ctx.newPage()
+  await wake.goto(`chrome-extension://${extId}/src/popup/index.html`)
+  w = ctx.serviceWorkers().at(-1) ?? (await ctx.waitForEvent('serviceworker'))
+  await wake.close()
+  return w
+}
 async function trigger(sw, action) {
+  sw = await liveSw(sw.__ctx, sw.__extId)
   await sw.evaluate(async (action) => {
-    const [tab] = await chrome.tabs.query({ url: 'http://127.0.0.1/*' })
+    // the NEWEST matching tab — an older tab of the same page may still be open from an earlier step
+    const [tab] = (await chrome.tabs.query({ url: 'http://127.0.0.1/*' })).sort((a, b) => b.id - a.id)
     const file = chrome.runtime.getManifest().web_accessible_resources.flatMap((w) => w.resources).find((r) => r.endsWith('.ts.js'))
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: [file] })
     await chrome.tabs.sendMessage(tab.id, { lortnocAction: action })

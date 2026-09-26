@@ -23,6 +23,7 @@
     "@noble/hashes": "^2.0.0",
     "@scure/bip39": "^1.6.0",
     "@worldcoin/idkit-core": "^4.3.0",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "viem": "^2.56.9"
   }
 }

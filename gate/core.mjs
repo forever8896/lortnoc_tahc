@@ -22,8 +22,8 @@ import { createSpaces } from './spaces.mjs'
 export const REF_LEN = 8
 const MAX_PARAMS_BYTES = 2048
 
-export function createGate({ dbPath = ':memory:', keyHex, world = null } = {}) {
-  const services = { world }
+export function createGate({ dbPath = ':memory:', keyHex, world = null, ensSpaces = null, holders = null } = {}) {
+  const services = { world, ensSpaces, holders }
   const db = new DatabaseSync(dbPath)
   db.exec(`CREATE TABLE IF NOT EXISTS deposits (
     ref TEXT PRIMARY KEY, check_id TEXT NOT NULL, params TEXT NOT NULL,
@@ -40,7 +40,7 @@ export function createGate({ dbPath = ':memory:', keyHex, world = null } = {}) {
   }
   const pub = publicKeyOf(priv)
   const signer = signerFrom(priv)
-  const spaces = createSpaces(db, { secret: signer.secret, signPriv: signer.priv })
+  const spaces = createSpaces(db, { secret: signer.secret, signPriv: signer.priv, ensSpaces })
   services.spaces = spaces
 
   /** Per-check durable state (e.g. spent nullifiers), namespaced so checks cannot collide. */
@@ -55,7 +55,7 @@ export function createGate({ dbPath = ':memory:', keyHex, world = null } = {}) {
     /** Ed25519 key readers use to verify "verified member" attestations. */
     signPub: signer.pub,
     spaces,
-    checks: Object.values(CHECKS).filter((m) => m.kind === 'attested' && (m.id !== 'human' || world)).map((m) => m.id),
+    checks: Object.values(CHECKS).filter((m) => m.kind === 'attested' && (m.id !== 'human' || world) && (m.id !== 'nft' || holders)).map((m) => m.id),
     world: world ? { env: world.env } : null,
 
     /**
@@ -85,7 +85,7 @@ export function createGate({ dbPath = ':memory:', keyHex, world = null } = {}) {
      * a request bound to this post and reader first. Checks without `gate.challenge` do not use it.
      * @param {{ref: string, readerPub: string, policyHash: string}} req
      */
-    challenge(req) {
+    async challenge(req) {
       if (!/^[0-9a-f]{16}$/.test(req?.ref ?? '')) throw httpError(400, 'bad ref')
       if (!/^[0-9a-f]{64}$/.test(req.readerPub ?? '')) throw httpError(400, 'bad readerPub')
       const row = db.prepare('SELECT * FROM deposits WHERE ref = ?').get(req.ref)

@@ -70,11 +70,31 @@ async function profile() {
   open.push(ctx)
   const sw = ctx.serviceWorkers()[0] ?? (await ctx.waitForEvent('serviceworker'))
   await sw.evaluate(([c, g]) => chrome.storage.local.set({ codecUrl: c, gateUrl: g }), [`http://127.0.0.1:${CODEC_PORT}`, `http://127.0.0.1:${GATE_PORT}`])
+  sw.__ctx = ctx
+  sw.__extId = new URL(sw.url()).host
   return { ctx, sw }
 }
+
+/** The CURRENT service worker. MV3 stops an idle worker after ~30 s and starts a new one on the next
+ *  event; a handle to the old one hangs forever (measured: a live test stalled right after a long
+ *  World ID wait). So never reuse a stored handle — wake the worker and take the live one. */
+async function liveSw(ctx, extId) {
+  let w = ctx.serviceWorkers().at(-1)
+  if (w) {
+    const alive = await Promise.race([w.evaluate(() => 1).then(() => true), new Promise((r) => setTimeout(() => r(false), 3000))])
+    if (alive) return w
+  }
+  const wake = await ctx.newPage()
+  await wake.goto(`chrome-extension://${extId}/src/popup/index.html`)
+  w = ctx.serviceWorkers().at(-1) ?? (await ctx.waitForEvent('serviceworker'))
+  await wake.close()
+  return w
+}
 async function trigger(sw, action) {
+  sw = await liveSw(sw.__ctx, sw.__extId)
   await sw.evaluate(async (action) => {
-    const [tab] = await chrome.tabs.query({ url: 'http://127.0.0.1/*' })
+    // the NEWEST matching tab — an older tab of the same page may still be open from an earlier step
+    const [tab] = (await chrome.tabs.query({ url: 'http://127.0.0.1/*' })).sort((a, b) => b.id - a.id)
     const file = chrome.runtime.getManifest().web_accessible_resources.flatMap((w) => w.resources).find((r) => r.endsWith('.ts.js'))
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: [file] })
     await chrome.tabs.sendMessage(tab.id, { lortnocAction: action })
@@ -149,5 +169,99 @@ describe('World ID, live (simulator + World API + World Chain)', () => {
     }
     assert.equal(await card.textContent('#plain'), 'the circle meets thursday')
     await ctx.close()
+  })
+})
+
+describe('spaces: join with World ID, sign as a member, get banned — live', () => {
+  // World's simulator is ONE fake human, so the owner never verifies here (they would become the same
+  // member they are about to ban). The member signs a post readable by anyone; the owner reads it,
+  // sees the verified pseudonym, and bans it. The member then cannot get back in.
+  const SPACE = 'wl-' + Date.now().toString(36)
+  let owner, member
+
+  test('owner creates a space and posts to its members', { timeout: 180_000 }, async (t) => {
+    if (skip) return t.skip(skip)
+    comments.length = 0
+    owner = await profile()
+    const pop = await owner.ctx.newPage()
+    await pop.goto(`chrome-extension://${new URL(owner.sw.url()).host}/src/popup/index.html`)
+    await pop.click('summary')
+    await pop.fill('#spaceName', SPACE)
+    await pop.click('#createSpace')
+    await pop.waitForFunction(() => /Created/.test(document.getElementById('status').textContent), null, { timeout: 30_000 })
+    const page = await owner.ctx.newPage()
+    await page.goto(siteUrl)
+    await page.click('#c')
+    await trigger(owner.sw, { action: 'compose' })
+    const sheet = await frameOf(page, 'sheet')
+    await sheet.waitForSelector(`#who option[value="space:${SPACE}"]`, { state: 'attached' })
+    await sheet.selectOption('#who', `space:${SPACE}`)
+    await sheet.fill('#msg', 'members meet at the library')
+    await sheet.click('#go')
+    await sheet.waitForSelector('.status.ok', { timeout: 90_000 })
+    await page.click('button:has-text("Post")')
+    await page.waitForSelector('.c')
+  })
+
+  test('a member joins with World ID and signs a post as their pseudonym', { timeout: 240_000 }, async (t) => {
+    if (skip || !owner) return t.skip(skip ?? 'no space')
+    member = await profile()
+    const page = await member.ctx.newPage()
+    const step = (m) => console.log(`    · ${m}`)
+    let card
+    try {
+    await page.goto(siteUrl)
+    step('scan')
+    await trigger(member.sw, { action: 'scan' })
+    await page.click('button:has-text("Reveal")', { timeout: 60_000 })
+    card = await frameOf(page, 'reveal')
+    step('verify')
+    await card.click('#verifyHuman', { timeout: 60_000 })
+    await card.click('#sim', { timeout: 30_000 })
+    await card.waitForSelector('#out:not([hidden])', { timeout: 150_000 })
+    assert.equal(await card.textContent('#plain'), 'members meet at the library')
+    step('opened; now writing as a member')
+    // now a member: sign a post readable by anyone
+    await page.keyboard.press('Escape')
+    await page.click('#c')
+    await trigger(member.sw, { action: 'compose' })
+    const sheet = await frameOf(page, 'sheet')
+    await sheet.waitForSelector('#signAs', { timeout: 10_000 })
+    await sheet.selectOption('#who', 'public')
+    await sheet.check('#signAs')
+    await sheet.fill('#msg', 'i am about to misbehave')
+    await sheet.click('#go')
+    await sheet.waitForSelector('.status.ok', { timeout: 90_000 })
+    step('posting')
+    await page.click('button:has-text("Post")')
+    await page.waitForFunction(() => document.querySelectorAll('.c').length === 2)
+    } catch (e) {
+      const status = await card?.textContent('#status').catch(() => '?')
+      throw new Error(`${e.message.split('\n')[0]} — card status: "${status}"`)
+    }
+  })
+
+  test('the owner sees the verified member and bans them; they cannot get back in', { timeout: 300_000 }, async (t) => {
+    if (skip || !member) return t.skip(skip ?? 'no member')
+    const page = await owner.ctx.newPage()
+    await page.goto(siteUrl)
+    await trigger(owner.sw, { action: 'scan' })
+    await page.waitForFunction(() => [...document.querySelectorAll('button')].filter((b) => b.textContent.includes('Reveal')).length === 2, null, { timeout: 60_000 })
+    await page.locator('button:has-text("Reveal")').last().click()
+    const card = await frameOf(page, 'reveal')
+    await card.waitForSelector('#out:not([hidden])', { timeout: 60_000 })
+    assert.match(await card.textContent('#author'), /✓ verified member member-[0-9a-f]{12}/)
+    await card.click('#ban')
+    await card.waitForFunction(() => /is banned/.test(document.getElementById('ban').textContent), null, { timeout: 30_000 })
+    // the member tries the members-only post again — same human, same nullifier → refused
+    const mp = await member.ctx.newPage()
+    await mp.goto(siteUrl)
+    await trigger(member.sw, { action: 'scan' })
+    await mp.locator('button:has-text("Reveal")').first().click({ timeout: 60_000 })
+    const again = await frameOf(mp, 'reveal')
+    await again.click('#verifyHuman', { timeout: 60_000 })
+    await again.click('#sim', { timeout: 30_000 })
+    await again.waitForFunction(() => /banned/i.test(document.getElementById('status').textContent), null, { timeout: 150_000 })
+    assert.equal(await again.isHidden('#out'), true)
   })
 })
