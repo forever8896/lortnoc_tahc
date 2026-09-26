@@ -153,7 +153,8 @@ $('forget').onclick = async (e) => {
 const DEMO_PASS = '0xc85460a6690f8b06fdafd1b7730bdfa6261243f0'
 const CHAIN_NAME: Record<string, string> = { '1': 'Ethereum', '8453': 'Base', '11155111': 'Sepolia', '84532': 'Base Sepolia', '10': 'Optimism' }
 const ok = { name: false, col: false }
-let payOn: 1 | 11155111 = 11155111
+// Spaces are sold for real money only — Sepolia purchases are closed (the relayer refuses them too)
+const payOn = 1 as const
 let priceEth = '0.005'
 /** The live price on the chosen chain — early bird included (LortnocSpaces.currentPrice). */
 async function renderPrice() {
@@ -166,7 +167,7 @@ async function renderPrice() {
   $('priceWas').hidden = !early
   $('priceWas').textContent = `${fullEth} ETH`
   $('early').hidden = !early
-  $('early').innerHTML = early ? `Early bird · 90% off <i>· ${earlyLeft} of 10 left${payOn === 11155111 ? ' on Sepolia' : ''}</i>` : ''
+  $('early').innerHTML = early ? `Early bird · 90% off <i>· ${earlyLeft} of 10 left</i>` : ''
   mark('s1', ok.name)
 }
 const label = () => $<HTMLInputElement>('buyName').value.trim().toLowerCase()
@@ -219,11 +220,6 @@ $('useDemoPass').onclick = (e) => {
   $<HTMLInputElement>('nftAddress').value = DEMO_PASS
   void checkCol()
 }
-document.querySelectorAll<HTMLButtonElement>('#net button').forEach((b) => (b.onclick = () => {
-  document.querySelectorAll('#net button').forEach((x) => x.classList.toggle('on', x === b))
-  payOn = Number(b.dataset.c) as 1 | 11155111
-  void renderPrice()
-}))
 void renderPrice()
 
 // ---------------------------------------------------------------------------

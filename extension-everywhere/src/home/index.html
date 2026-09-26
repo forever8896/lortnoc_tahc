@@ -86,6 +86,7 @@
     .suffix input { border: 0 !important; border-radius: 0; background: transparent; flex: 1; min-width: 0; }
     .suffix span { display: grid; place-items: center; padding: 0 12px; color: var(--faint); font-size: 13px; border-left: 1px solid var(--rule); white-space: nowrap; }
     .check { font-size: 12.5px; margin-top: 8px; min-height: 16px; } .check.ok { color: var(--signal); } .check.bad { color: var(--warn); }
+    [hidden] { display: none !important; }
     .seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 12px; padding: 3px; gap: 3px; }
     .seg button { border: 0; background: none; color: var(--muted); font: 500 13px Jost, system-ui; padding: 7px 14px; border-radius: 9px; cursor: pointer; }
     .seg button.on { background: rgba(18,196,190,.14); color: var(--ink); }
@@ -210,7 +211,7 @@
           <div class="step" id="s3">
             <div class="num">3</div>
             <div><h3>Create it</h3>
-              <div class="seg" id="net"><button data-c="11155111" class="on">Test · Sepolia</button><button data-c="1">Live · Ethereum</button></div>
+              <p class="quiet" style="margin:0 0 10px">Paid in ETH on Ethereum mainnet. Your space is yours — its own ENS name, owned by a key only this extension holds.</p>
               <button class="btn cta" id="buy" disabled>Create space · 0.005 ETH</button>
               <div class="track" id="track"><div>Payment</div><div>ENS name</div><div>Ready</div></div>
               <div class="msg" id="buyState"></div></div>

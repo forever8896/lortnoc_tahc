@@ -452,6 +452,8 @@ const handleSpace = SPACE_BRANCH
         [[MAINNET, SPACES_D.mainnet?.address], [SEPOLIA, SPACES_D.sepolia?.address]].filter(([, a]) => a),
       ),
       branchName: SPACE_BRANCH.branchName ?? `space.${PARENT}`,
+      // real money only: a Sepolia purchase counts when WE paid it (the live tests), nobody else's
+      sepoliaPayers: [account.address],
       spaceOwnerOf: (label) =>
         eth.readContract({ address: SPACE_BRANCH.registry, abi: registryAbi, functionName: 'findOwner', args: [label] }),
       claimSpace: async (label, owner, token) => {

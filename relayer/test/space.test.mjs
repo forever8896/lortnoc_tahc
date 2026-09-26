@@ -29,7 +29,7 @@ function receipt({ logs = [spaceLog()], status = 'success', blockNumber = 100n, 
 }
 
 /** A world where every dependency is scripted and every call is recorded. */
-function world({ chainId = 11155111, rcpt = receipt(), head = 100n, holder = ZERO, mainnetTaken = false, claimFails = false, stipendFails = false, receipts } = {}) {
+function world({ chainId = 11155111, rcpt = receipt(), head = 100n, holder = ZERO, mainnetTaken = false, claimFails = false, stipendFails = false, receipts, sepoliaPayers } = {}) {
   const calls = { claim: [], stipend: [], reads: 0 }
   let headNow = head
   const reader = {
@@ -66,6 +66,7 @@ function world({ chainId = 11155111, rcpt = receipt(), head = 100n, holder = ZER
     },
     confirmTimeoutMs: 30,
     pollMs: 5,
+    sepoliaPayers,
   })
   return { handler, calls, setHead: (h) => (headNow = h) }
 }
@@ -288,4 +289,25 @@ test('findPurchase skips undecodable logs from the right address', () => {
   const p = findPurchase(receipt({ logs: [junk, spaceLog()] }), SPACES[11155111], 'lentil-club')
   assert.equal(p.owner, OWNER)
   assert.equal(p.id, 1n)
+})
+
+// ---- real money only: Sepolia purchases are closed to everyone but our own tests ------------------
+
+test('a Sepolia purchase from anyone else is refused before anything is issued', async () => {
+  const { handler, calls } = world({ sepoliaPayers: ['0x000000000000000000000000000000000000beef'] })
+  const r = await handler(body())
+  assert.equal(r.status, 403)
+  assert.match(r.body.error, /mainnet/)
+  assert.deepEqual(calls.claim, [])
+  assert.deepEqual(calls.stipend, [])
+})
+
+test('a Sepolia purchase paid by an allowed payer (our live tests) still issues', async () => {
+  const { handler } = world({ sepoliaPayers: [PAYER.toUpperCase().replace('0X', '0x')] })
+  assert.equal((await handler(body())).status, 200)
+})
+
+test('the allowlist never touches mainnet purchases', async () => {
+  const w = world({ chainId: 1, rcpt: receipt({ logs: [spaceLog({ address: SPACES[1] })] }), head: 102n, sepoliaPayers: [] })
+  assert.equal((await w.handler(body({ chainId: 1 }))).status, 200)
 })

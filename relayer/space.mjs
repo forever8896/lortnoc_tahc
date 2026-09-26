@@ -79,6 +79,8 @@ const same = (a, b) => typeof a === 'string' && typeof b === 'string' && a.toLow
  * @param {(label: string, owner: string, token: string) => Promise<string>} deps.claimSpace  claimSpaceFor; resolves to the mined tx hash
  * @param {(owner: string) => Promise<string|null>} [deps.payStipend]  best-effort Sepolia gas
  * @param {(label: string) => Promise<boolean>} [deps.mainnetTaken]  LortnocSpaces.taken on mainnet (guards Sepolia demo buys)
+ * @param {string[]} [deps.sepoliaPayers]  if set, a Sepolia purchase counts only when one of these paid —
+ *   spaces are sold for real money on mainnet; Sepolia stays open to our own live tests
  * @param {string} deps.branchName   `space.lortnoctahc.eth`
  * @param {Function} [deps.log]
  * @param {number} [deps.confirmTimeoutMs]  how long to wait for confirmations inside one request
@@ -87,7 +89,7 @@ const same = (a, b) => typeof a === 'string' && typeof b === 'string' && a.toLow
  */
 export function createSpaceHandler(deps) {
   const {
-    readers, spaces, spaceOwnerOf, claimSpace, payStipend, mainnetTaken, branchName,
+    readers, spaces, spaceOwnerOf, claimSpace, payStipend, mainnetTaken, branchName, sepoliaPayers,
     log = () => {}, confirmTimeoutMs = 120_000, pollMs = 4_000,
   } = deps
   const inFlight = new Set()
@@ -113,6 +115,9 @@ export function createSpaceHandler(deps) {
       const purchase = findPurchase(receipt, spacesAddress, label)
       if (!purchase) {
         return { status: 400, body: { error: 'no SpaceBought for this label from LortnocSpaces in this transaction' } }
+      }
+      if (chainId === SEPOLIA && sepoliaPayers && !sepoliaPayers.some((p) => same(p, purchase.payer))) {
+        return { status: 403, body: { error: 'spaces are sold on Ethereum mainnet — Sepolia purchases are closed' } }
       }
 
       // 2. Its rules are the ones the buyer committed to.

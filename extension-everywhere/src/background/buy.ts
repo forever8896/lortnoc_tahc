@@ -98,6 +98,7 @@ export async function spacePrice(chainId: 1 | 11155111): Promise<SwResponse> {
 export async function buySpace(req: { label: string; token: string; chainId: 1 | 11155111; tabId: number }): Promise<SwResponse> {
   const { label, token, chainId, tabId } = req
   if (!/^[a-z0-9-]{3,32}$/.test(label) || label.startsWith('-') || label.endsWith('-')) return { ok: false, error: 'bad space name' }
+  if (chainId !== 1) return { ok: false, error: 'Spaces are sold on Ethereum mainnet.' }
   const dep = (deployments as Record<string, { address: `0x${string}`; price: string; chainId: number }>)[chainId === 1 ? 'mainnet' : 'sepolia']
   if (!dep) return { ok: false, error: 'no LortnocSpaces on that chain' }
 
