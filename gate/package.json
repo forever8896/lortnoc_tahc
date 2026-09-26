@@ -1,0 +1,13 @@
+{
+  "name": "lortnoc-gate",
+  "private": true,
+  "type": "module",
+  "description": "Key-release gate for attested reader checks (docs/PRD-universal.md §5). Imports ../shared by relative path.",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@worldcoin/idkit-core": "4.3.0",
+    "viem": "^2.56.9"
+  }
+}
