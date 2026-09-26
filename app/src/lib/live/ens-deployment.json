@@ -34,6 +34,15 @@
         "retiredAt": "2026-09-25",
         "note": "ENS reset Sepolia; these contracts still exist but hang off a root no ENS tool walks."
       }
-    ]
+    ],
+    "spaces": {
+      "registry": "0x4d19b7bb756125027D8433429D598bB3725E8867",
+      "resolver": "0xC6459CF90018BA8B55a35F6A29F8427970071bae",
+      "registrar": "0x05dcdfe5b66c5d90507de42ddaa656eec82309f0",
+      "registrarDeployBlock": 11783309,
+      "demoPass": "0xc85460a6690f8b06fdafd1b7730bdfa6261243f0",
+      "branchName": "space.lortnoctahc.eth",
+      "deployedAt": "2026-09-26T02:34:26.201Z"
+    }
   }
 }
