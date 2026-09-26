@@ -49,6 +49,20 @@ const handleClaimedEvent = {
   ],
 } as const
 
+/** LortnocRegistrar.migrate emits this when a handle is REISSUED to its same owner after an ENS
+ *  Sepolia reset (the 09-15 migration reissued 12 handles this way). It is NOT a HandleClaimed, so a
+ *  lookup that scanned only HandleClaimed told every migrated user "no handle" and offered to sell
+ *  them one (found 2026-09-26). handleOf() scans both. */
+const handleMigratedEvent = {
+  type: 'event',
+  name: 'HandleMigrated',
+  inputs: [
+    { name: 'label', type: 'string', indexed: false },
+    { name: 'claimant', type: 'address', indexed: true },
+    { name: 'records', type: 'uint256', indexed: false },
+  ],
+} as const
+
 // ---- ABIs (only what we call) -----------------------------------------------------------------
 
 const resolverAbi = [
@@ -259,13 +273,12 @@ export async function handleOf(owner: Address): Promise<string | null> {
     const to = from + step > latest ? latest : from + step
     let logs
     try {
-      logs = await client.getLogs({
-        address: LORTNOC.registrar as Address,
-        event: handleClaimedEvent,
-        args: { claimant: owner },
-        fromBlock: from,
-        toBlock: to,
-      })
+      const q = { address: LORTNOC.registrar as Address, args: { claimant: owner }, fromBlock: from, toBlock: to } as const
+      const [claimed, migrated] = await Promise.all([
+        client.getLogs({ ...q, event: handleClaimedEvent }),
+        client.getLogs({ ...q, event: handleMigratedEvent }),
+      ])
+      logs = [...claimed, ...migrated]
     } catch (e) {
       // A log endpoint that rate-limits or dies must not break sign-in — we simply fall back to
       // whatever the local note says.

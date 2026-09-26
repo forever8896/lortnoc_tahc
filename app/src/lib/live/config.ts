@@ -14,7 +14,9 @@ export const ENS = {
    *  log queries outright ("Archive requests require a personal token"), and log access is what
    *  lets a fresh browser discover which handle you already own. drpc's free tier serves them,
    *  capped at 10k-block ranges — hence the chunked scan in ens.handleOf(). */
-  logsRpc: (import.meta.env.VITE_SEPOLIA_LOGS_RPC as string) || 'https://sepolia.drpc.org',
+  // publicnode serves getLogs over our ranges; sepolia.drpc.org (the old default) refuses every
+  // request as of 2026-09-26 — which made every handle lookup come back empty.
+  logsRpc: (import.meta.env.VITE_SEPOLIA_LOGS_RPC as string) || 'https://ethereum-sepolia-rpc.publicnode.com',
   /** drpc free-plan ceiling; ranges above this are rejected. */
   logSpan: 9_500n,
   ...deployment.ens,
