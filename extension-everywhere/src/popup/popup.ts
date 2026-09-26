@@ -105,7 +105,8 @@ $('buy').onclick = async () => {
   const chainId = Number($<HTMLSelectElement>('buyChain').value) as 1 | 11155111
   $('buyState').textContent = 'Check your wallet…'
   // runs in the service worker — it keeps going when this popup closes for the wallet
-  void chrome.runtime.sendMessage({ type: 'BUY_SPACE', label, token, chainId, tabId: tab.id })
+  const r = await chrome.runtime.sendMessage({ type: 'BUY_SPACE', label, token, chainId, tabId: tab.id }).catch(() => null)
+  if (r && !r.ok && /taken|bad space name/.test(r.error ?? '')) $('buyState').textContent = r.error
 }
 void renderBuy()
 setInterval(() => void renderBuy(), 3000)

@@ -19,15 +19,17 @@ export function fakeWorld({ api = { ok: true }, chain = { ok: true, verdicts: ['
 let n = 1
 /** Build the proof World App would return for a challenge `request`. Overrides let tests forge one. */
 export function proofFrom(request, over = {}) {
+  const identity = request.preset === 'identity' // Identity Check: passport credential, no signal
   return {
     protocol_version: '4.0',
     nonce: request.rp_context.nonce,
     action: request.action,
     environment: request.environment,
+    ...(identity ? { identity_attested: true } : {}),
     responses: [{
-      identifier: request.preset === 'selfie' ? 'selfie' : 'proof_of_human',
-      issuer_schema_id: 1,
-      signal_hash: hashSignal(request.signal),
+      identifier: identity ? 'passport' : request.preset === 'selfie' ? 'selfie' : 'proof_of_human',
+      issuer_schema_id: identity ? 9303 : 1,
+      ...(identity ? {} : { signal_hash: hashSignal(request.signal) }),
       proof: ['1', '2', '3', '4', '5'],
       nullifier: '0x' + (n++).toString(16).padStart(64, '0'),
       expires_at_min: String(Math.floor(Date.now() / 60000) + 60),

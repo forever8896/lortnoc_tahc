@@ -4,7 +4,7 @@
 import { canonicalCover, inspect, openMessage } from '../../../shared/webframe.mjs'
 import { fromB64 } from '../../../shared/keys.mjs'
 import { gateReleaser } from '../../../shared/gateclient.mjs'
-import { IDKit, proofOfHuman, selfieCheck } from '@worldcoin/idkit-core'
+import { IDKit, proofOfHuman, selfieCheck, identityCheck } from '@worldcoin/idkit-core'
 import QRCode from 'qrcode'
 import { sw, gatePost } from '../shared/messages'
 import type { GateHealth } from '../shared/messages'
@@ -60,13 +60,19 @@ async function worldProof({ check, ref, readerPub, policyHash }: { check: string
   const c = await gatePost('/challenge', { ref, readerPub, policyHash })
   if (!c?.request) throw new Error(c?.deny ?? c?.error ?? 'the gate could not start World ID')
   const q = c.request
-  const preset = q.preset === 'selfie' ? selfieCheck({ signal: q.signal }) : proofOfHuman({ signal: q.signal })
+  // Nationality = Identity Check (preview): World App answers only if the passport matches. It takes
+  // no signal — the gate binds the proof to this post + reader through the single-use nonce instead.
+  const preset = q.preset === 'identity' ? identityCheck({ attributes: q.attributes })
+    : q.preset === 'selfie' ? selfieCheck({ signal: q.signal }) : proofOfHuman({ signal: q.signal })
   const req = await IDKit.request({
     app_id: q.app_id, action: q.action, rp_context: q.rp_context, allow_legacy_proofs: false, environment: q.environment,
   }).preset(preset)
   $('world').hidden = false
   $('verifyHuman').hidden = true
-  $('sim').hidden = q.environment !== 'staging'
+  // The simulator only does Proof of Human; nationality needs World App or World's Sandbox app.
+  $('sim').hidden = q.environment !== 'staging' || q.preset === 'identity'
+  if (q.preset === 'identity')
+    $('worldHow').textContent = `Scan with World App (or World's Sandbox app). It checks your passport's nationality is ${q.attributes?.[0]?.value} — nothing else about you is shared.`
   await QRCode.toCanvas($<HTMLCanvasElement>('qr'), req.connectorURI, { width: 132, margin: 1 })
   fit()
   const abort = new AbortController()

@@ -16,7 +16,7 @@ type CheckDraft =
   | { check: 'passphrase'; passphrase: string; hint: string }
   | { check: 'recipients'; keys: string }
   | { check: 'after'; when: string }
-  | { check: 'human'; preset: 'poh' | 'selfie'; space: string }
+  | { check: 'human'; preset: 'poh' | 'selfie' | 'identity'; space: string; country?: string }
   | { check: 'nft'; space: string }
 
 const LABELS: Record<CheckDraft['check'], string> = {
@@ -43,11 +43,12 @@ const fresh = (check: CheckDraft['check']): CheckDraft =>
 let groups: CheckDraft[][] = [[fresh('public')]]
 
 /** The ready-made choices. "custom" reveals the full builder (AND of ORs). */
-type Preset = 'public' | 'passphrase' | 'human' | 'human-or-pass' | 'after' | `space:${string}` | `nft:${string}` | 'custom'
+type Preset = 'public' | 'passphrase' | 'human' | 'human-or-pass' | 'citizens' | 'after' | `space:${string}` | `nft:${string}` | 'custom'
 function presetGroups(p: Preset): CheckDraft[][] {
   if (p === 'passphrase') return [[fresh('passphrase')]]
   if (p === 'human') return [[fresh('human')]]
   if (p === 'human-or-pass') return [[fresh('human'), fresh('passphrase')]]
+  if (p === 'citizens') return [[{ check: 'human', preset: 'identity', space: '', country: '' }]]
   if (p === 'after') return [[fresh('after')]]
   if (p.startsWith('space:')) return [[{ check: 'human', preset: 'poh', space: p.slice(6) }]]
   if (p.startsWith('nft:')) return [[{ check: 'nft', space: p.slice(4) }]]
@@ -78,7 +79,10 @@ const fit = () => requestAnimationFrame(() => toParent({ lortnoc: 'resize', heig
 function leaf(d: CheckDraft) {
   if (d.check === 'public') return { check: 'public' }
   if (d.check === 'passphrase') return { check: 'passphrase', passphrase: d.passphrase, ...(d.hint.trim() ? { hint: d.hint.trim() } : {}) }
-  if (d.check === 'human') return { check: 'human', preset: d.preset, ...(d.space ? { space: d.space } : {}) }
+  if (d.check === 'human') {
+    if (d.preset === 'identity' && !/^[A-Z]{3}$/.test(d.country ?? '')) throw new Error('Type the country as a 3-letter code, e.g. UKR, POL, DEU.')
+    return { check: 'human', preset: d.preset, ...(d.space ? { space: d.space } : {}), ...(d.preset === 'identity' ? { country: d.country } : {}) }
+  }
   if (d.check === 'nft') {
     if (!d.space) throw new Error('Pick the ENS space whose NFT readers must hold.')
     return { check: 'nft', space: d.space }
@@ -155,9 +159,14 @@ function checkEl(d: CheckDraft, remove: () => void): HTMLElement {
       note('Share the passphrase privately. The generated one is five random words; a guessable one (a name, a place) can be cracked offline by anyone who sees the post.'))
   } else if (d.check === 'human') {
     const sel = document.createElement('select')
-    sel.innerHTML = `<option value="poh">Proof of Human (Orb) — one per person</option><option value="selfie">Selfie Check — keeps bots out</option>`
+    sel.innerHTML = `<option value="poh">Proof of Human (Orb) — one per person</option><option value="selfie">Selfie Check — keeps bots out</option><option value="identity">Nationality (passport) — preview</option>`
     sel.value = d.preset
-    sel.onchange = () => (d.preset = sel.value as 'poh' | 'selfie')
+    sel.onchange = () => ((d.preset = sel.value as 'poh' | 'selfie' | 'identity'), render())
+    if (d.preset === 'identity') {
+      const c = Object.assign(document.createElement('input'), { type: 'text', value: d.country ?? '', placeholder: 'Country code, e.g. UKR', maxLength: 3 })
+      c.oninput = () => ((c.value = c.value.toUpperCase().replace(/[^A-Z]/g, '')), (d.country = c.value))
+      fields.append(c)
+    }
     const sp = document.createElement('select')
     sp.innerHTML = `<option value="">Any verified human</option>` + knownSpaces.map((x) => `<option value="${x}">Members of ${x}</option>`).join('')
     sp.value = d.space
@@ -320,6 +329,7 @@ function fillPresets() {
     ['passphrase', 'People with the passphrase'],
     ['human', 'Verified humans (World ID)'],
     ['human-or-pass', 'Verified humans, or the passphrase'],
+    ['citizens', 'Citizens of a country (passport, World ID)'],
     ...knownSpaces.map((x) => [`space:${x}`, `Members of ${x}`] as [Preset, string]),
     ...ensList.flatMap((x) => [
       [`space:@${x}`, `Verified humans of ${x}.space`],

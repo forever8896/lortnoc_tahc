@@ -142,3 +142,47 @@ describe('the on-chain verdict rule', () => {
     assert.equal(confirmed([]), false)
   })
 })
+
+describe('nationality (World ID Identity Check, preview)', () => {
+  const UKR = { check: 'human', preset: 'identity', country: 'UKR' }
+  test('the challenge asks for nationality UKR; a matching passport opens it', async () => {
+    const h = harness()
+    const f = await sealMessage('for ukrainians', UKR, { deposit: h.deposit })
+    assert.deepEqual(inspect(f).checks, ['Citizens of UKR (World ID passport)'])
+    const { parse } = await import('../../shared/policy.mjs')
+    const { genKeyPair, toHex } = await import('../../shared/keys.mjs')
+    const p = parse(f.subarray(1))
+    const c = await h.post('/challenge', { ref: toHex(p.material.get('')), readerPub: toHex(genKeyPair().pub), policyHash: toHex(p.policyHash) })
+    assert.deepEqual(c.request.attributes, [{ type: 'nationality', value: 'UKR' }])
+    assert.equal(await openMessage(f, { release: h.release }), 'for ukrainians')
+  })
+  for (const [name, over, why] of [
+    ['World ID did not attest the nationality', { top: { identity_attested: false } }, /did not attest/],
+    ['no attestation at all', { top: { identity_attested: undefined } }, /did not attest/],
+    ['a Proof of Human credential instead of a passport', { response: { identifier: 'proof_of_human', issuer_schema_id: 1 } }, /passport/],
+  ]) {
+    test(`refused: ${name}`, async () => {
+      const h = harness({}, over)
+      const f = await sealMessage('x', UKR, { deposit: h.deposit })
+      assert.equal(await openMessage(f, { release: h.release }), null)
+      assert.match(h.denials.at(-1).deny, why)
+    })
+  }
+  test('a proof obtained for ANOTHER post cannot open this one (no signal — the nonce binds it)', async () => {
+    const h = harness()
+    const a = await sealMessage('a', UKR, { deposit: h.deposit })
+    const b = await sealMessage('b', UKR, { deposit: h.deposit })
+    const { parse } = await import('../../shared/policy.mjs')
+    const { genKeyPair, toHex } = await import('../../shared/keys.mjs')
+    const pa = parse(a.subarray(1)), pb = parse(b.subarray(1))
+    const me = toHex(genKeyPair().pub)
+    const c = await h.post('/challenge', { ref: toHex(pa.material.get('')), readerPub: me, policyHash: toHex(pa.policyHash) })
+    const r = await h.post('/release', { ref: toHex(pb.material.get('')), readerPub: me, policyHash: toHex(pb.policyHash), proof: proofFrom(c.request) })
+    // Refused either way: nonces live in each post's own gate state, so B has never seen A's nonce.
+    assert.match(r.deny, /another post|not issued by this gate/)
+  })
+  test('a country must be a 3-letter ISO code', async () => {
+    const h = harness()
+    await assert.rejects(sealMessage('x', { check: 'human', preset: 'identity', country: 'UA' }, { deposit: h.deposit }), /3-letter/)
+  })
+})

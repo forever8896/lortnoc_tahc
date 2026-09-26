@@ -5,7 +5,8 @@
 //   2. the reader's own wallet (MAIN world on the current page) sends LortnocSpaces.buySpace
 //   3. the relayer turns the SpaceBought event into <label>.space.lortnoctahc.eth with the collection
 // Progress is kept in storage so the popup shows it when reopened.
-import { encodeFunctionData, keccak256, toHex, numberToHex } from 'viem'
+import { encodeFunctionData, keccak256, toHex, numberToHex, createPublicClient, http } from 'viem'
+import { sepolia } from 'viem/chains'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import deployments from '../../../app/src/lib/live/spaces-deployment.json'
 import { RELAYER_URL } from '../shared/messages'
@@ -26,6 +27,13 @@ export async function buySpace(req: { label: string; token: string; chainId: 1 |
   if (!/^[a-z0-9-]{3,32}$/.test(label) || label.startsWith('-') || label.endsWith('-')) return { ok: false, error: 'bad space name' }
   const dep = (deployments as Record<string, { address: `0x${string}`; price: string; chainId: number }>)[chainId === 1 ? 'mainnet' : 'sepolia']
   if (!dep) return { ok: false, error: 'no LortnocSpaces on that chain' }
+
+  // 0. is the name still free? A Sepolia demo purchase can take a name first, and a mainnet buyer
+  //    would then pay and be refused by the relayer (409). Check ENS BEFORE any money moves. A space
+  //    always has addr = owner, so a resolving address means the name is taken.
+  const taken = await createPublicClient({ chain: sepolia, transport: http('https://ethereum-sepolia-rpc.publicnode.com') })
+    .getEnsAddress({ name: `${label}.space.lortnoctahc.eth` }).catch(() => null)
+  if (taken) return { ok: false, error: `${label}.space.lortnoctahc.eth is already taken` }
 
   // 1. the owner key, saved before a single wei moves
   const priv = generatePrivateKey()

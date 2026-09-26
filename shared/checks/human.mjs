@@ -11,7 +11,11 @@
 // `human` is readable by the gate operator (flags.gateHoldsShare) — pair it with a passphrase to
 // close that.
 //
-// Credential presets on the wire (public): 0 = proof_of_human (Orb), 1 = selfie (Selfie Check).
+// Credential presets on the wire (public): 0 = proof_of_human (Orb), 1 = selfie (Selfie Check),
+// 2 = identity (World ID Identity Check on NATIONALITY, preview — the reader's passport must match
+// `country`, ISO 3166-1 alpha-3). The country is public in the post: readers must know who may read.
+// Heaviest credential there is (an NFC-scanned passport); an author's opt-in for spaces that need a
+// national boundary, never a default — it also shuts out refugees and people without a passport.
 //
 // SPACES (optional `space` param, public): the World ID action becomes one per SPACE instead of one
 // per post, so the same human always yields the same nullifier there. The gate turns that into a
@@ -23,8 +27,8 @@
 export const REF_LEN = 8
 const enc = new TextEncoder()
 const dec = new TextDecoder()
-const PRESETS = ['poh', 'selfie']
-const LABEL = { poh: 'Verified human (World ID)', selfie: 'Verified human (World ID Selfie Check)' }
+const PRESETS = ['poh', 'selfie', 'identity']
+const LABEL = { poh: 'Verified human (World ID)', selfie: 'Verified human (World ID Selfie Check)', identity: 'Citizens of' }
 
 export default {
   id: 'human',
@@ -34,22 +38,31 @@ export default {
   validate(node) {
     if (node.preset !== undefined && !PRESETS.includes(node.preset)) throw new Error('human: unknown preset')
     if (node.space !== undefined && !/^@?[a-z0-9-]{3,32}$/.test(node.space)) throw new Error('human: bad space name')
+    if (node.preset === 'identity' && !/^[A-Z]{3}$/.test(node.country ?? '')) throw new Error('human: nationality needs a 3-letter country code (e.g. UKR)')
   },
-  describe: (p) => LABEL[p.preset ?? 'poh'] + (p.space ? ` · members of ${p.space.startsWith('@') ? `${p.space.slice(1)}.space.lortnoctahc.eth` : p.space}` : ''),
+  describe: (p) => (p.preset === 'identity' ? `Citizens of ${p.country} (World ID passport)` : LABEL[p.preset ?? 'poh']) + (p.space ? ` · members of ${p.space.startsWith('@') ? `${p.space.slice(1)}.space.lortnoctahc.eth` : p.space}` : ''),
   encodeParams(node) {
     const space = enc.encode(node.space ?? '')
-    return [PRESETS.indexOf(node.preset ?? 'poh'), space.length, ...space]
+    const country = node.preset === 'identity' ? [...enc.encode(node.country)] : []
+    return [PRESETS.indexOf(node.preset ?? 'poh'), space.length, ...space, ...country]
   },
   decodeParams(bytes, at) {
     const preset = PRESETS[bytes[at]]
     const n = bytes[at + 1]
     if (!preset || n > 33 || at + 2 + n > bytes.length) throw new Error('human: bad params')
     const space = n ? dec.decode(bytes.subarray(at + 2, at + 2 + n)) : undefined
-    return { params: { preset, ...(space ? { space } : {}), fromWire: true }, at: at + 2 + n }
+    let end = at + 2 + n
+    let country
+    if (preset === 'identity') {
+      if (end + 3 > bytes.length) throw new Error('human: bad params')
+      country = dec.decode(bytes.subarray(end, end + 3))
+      end += 3
+    }
+    return { params: { preset, ...(space ? { space } : {}), ...(country ? { country } : {}), fromWire: true }, at: end }
   },
   async seal(ctx, share, node) {
     if (!ctx.deposit) throw new Error('human: needs a gate to deposit with')
-    const ref = await ctx.deposit({ check: 'human', preset: node.preset ?? 'poh', ...(node.space ? { space: node.space } : {}) }, share, ctx)
+    const ref = await ctx.deposit({ check: 'human', preset: node.preset ?? 'poh', ...(node.space ? { space: node.space } : {}), ...(node.country ? { country: node.country } : {}) }, share, ctx)
     if (!(ref instanceof Uint8Array) || ref.length !== REF_LEN) throw new Error('human: bad reference from gate')
     return ref
   },
@@ -62,12 +75,12 @@ export default {
   gate: {
     async challenge(stored, req, state, services) {
       if (!services.world) return { deny: 'World ID is not configured on this gate' }
-      const { preset, space } = stored.params
+      const { preset, space, country } = stored.params
       const known = !space ? true
         : space.startsWith('@') ? await services.ensSpaces?.exists(space) : services.spaces?.exists(space)
       if (!known) return { deny: `the space "${space}" does not exist` }
       const action = services.world.actionFor(stored.ref, space)
-      return { request: services.world.challenge(stored.ref, req.readerPub, state, preset, action) }
+      return { request: services.world.challenge(stored.ref, req.readerPub, state, preset, action, country) }
     },
     async release(stored, req, state, services) {
       if (!services.world) return { deny: 'World ID is not configured on this gate' }
