@@ -19,14 +19,6 @@ type CheckDraft =
   | { check: 'human'; preset: 'poh' | 'selfie' | 'identity'; space: string; country?: string }
   | { check: 'nft'; space: string }
 
-const LABELS: Record<CheckDraft['check'], string> = {
-  public: 'Anyone with the extension',
-  passphrase: 'Anyone with the passphrase',
-  recipients: 'Named people',
-  after: 'Opens after a time',
-  human: 'Verified humans (World ID)',
-  nft: 'NFT holders of an ENS space',
-}
 /** datetime-local value for `h` hours from now, in the user's own time zone */
 const localIn = (h: number) => {
   const d = new Date(Date.now() + h * 3600_000)
@@ -42,8 +34,9 @@ const fresh = (check: CheckDraft['check']): CheckDraft =>
 
 let groups: CheckDraft[][] = [[fresh('public')]]
 
-/** The ready-made choices. "custom" reveals the full builder (AND of ORs). */
-type Preset = 'public' | 'passphrase' | 'human' | 'human-or-pass' | 'citizens' | 'after' | `space:${string}` | `nft:${string}` | 'custom'
+/** The ready-made choices. Each is only a starting point: "Edit rules" opens it in the builder. */
+type Preset = 'public' | 'passphrase' | 'human' | 'human-or-pass' | 'citizens' | 'after' | `space:${string}` | `nft:${string}`
+let editing = false
 function presetGroups(p: Preset): CheckDraft[][] {
   if (p === 'passphrase') return [[fresh('passphrase')]]
   if (p === 'human') return [[fresh('human')]]
@@ -105,95 +98,145 @@ function buildPolicy() {
 // ---------------------------------------------------------------------------
 // Render
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// The rules builder — plain sentences: "Readers must [know the passphrase] or [be a verified human],
+// and [wait until …]". Rows are AND, the pills in a row are OR. It opens pre-filled with whatever
+// preset was chosen, so a preset is a starting point you can tweak.
+// ---------------------------------------------------------------------------
+type Rule = 'public' | 'passphrase' | 'human' | 'citizen' | 'member' | 'nft' | 'after' | 'recipients'
+const ruleOf = (d: CheckDraft): Rule =>
+  d.check === 'human' ? (d.preset === 'identity' ? 'citizen' : d.space ? 'member' : 'human') : d.check
+function rules(): [Rule, string, () => CheckDraft][] {
+  const firstSpace = [...knownSpaces, ...ensList.map((x) => `@${x}`)][0] ?? ''
+  return [
+    ['passphrase', 'know the passphrase', () => fresh('passphrase')],
+    ['human', 'be a verified human (World ID)', () => fresh('human')],
+    ['citizen', 'be a citizen of… (passport, World ID)', () => ({ check: 'human', preset: 'identity', space: '', country: '' })],
+    ...(firstSpace ? [['member', 'be a member of a space', () => ({ check: 'human', preset: 'poh', space: firstSpace })] as [Rule, string, () => CheckDraft]] : []),
+    ...(ensList.length ? [['nft', "hold a space's NFT", () => ({ check: 'nft', space: `@${ensList[0]}` })] as [Rule, string, () => CheckDraft]] : []),
+    ['after', 'wait until a date', () => fresh('after')],
+    ['public', 'have lortnoc (anyone with it)', () => fresh('public')],
+    ['recipients', 'be one of these people (keys)', () => fresh('recipients')],
+  ]
+}
+/** A <select> whose first option is the prompt; picking a rule calls `on` with a fresh draft. */
+function rulePicker(prompt: string, on: (d: CheckDraft) => void) {
+  const sel = Object.assign(document.createElement('select'), { className: 'pick' })
+  const rs = rules()
+  sel.innerHTML = `<option value="">${prompt}</option>` + rs.map(([k, t]) => `<option value="${k}">${t}</option>`).join('')
+  sel.onchange = () => {
+    const r = rs.find(([k]) => k === sel.value)
+    if (r) on(r[2]())
+  }
+  return sel
+}
+
+/** After a change in the builder the preset name no longer describes it — say so in the dropdown. */
+function edited() {
+  const who = $<HTMLSelectElement>('who')
+  if (!who.querySelector('option[value="own"]')) who.append(new Option('Your own rules', 'own'))
+  who.value = 'own'
+  render()
+}
+
 function render() {
   const root = $('groups')
   root.replaceChildren()
+  root.append(Object.assign(document.createElement('div'), { className: 'small muted', textContent: 'Readers must:' }))
   groups.forEach((g, gi) => {
-    if (gi > 0) root.append(Object.assign(document.createElement('div'), { className: 'and', textContent: 'AND' }))
-    const box = Object.assign(document.createElement('div'), { className: 'group' })
-    const head = Object.assign(document.createElement('div'), { className: 'group-head' })
-    const add = document.createElement('select')
-    add.innerHTML = `<option value="">+ or…</option>` + Object.entries(LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')
-    add.onchange = () => {
-      if (add.value) (g.push(fresh(add.value as CheckDraft['check'])), render())
-    }
-    head.append(Object.assign(document.createElement('span'), { textContent: `Requirement ${gi + 1}` }), add)
-    if (groups.length > 1) {
-      const rm = Object.assign(document.createElement('button'), { className: 'x', textContent: '×', title: 'Remove requirement' })
-      rm.onclick = () => ((groups = groups.filter((_, i) => i !== gi)), render())
-      head.append(rm)
-    }
-    box.append(head)
+    if (gi > 0) root.append(Object.assign(document.createElement('div'), { className: 'and', textContent: 'and' }))
+    const row = Object.assign(document.createElement('div'), { className: 'rule-row' })
     g.forEach((d, ci) => {
-      if (ci > 0) box.append(Object.assign(document.createElement('div'), { className: 'or', textContent: 'or' }))
-      box.append(checkEl(d, () => {
+      if (ci > 0) row.append(Object.assign(document.createElement('span'), { className: 'or', textContent: 'or' }))
+      row.append(pillEl(d, () => {
         g.splice(ci, 1)
         groups = groups.filter((x) => x.length)
         if (!groups.length) groups = [[fresh('public')]]
-        render()
+        edited()
       }))
     })
-    root.append(box)
+    row.append(rulePicker('+ or…', (d) => (g.push(d), edited())))
+    root.append(row)
   })
+  const more = rulePicker('+ and also…', (d) => (groups.push([d]), edited()))
+  more.classList.add('more')
+  root.append(more)
   renderHonesty()
   fit()
 }
 
-function checkEl(d: CheckDraft, remove: () => void): HTMLElement {
-  const el = Object.assign(document.createElement('div'), { className: 'check' })
-  const head = Object.assign(document.createElement('div'), { className: 'check-head' })
-  const rm = Object.assign(document.createElement('button'), { className: 'x', textContent: '×', title: 'Remove' })
-  rm.onclick = remove
-  head.append(Object.assign(document.createElement('span'), { textContent: LABELS[d.check] }), rm)
-  el.append(head)
-  const fields = Object.assign(document.createElement('div'), { className: 'fields' })
-  if (d.check === 'public') {
-    fields.append(note('Hidden from people without the tool — not private. Anyone with the extension can read it.'))
-  } else if (d.check === 'passphrase') {
-    const pw = input(d.passphrase, (v) => ((d.passphrase = v), renderHonesty()))
-    const regen = Object.assign(document.createElement('button'), { className: 'btn btn-ghost btn-small', textContent: 'New' })
-    regen.onclick = () => ((d.passphrase = generatePassphrase()), (pw.value = d.passphrase))
-    const row = Object.assign(document.createElement('div'), { className: 'row' })
-    row.append(pw, regen)
-    fields.append(row, input(d.hint, (v) => (d.hint = v), 'Hint shown to readers (optional, public)'),
-      note('Share the passphrase privately. The generated one is five random words; a guessable one (a name, a place) can be cracked offline by anyone who sees the post.'))
-  } else if (d.check === 'human') {
-    const sel = document.createElement('select')
-    sel.innerHTML = `<option value="poh">Proof of Human (Orb) — one per person</option><option value="selfie">Selfie Check — keeps bots out</option><option value="identity">Nationality (passport) — preview</option>`
-    sel.value = d.preset
-    sel.onchange = () => ((d.preset = sel.value as 'poh' | 'selfie' | 'identity'), render())
-    if (d.preset === 'identity') {
-      const c = Object.assign(document.createElement('input'), { type: 'text', value: d.country ?? '', placeholder: 'Country code, e.g. UKR', maxLength: 3 })
-      c.oninput = () => ((c.value = c.value.toUpperCase().replace(/[^A-Z]/g, '')), (d.country = c.value))
-      fields.append(c)
-    }
-    const sp = document.createElement('select')
-    sp.innerHTML = `<option value="">Any verified human</option>` + knownSpaces.map((x) => `<option value="${x}">Members of ${x}</option>`).join('')
-    sp.value = d.space
-    sp.onchange = () => (d.space = sp.value)
-    fields.append(sel, sp, note('Readers prove they are a unique real person — never who they are, never gender, age or nationality. Keeps bots and sock-puppets out. Add "or passphrase" so people without World ID can still get in.'))
+/** One rule as a pill: its phrase, the ONE input it needs, and ×. */
+function pillEl(d: CheckDraft, remove: () => void): HTMLElement {
+  const el = Object.assign(document.createElement('div'), { className: 'pill' })
+  const label = (t: string) => Object.assign(document.createElement('span'), { textContent: t })
+  const r = ruleOf(d)
+  if (d.check === 'public') el.append(label('have lortnoc'))
+  else if (d.check === 'passphrase') {
+    const i = input(d.passphrase, (v) => ((d.passphrase = v), (i.size = Math.max(12, v.length)), renderHonesty()))
+    i.size = Math.max(12, d.passphrase.length)
+    const again = Object.assign(document.createElement('button'), { className: 'mini', textContent: '↻', title: 'New random words' })
+    again.onclick = () => ((d.passphrase = generatePassphrase()), (i.value = d.passphrase), (i.size = Math.max(12, d.passphrase.length)), renderHonesty())
+    const copy = Object.assign(document.createElement('button'), { className: 'mini', textContent: '⧉', title: 'Copy — send it to your readers another way' })
+    copy.onclick = () => void navigator.clipboard.writeText(d.passphrase).then(() => (copy.textContent = '✓'))
+    el.append(label('know'), i, again, copy)
   } else if (d.check === 'after') {
     const i = Object.assign(document.createElement('input'), { type: 'datetime-local', value: d.when })
     i.oninput = () => ((d.when = i.value), renderHonesty())
-    fields.append(i, note('Nobody can open it before then — held by the lortnoc gate. Combine with a passphrase so the gate alone can never read it.'))
+    el.append(label('wait until'), i)
   } else if (d.check === 'nft') {
     const sel = document.createElement('select')
-    sel.innerHTML = `<option value="">Pick an ENS space…</option>` + ensList.map((x) => `<option value="@${x}">${x}.space</option>`).join('')
+    sel.innerHTML = ensList.map((x) => `<option value="@${x}">${x}.space</option>`).join('')
     sel.value = d.space
-    sel.onchange = () => (d.space = sel.value)
-    fields.append(sel, note("Readers sign with the wallet holding the space's NFT. The collection is the space's ENS record."))
-  } else {
-    const ta = document.createElement('textarea')
-    ta.placeholder = 'Messaging keys (hex), one per line — ENS names come with the ENS update'
-    ta.value = d.keys
-    ta.style.minHeight = '54px'
-    ta.oninput = () => (d.keys = ta.value)
-    fields.append(ta, note('Who they are stays hidden; how many is visible.'))
+    sel.onchange = () => ((d.space = sel.value), renderHonesty())
+    el.append(label('hold'), sel, label("'s NFT"))
+  } else if (d.check === 'human' && r === 'citizen') {
+    const c = Object.assign(document.createElement('input'), { type: 'text', value: d.country ?? '', placeholder: 'UKR', maxLength: 3, size: 4 })
+    c.oninput = () => ((c.value = c.value.toUpperCase().replace(/[^A-Z]/g, '')), (d.country = c.value), renderHonesty())
+    el.append(label('be a citizen of'), c)
+  } else if (d.check === 'human' && r === 'member') {
+    const sel = document.createElement('select')
+    sel.innerHTML = [...knownSpaces.map((x) => `<option value="${x}">${x}</option>`), ...ensList.map((x) => `<option value="@${x}">${x}.space</option>`)].join('')
+    sel.value = d.space
+    sel.onchange = () => ((d.space = sel.value), renderHonesty())
+    el.append(label('be a member of'), sel)
+  } else if (d.check === 'human') {
+    const sel = document.createElement('select')
+    sel.innerHTML = `<option value="poh">verified human</option><option value="selfie">human (Selfie Check)</option>`
+    sel.value = d.preset
+    sel.onchange = () => ((d.preset = sel.value as 'poh' | 'selfie'), renderHonesty())
+    el.append(label('be a'), sel)
+  } else if (d.check === 'recipients') {
+    const i = input(d.keys, (v) => (d.keys = v), 'messaging keys, comma-separated')
+    el.append(label('be one of'), i)
   }
-  el.append(fields)
+  const rm = Object.assign(document.createElement('button'), { className: 'mini', textContent: '×', title: 'Remove' })
+  rm.onclick = remove
+  el.append(rm)
   return el
 }
-const note = (t: string) => Object.assign(document.createElement('div'), { className: 'small muted', textContent: t })
+
+/** The whole policy read back as one sentence — what a reader will need, in plain words. */
+function summary(): string {
+  const fmt = (w: string) => { const t = new Date(w); return Number.isFinite(t.getTime()) ? t.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '…' }
+  const phrase = (d: CheckDraft): string => {
+    const r = ruleOf(d)
+    if (d.check === 'public') return 'have lortnoc'
+    if (d.check === 'passphrase') return 'know the passphrase'
+    if (d.check === 'after') return `wait until ${fmt(d.when)}`
+    if (d.check === 'nft') return `hold ${d.space.slice(1)}.space's NFT`
+    if (d.check === 'recipients') return 'are one of the people you named'
+    if (d.check === 'human' && r === 'citizen') return `are citizens of ${d.country || '…'}`
+    if (d.check === 'human' && r === 'member') return `are members of ${d.space.replace(/^@(.*)$/, '$1.space')}`
+    return 'are verified humans'
+  }
+  // A group that is ONLY a date reads as "from <date>", not as a thing people must be.
+  const dates = groups.filter((g) => g.length && g.every((d) => d.check === 'after')) as Extract<CheckDraft, { check: 'after' }>[][]
+  const from = dates.length ? ` from ${dates.map((g) => g.map((d) => fmt(d.when)).join(' or ')).join(' and ')}` : ''
+  const parts = groups.filter((g) => g.length && !dates.includes(g as never)).map((g) => g.map(phrase).join(' or '))
+  if (!parts.length || (parts.length === 1 && parts[0] === 'have lortnoc')) return `Anyone with lortnoc can read this${from}.`
+  return `Readable by people who ${parts.join(', and who ')}${from && ','}${from}.`
+}
+
 function input(value: string, on: (v: string) => void, placeholder = '') {
   const i = Object.assign(document.createElement('input'), { type: 'text', value, placeholder })
   i.oninput = () => on(i.value)
@@ -207,14 +250,15 @@ function renderHonesty() {
   } catch {
     return void ($('honesty').textContent = '')
   }
-  // ONE line — the thing that matters most for this choice.
-  $('honesty').textContent = h.obfuscationOnly
+  // The sentence first (what readers need), then ONE honesty note (what it protects against).
+  const say = h.obfuscationOnly
     ? 'Hidden, not private — anyone with lortnoc can read it.'
     : h.offlineGuessable
       ? '🔒 Share the passphrase privately. Keep the generated words — a guessable one can be cracked.'
       : h.gateCanRead
         ? '🔒 Locked. The lortnoc gate holds part of the key — add a passphrase if that matters.'
         : '🔒 Only the people you chose can read it.'
+  $('honesty').textContent = `${summary()} ${say}`
 }
 
 // ---------------------------------------------------------------------------
@@ -282,15 +326,19 @@ $('copy').onclick = async () => {
   setStatus('Copied. Paste it into the box and post.', 'ok')
 }
 $('close').onclick = () => toParent({ lortnoc: 'close' })
-$('addGroup').onclick = () => ((groups.push([fresh('passphrase')]), render()))
+$('edit').onclick = () => {
+  editing = !editing
+  renderDetail($<HTMLSelectElement>('who').value as Preset)
+}
 
 /** The detail line under the dropdown: only the ONE input the chosen preset needs. */
 function renderDetail(p: Preset) {
   const box = $('detail')
   box.replaceChildren()
-  $('custom').hidden = p !== 'custom'
-  if (p === 'custom') return render()
-  const pass = groups.flat().find((d) => d.check === 'passphrase') as Extract<CheckDraft, { check: 'passphrase' }> | undefined
+  $('custom').hidden = !editing
+  $('edit').textContent = editing ? 'Done' : 'Edit rules'
+  if (editing) render()
+  const pass = editing ? undefined : groups.flat().find((d) => d.check === 'passphrase') as Extract<CheckDraft, { check: 'passphrase' }> | undefined
   if (pass) {
     const i = Object.assign(document.createElement('input'), { type: 'text', value: pass.passphrase, id: 'pass' })
     i.oninput = () => ((pass.passphrase = i.value), renderHonesty())
@@ -302,10 +350,10 @@ function renderDetail(p: Preset) {
     row.append(i, again, copy)
     box.append(row)
   }
-  const after = groups.flat().find((d) => d.check === 'after') as Extract<CheckDraft, { check: 'after' }> | undefined
+  const after = editing ? undefined : groups.flat().find((d) => d.check === 'after') as Extract<CheckDraft, { check: 'after' }> | undefined
   if (after) {
     const i = Object.assign(document.createElement('input'), { type: 'datetime-local', value: after.when, id: 'when' })
-    i.oninput = () => (after.when = i.value)
+    i.oninput = () => ((after.when = i.value), renderHonesty())
     box.append(i)
   }
   // Members may sign ANY post as their pseudonym (so a space owner can see who wrote it and ban
@@ -336,10 +384,10 @@ function fillPresets() {
       [`nft:@${x}`, `NFT holders of ${x}.space`],
     ] as [Preset, string][]),
     ['after', 'Everyone, after a date'],
-    ['custom', 'Custom…'],
   ]
   who.innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')
   who.onchange = () => {
+    who.querySelector('option[value="own"]')?.remove()
     groups = presetGroups(who.value as Preset)
     void chrome.storage.local.set({ lastWho: who.value })
     renderDetail(who.value as Preset)
