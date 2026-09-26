@@ -86,7 +86,11 @@ export type ContentToFrame = { lortnoc: 'inserted'; how: 'field' | 'clipboard' |
 
 export async function sw<T>(req: SwRequest): Promise<SwResponse<T>> {
   try {
-    return (await chrome.runtime.sendMessage(req)) as SwResponse<T>
+    const r = (await chrome.runtime.sendMessage(req)) as SwResponse<T>
+    // Pages load new files from disk at once; the background worker keeps the old code until the
+    // extension is reloaded. A page newer than its worker gets "unknown message" — say what to do.
+    if (r && !r.ok && r.error === 'unknown message') return { ok: false, error: 'The extension was just updated — reload it (↻ in chrome://extensions), then try again.' }
+    return r
   } catch (e) {
     return { ok: false, error: `extension error: ${String(e)}` }
   }
