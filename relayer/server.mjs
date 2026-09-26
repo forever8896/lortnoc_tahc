@@ -21,16 +21,17 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import express from 'express'
 import {
-  createPublicClient, createWalletClient, defineChain, http, parseAbi, formatEther, getAddress,
+  createPublicClient, createWalletClient, defineChain, http, parseAbi, formatEther, getAddress, keccak256, stringToHex,
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { sepolia } from 'viem/chains'
+import { mainnet, sepolia } from 'viem/chains'
 import { SuiClient } from '@mysten/sui/client'
 import { Transaction } from '@mysten/sui/transactions'
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519'
 import { decodeSuiPrivateKey } from '@mysten/sui/cryptography'
 import { verifyMessage } from 'viem'
 import { ticketMessage, claimScope } from '../shared/ticket.mjs'
+import { createSpaceHandler, MAINNET, SEPOLIA } from './space.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
@@ -45,10 +46,15 @@ const REGISTRAR = ENS_D.lortnoc.registrar
 const REGISTRY = ENS_D.lortnoc.registry
 const UNIVERSAL_HELPER = ENS_D.ens.universalHelper
 const PARENT = ENS_D.lortnoc.parentName
+// Paid spaces (docs/PRD-universal.md §23): purchase contract per chain, ENS branch on Sepolia.
+const SPACES_D = readJson('app/src/lib/live/spaces-deployment.json')
+const SPACE_BRANCH = ENS_D.lortnoc.spaces ?? null
 
 const PORT = Number(process.env.PORT || 8080)
 const SUI_RPC = process.env.SUI_RPC || 'https://sui-testnet-rpc.publicnode.com'
 const SEPOLIA_RPC = process.env.SEPOLIA_RPC || 'https://ethereum-sepolia-rpc.publicnode.com'
+// Mainnet is READ-ONLY here (SpaceBought receipts). This service never sends a mainnet tx.
+const MAINNET_RPC = process.env.MAINNET_RPC || 'https://ethereum-rpc.publicnode.com'
 const WAL_TYPE = '0x8270feb7375eee355e64fdb69c50abb6b5f9393a722883c1cf45f8e26048810a::wal::WAL'
 const SUI_STIPEND = BigInt(process.env.SUI_STIPEND ?? 50_000_000)
 const WAL_STIPEND = BigInt(process.env.WAL_STIPEND ?? 50_000_000)
@@ -113,6 +119,16 @@ const zgWallet = createWalletClient({ account, chain: zeroG, transport: http(zer
 const eth = createPublicClient({ chain: sepolia, transport: http(SEPOLIA_RPC) })
 const ethWallet = createWalletClient({ account, chain: sepolia, transport: http(SEPOLIA_RPC) })
 const sui = new SuiClient({ url: SUI_RPC })
+const mainnetReader = createPublicClient({ chain: mainnet, transport: http(MAINNET_RPC) })
+
+/** One Sepolia send at a time. /claim, /space and the stipends all sign with the same key, and
+ *  two concurrent sends would race for the same nonce. */
+let sepoliaQueue = Promise.resolve()
+function sepoliaSerial(fn) {
+  const run = sepoliaQueue.then(fn, fn)
+  sepoliaQueue = run.catch(() => {})
+  return run
+}
 
 const membershipAbi = parseAbi([
   'function spendTicket((uint256 merkleTreeDepth,uint256 merkleTreeRoot,uint256 nullifier,uint256 message,uint256 scope,uint256[8] points) proof)',
@@ -127,6 +143,11 @@ const registrarAbi = parseAbi([
   'function isRelayer(address) view returns (bool)',
 ])
 const registryAbi = parseAbi(['function findOwner(string label) view returns (address)'])
+const spaceRegistrarAbi = parseAbi([
+  'function claimSpaceFor(string label, address spaceOwner, string token) returns (address, uint256)',
+  'function isRelayer(address) view returns (bool)',
+])
+const spacesAbi = parseAbi(['function taken(bytes32 labelHash) view returns (bool)'])
 const helperAbi = parseAbi(['function findExactOwner(bytes name) view returns (address)'])
 const dnsEncode = (name) => {
   let o = '0x'
@@ -177,13 +198,20 @@ app.get('/health', async (_req, res) => {
       suiBal = s.totalBalance
       walBal = w.totalBalance
     }
-    const ok = authorized && ethBal > 0n && (!suiSigner || (BigInt(suiBal) > 0n && BigInt(walBal) > 0n))
+    const spacesAuthorized = SPACE_BRANCH
+      ? await eth.readContract({ address: SPACE_BRANCH.registrar, abi: spaceRegistrarAbi, functionName: 'isRelayer', args: [account.address] })
+      : null
+    const ok = authorized && spacesAuthorized !== false && ethBal > 0n && (!suiSigner || (BigInt(suiBal) > 0n && BigInt(walBal) > 0n))
     res.json({
-      ok, relayer: account.address, sepoliaAuthorized: authorized,
+      ok, relayer: account.address, sepoliaAuthorized: authorized, spacesAuthorized,
       memberCount: members.toString(),
       balances: { zeroG: formatEther(zgBal), sepolia: formatEther(ethBal), sui: suiBal, wal: walBal },
       sui: suiSigner?.toSuiAddress() ?? null,
-      contracts: { membership: MEMBERSHIP, registrar: REGISTRAR, parent: PARENT },
+      contracts: {
+        membership: MEMBERSHIP, registrar: REGISTRAR, parent: PARENT,
+        spaceRegistrar: SPACE_BRANCH?.registrar ?? null,
+        spaces: { [MAINNET]: SPACES_D.mainnet?.address ?? null, [SEPOLIA]: SPACES_D.sepolia?.address ?? null },
+      },
       codecTokens: !!CODEC_SECRET,
     })
   } catch (e) {
@@ -298,9 +326,12 @@ app.post('/claim', async (req, res) => {
         account, address: REGISTRAR, abi: registrarAbi, functionName: 'claimFor',
         args: [label, pubkey, getAddress(evmAddr)],
       })
-      claimTx = await ethWallet.writeContract({ ...request, ...(await sepoliaFees()) })
-      const r = await eth.waitForTransactionReceipt({ hash: claimTx })
-      if (r.status !== 'success') throw new Error('claimFor reverted')
+      claimTx = await sepoliaSerial(async () => {
+        const h = await ethWallet.writeContract({ ...request, ...(await sepoliaFees()) })
+        const r = await eth.waitForTransactionReceipt({ hash: h })
+        if (r.status !== 'success') throw new Error('claimFor reverted')
+        return h
+      })
       log(`issued ${label}.${PARENT} to ${evmAddr} (${claimTx})`)
     } else {
       // Idempotent retry path — but only if the label is OURS to skip. A label owned by anyone
@@ -357,8 +388,11 @@ async function payGasStipend(recipient) {
     log(`gas stipend skipped — ${recipient} already holds ${formatEther(balance)} ETH`)
     return null
   }
-  const hash = await ethWallet.sendTransaction({ account, to: recipient, value: ETH_STIPEND })
-  await eth.waitForTransactionReceipt({ hash })
+  const hash = await sepoliaSerial(async () => {
+    const h = await ethWallet.sendTransaction({ account, to: recipient, value: ETH_STIPEND, ...(await sepoliaFees()) })
+    await eth.waitForTransactionReceipt({ hash: h })
+    return h
+  })
   log(`gas stipend ${formatEther(ETH_STIPEND)} ETH → ${recipient} (${hash})`)
   return hash
 }
@@ -405,6 +439,47 @@ async function payStipend(recipient) {
   log(`stipend → ${recipient} (${res.digest})`)
   return res.digest
 }
+
+// ---- POST /space (docs/PRD-universal.md §23.2) ------------------------------------------------
+// A `SpaceBought` purchase (mainnet = real money, Sepolia = demos) becomes
+// `<label>.space.lortnoctahc.eth`. The decision lives in space.mjs (tested in relayer/test/);
+// this only supplies the chain clients. Logs carry label/owner/chain — never the caller's IP.
+const handleSpace = SPACE_BRANCH
+  ? createSpaceHandler({
+      readers: { [MAINNET]: mainnetReader, [SEPOLIA]: eth },
+      spaces: Object.fromEntries(
+        [[MAINNET, SPACES_D.mainnet?.address], [SEPOLIA, SPACES_D.sepolia?.address]].filter(([, a]) => a),
+      ),
+      branchName: SPACE_BRANCH.branchName ?? `space.${PARENT}`,
+      spaceOwnerOf: (label) =>
+        eth.readContract({ address: SPACE_BRANCH.registry, abi: registryAbi, functionName: 'findOwner', args: [label] }),
+      claimSpace: async (label, owner, token) => {
+        const { request } = await eth.simulateContract({
+          account, address: SPACE_BRANCH.registrar, abi: spaceRegistrarAbi, functionName: 'claimSpaceFor',
+          args: [label, getAddress(owner), token],
+        })
+        return sepoliaSerial(async () => {
+          const h = await ethWallet.writeContract({ ...request, ...(await sepoliaFees()) })
+          const r = await eth.waitForTransactionReceipt({ hash: h })
+          if (r.status !== 'success') throw new Error('claimSpaceFor reverted')
+          return h
+        })
+      },
+      payStipend: (owner) => payGasStipend(getAddress(owner)),
+      mainnetTaken: SPACES_D.mainnet?.address
+        ? (label) => mainnetReader.readContract({
+            address: SPACES_D.mainnet.address, abi: spacesAbi, functionName: 'taken', args: [keccak256(stringToHex(label))],
+          })
+        : undefined,
+      log,
+    })
+  : null
+
+app.post('/space', async (req, res) => {
+  if (!handleSpace) return res.status(503).json({ error: 'spaces are not deployed (ens-deployment.json lortnoc.spaces)' })
+  const r = await handleSpace(req.body)
+  res.status(r.status).json(r.body)
+})
 
 /**
  * POST /codec-token — re-issue the codec capability to someone who already paid.
@@ -574,4 +649,5 @@ app.listen(PORT, '0.0.0.0', () => {
   log(`  sui      ${suiSigner?.toSuiAddress() ?? '(not configured)'}`)
   log(`  0G       ${MEMBERSHIP}`)
   log(`  registrar ${REGISTRAR}`)
+  log(`  spaces   ${SPACE_BRANCH?.registrar ?? '(not deployed)'}`)
 })

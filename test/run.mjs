@@ -5,6 +5,7 @@
 //
 //   unit         JS/TS. No network, no browser, no codec. Imports the real product source.
 //   invariants   The CLAUDE.md §4 "hard constraints in review", automated.
+//   relayer      The relayer's route logic (relayer/test/) against fake chain clients.
 //   codec        Python. The coder's reversibility proof, the paywall, the HTTP surface.
 //   integration  JS/TS against a LIVE codec. Skips cleanly when none is running.
 //
@@ -30,6 +31,8 @@ const node = (globs) => ({
 const TIERS = {
   unit: { label: 'unit — real source, no I/O', ...node(['test/unit/*.test.mjs']) },
   invariants: { label: 'invariants — CLAUDE.md §4', ...node(['test/invariants/*.test.mjs']) },
+  // The funded-key service. Its route logic with fake chain clients — no network, no key.
+  relayer: { label: 'relayer — /space decision logic, mocked chains', ...node(['relayer/test/*.test.mjs']) },
   codec: {
     label: 'codec — python (coder, paywall, HTTP)',
     cmd: 'python3',
@@ -54,7 +57,7 @@ const TIERS = {
   dm: { label: 'dm — Lortnoc DM on real chains', ...node(['--test-concurrency=1', 'test/dm/*.test.mjs']) },
 }
 
-const ORDER = ['unit', 'invariants', 'codec', 'contracts', 'browser', 'integration', 'dm']
+const ORDER = ['unit', 'invariants', 'relayer', 'codec', 'contracts', 'browser', 'integration', 'dm']
 
 function run({ cmd, args, cwd }) {
   return new Promise((done) => {

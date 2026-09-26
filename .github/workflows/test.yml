@@ -35,10 +35,14 @@ jobs:
           npm ci --prefix extension
           npm ci --prefix app
           npm ci --prefix shared
+          npm ci --prefix relayer
           npm install --no-audit --no-fund
 
       - name: Unit + invariants
         run: node test/run.mjs unit invariants
+
+      - name: Relayer (route logic, mocked chains)
+        run: node test/run.mjs relayer
 
       - name: Codec (python)
         run: node test/run.mjs codec

@@ -14,6 +14,7 @@ RUN cd shared && npm install --omit=dev --no-audit --no-fund
 COPY shared ./shared
 COPY app/src/lib/live/zerog-deployment.json ./app/src/lib/live/zerog-deployment.json
 COPY app/src/lib/live/ens-deployment.json ./app/src/lib/live/ens-deployment.json
+COPY app/src/lib/live/spaces-deployment.json ./app/src/lib/live/spaces-deployment.json
 COPY relayer ./relayer
 WORKDIR /app/relayer
 ENV PORT=8080
