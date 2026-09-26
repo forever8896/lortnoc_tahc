@@ -194,11 +194,10 @@ describe('spaces through the keyring: join, sign as a member, get banned — liv
     comments.length = 0
     owner = await profile()
     const pop = await owner.ctx.newPage()
-    await pop.goto(`chrome-extension://${new URL(owner.sw.url()).host}/src/popup/index.html`)
-    await pop.click('summary')
+    await pop.goto(`chrome-extension://${new URL(owner.sw.url()).host}/src/home/index.html#spaces`) // the full page (popup ⚙)
     await pop.fill('#spaceName', SPACE)
     await pop.click('#createSpace')
-    await pop.waitForFunction(() => /Created/.test(document.getElementById('status').textContent), null, { timeout: 30_000 })
+    await pop.waitForFunction(() => /Created/.test(document.getElementById('spaceMsg').textContent), null, { timeout: 30_000 })
     const page = await owner.ctx.newPage()
     await page.goto(siteUrl)
     await page.click('#c')

@@ -34,6 +34,7 @@ export type SwRequest =
   | { type: 'BUY_STATE' }
   | { type: 'SITE_STATE'; origin: string }
   | { type: 'SITE_SET'; origin: string; on: boolean }
+  | { type: 'SITE_LIST' }
   | { type: 'WORLD_WIDGET_OPEN'; id: string; request: WorldRequest; simulate?: boolean }
   | { type: 'WORLD_WIDGET_DONE'; id: string }
   | { type: 'SEALED_GET'; id: string }

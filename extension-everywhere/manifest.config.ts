@@ -18,6 +18,8 @@ export default defineManifest({
     default_title: 'lortnoc tahc — everywhere',
     default_icon: { 16: 'icons/on-16.png', 32: 'icons/on-32.png', 48: 'icons/on-48.png', 128: 'icons/on-128.png' },
   },
+  // The full page (popup ⚙): keys, spaces, sites, connection. Also Chrome's "Extension options".
+  options_ui: { page: 'src/home/index.html', open_in_tab: true },
   background: { service_worker: 'src/background/index.ts', type: 'module' },
   commands: {
     compose: {

@@ -31,6 +31,10 @@ async function post(url: string, body: unknown): Promise<Response> {
 }
 
 async function handle(msg: SwRequest): Promise<SwResponse> {
+  if (msg.type === 'SITE_LIST') {
+    const all = await chrome.scripting.getRegisteredContentScripts()
+    return { ok: true, data: all.filter((c) => c.id.startsWith('auto:')).map((c) => c.id.slice(5)) }
+  }
   if (msg.type === 'SITE_STATE' || msg.type === 'SITE_SET') {
     // "Always on for this site": the permission is requested by the POPUP (it needs the click);
     // here we only (un)register the content script for that one origin.

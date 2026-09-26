@@ -5,66 +5,26 @@
   <title>lortnoc tahc — everywhere</title>
   <link rel="stylesheet" href="../shared/ui.css">
   <style>
-    body { width: 300px; background: #08080a; } .card { border: 0; border-radius: 0; }
+    :root, :root body { background: #08080a; } body { width: 300px; } .card { border: 0; border-radius: 0; }
     .big { width: 100%; margin-top: 8px; padding: 12px; font-size: 15px; }
-    details { margin-top: 14px; } summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
-    .keys { background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 10px 12px; }
-    .krow { display: flex; justify-content: space-between; align-items: baseline; margin: 10px 0 6px; font-size: 13px; }
-    .krow:first-child { margin-top: 0; } .krow b { font-weight: 500; }
-    .row.wrap { flex-wrap: wrap; } .ok { color: var(--signal); }
-    .keys select { min-width: 0; width: 0; flex: 1; } .keys .btn { white-space: nowrap; }
-    .chips .chip button { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0 0 0 4px; }
+    .cog { background: none; border: 1px solid var(--rule); color: var(--muted); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 15px; line-height: 1; }
+    .cog:hover { color: var(--signal); border-color: var(--signal); }
+    .keys { display: flex; justify-content: space-between; gap: 8px; margin-top: 14px; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 12px; background: var(--panel); color: var(--ink); text-decoration: none; font-size: 12.5px; }
+    .keys:hover { border-color: var(--signal); } .keys .go { color: var(--signal); white-space: nowrap; }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="hdr"><div class="title">lortnoc <b>tahc</b></div><span class="chip" id="health">…</span></div>
+    <div class="hdr">
+      <div class="title">lortnoc <b>tahc</b></div>
+      <div class="row" style="gap:6px"><span class="chip" id="health">…</span><button class="cog" id="settings" title="Keys, spaces, sites and settings">⚙</button></div>
+    </div>
     <button class="btn big" id="compose">Write hidden</button>
     <button class="btn btn-ghost big" id="scan">Find hidden posts</button>
     <div class="small muted" style="margin-top:8px">Or <b id="key">Ctrl+Shift+L</b> in any text box · right-click text → Reveal</div>
-    <label class="toggle" id="siteRow" style="margin-top:12px" hidden><input type="checkbox" id="site"> <span>Always on for <b id="siteName"></b> <span class="muted">— a 🔒 appears when you click a text box</span></span></label>
-    <div class="eyebrow" style="margin-top:16px">Your keys</div>
-    <div class="small muted" style="margin-bottom:8px">Hidden posts meant for you open by themselves. Everything else stays ordinary text — nobody can tell what a post needs.</div>
-    <div class="keys">
-      <div class="krow"><b>Passphrases</b><span class="small muted" id="passCount"></span></div>
-      <div class="chips" id="passList"></div>
-      <div class="row"><input type="password" id="passIn" placeholder="add a passphrase you were given" autocomplete="off"><button class="btn btn-ghost btn-small" id="addPass">Add</button></div>
-
-      <div class="krow"><b>World ID</b><span class="small" id="worldState"></span></div>
-      <div class="row wrap">
-        <button class="btn btn-ghost btn-small" id="wHuman">Verified human</button>
-        <button class="btn btn-ghost btn-small" id="wSelfie">Selfie Check</button>
-        <button class="btn btn-ghost btn-small" id="wSim" hidden title="World's simulator answers — no phone (staging demo)">Human · simulator</button>
-      </div>
-      <div class="row" style="margin-top:6px"><select id="natSel" style="flex:1"></select><button class="btn btn-ghost btn-small" id="wNat">Prove</button></div>
-
-      <div class="krow"><b>Wallets</b><span class="small" id="walletState"></span></div>
-      <button class="btn btn-ghost btn-small" id="wallet">Connect the wallet on this page</button>
-      <div class="small" style="margin-top:8px"><a href="#" id="forget">Forget connected World ID &amp; wallets</a></div>
-    </div>
+    <label class="toggle" id="siteRow" style="margin-top:12px" hidden><input type="checkbox" id="site"> <span>Always on for <b id="siteName"></b> <span class="muted">— checks every page for posts meant for you</span></span></label>
+    <a href="#" class="keys" id="keys"><span id="keySummary">Your keys…</span><span class="go">Manage →</span></a>
     <div class="status" id="status"></div>
-    <details>
-      <summary>Settings</summary>
-      <div class="eyebrow">Your spaces</div>
-      <div class="row"><input type="text" id="spaceName" placeholder="new-space-name" spellcheck="false"><button class="btn btn-ghost btn-small" id="createSpace">Create</button></div>
-      <div class="small" id="spaceList" style="margin-top:6px"></div>
-      <div class="eyebrow">ENS spaces</div>
-      <div class="row"><input type="text" id="ensName" placeholder="name  (→ name.space.lortnoctahc.eth)" spellcheck="false"><button class="btn btn-ghost btn-small" id="addEns">Add</button></div>
-      <div class="small" id="ensList" style="margin-top:6px"></div>
-      <div class="eyebrow">Buy a space · 0.005 ETH</div>
-      <div class="small muted" style="margin-bottom:6px">A real ENS name for your community, gated by your NFT collection. Your wallet on this page pays.</div>
-      <input type="text" id="buyName" placeholder="name  (→ name.space.lortnoctahc.eth)" spellcheck="false" style="margin-bottom:6px">
-      <div class="small muted" style="margin:2px 0 4px">NFT collection readers must hold (ERC-721)</div>
-      <div class="row" style="margin-bottom:4px">
-        <select id="nftChain"><option value="1">Ethereum</option><option value="8453">Base</option><option value="11155111">Sepolia</option><option value="84532">Base Sepolia</option></select>
-        <input type="text" id="nftAddress" placeholder="contract address 0x…" spellcheck="false">
-      </div>
-      <div class="small" style="margin-bottom:8px"><a href="#" id="useDemoPass">Use the demo pass (Sepolia, anyone can mint)</a></div>
-      <div class="row"><span class="small muted">Pay 0.005 ETH on</span><select id="buyChain"><option value="11155111">Sepolia (demo)</option><option value="1">Ethereum mainnet</option></select><button class="btn btn-small" id="buy">Buy</button></div>
-      <div class="small" id="buyState" style="margin-top:6px"></div>
-      <div class="eyebrow">Codec</div>
-      <div class="row"><input type="text" id="codec" spellcheck="false"><button class="btn btn-ghost btn-small" id="save">Save</button></div>
-    </details>
   </div>
   <script type="module" src="./popup.ts"></script>
 </body>

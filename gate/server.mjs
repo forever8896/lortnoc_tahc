@@ -76,6 +76,15 @@ createServer(async (req, res) => {
     if (req.method === 'GET' && (req.url === '/health' || req.url === '/')) {
       return send(res, 200, { ok: true, pub: gate.pub, signPub: gate.signPub, checks: gate.checks, world: gate.world, deposits: gate.stats() }, origin)
     }
+    // A plain web page for the extension's full settings view: wallets inject into web pages, never
+    // into extension pages, so "connect wallet" / "buy a space" open this, sign there, and close it.
+    if (req.method === 'GET' && req.url === '/wallet') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      return res.end(`<!doctype html><meta charset="utf-8"><title>lortnoc tahc · wallet</title>
+<body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#08080a;color:#edeae4;font:15px system-ui">
+<div style="text-align:center;max-width:360px"><div style="font-weight:600;font-size:18px">lortnoc <span style="color:#12c4be">tahc</span></div>
+<p style="color:#9a978f">Confirm in your wallet. This tab closes itself when you're done.</p></div></body>`)
+    }
     if (req.method === 'GET' && req.url?.startsWith('/debug/events')) {
       if (!debug || !local(req)) return send(res, 404, { error: 'not found' }, origin)
       return send(res, 200, { events: debug.since(Number(new URL(req.url, 'http://x').searchParams.get('since') ?? 0)) }, origin)

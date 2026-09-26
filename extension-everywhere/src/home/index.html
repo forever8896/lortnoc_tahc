@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>lortnoc tahc — settings</title>
+  <link rel="stylesheet" href="../shared/ui.css">
+  <style>
+    /* more specific than ui.css's html, body { background: transparent } — the build places that sheet after this one */
+    :root, :root body { background: var(--bg); }
+    body { min-height: 100vh; font-size: 15px; }
+    .shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
+    @media (max-width: 820px) { .shell { grid-template-columns: 1fr; } nav.side { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--rule); } }
+    nav.side { position: sticky; top: 0; height: 100vh; border-right: 1px solid var(--rule); padding: 28px 18px; display: flex; flex-direction: column; gap: 4px;
+      background: radial-gradient(120% 60% at 0% 0%, rgba(18,196,190,.08), transparent 60%); }
+    .brand { font-weight: 500; font-size: 20px; margin: 0 8px 22px; } .brand b { color: var(--signal); font-weight: 500; }
+    .navlink { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; color: var(--muted); text-decoration: none; font-size: 14px; cursor: pointer; border: 0; background: none; text-align: left; font-family: inherit; }
+    .navlink:hover { color: var(--ink); background: rgba(237,234,228,.04); }
+    .navlink.on { color: var(--ink); background: rgba(18,196,190,.1); }
+    .navlink .ic { width: 20px; text-align: center; }
+    .side-foot { margin-top: auto; font-size: 12px; color: var(--faint); padding: 0 8px; line-height: 1.5; }
+    main { padding: 34px clamp(18px, 4vw, 56px) 80px; max-width: 880px; }
+    .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 26px; }
+    h1 { font-weight: 400; font-size: 30px; margin: 0; letter-spacing: -.01em; }
+    .lede { color: var(--muted); margin: 6px 0 0; max-width: 560px; }
+    .pills { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pill { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 11px; border: 1px solid var(--rule); border-radius: 99px; padding: 5px 10px; color: var(--muted); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); } .dot.ok { background: var(--signal); } .dot.bad { background: var(--bad); } .dot.warn { background: var(--warn); }
+    section.view { display: none; } section.view.on { display: block; animation: rise .18s ease-out; }
+    @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .grid { display: grid; gap: 14px; } .grid.two { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+    .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 16px; padding: 20px 20px 18px; }
+    .card h2 { font-weight: 500; font-size: 16px; margin: 0 0 4px; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+    .card .sub { color: var(--muted); font-size: 13.5px; margin: 0 0 14px; }
+    .state { font-size: 12.5px; font-weight: 400; } .state.ok { color: var(--signal); } .state.muted { color: var(--faint); }
+    .list { display: grid; gap: 6px; margin: 0 0 12px; }
+    .item { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--bg); border: 1px solid var(--rule); border-radius: 10px; padding: 9px 12px; font-size: 13.5px; }
+    .item .meta { color: var(--muted); font-family: var(--mono); font-size: 11.5px; }
+    .item button.x { background: none; border: 0; color: var(--faint); cursor: pointer; font-size: 16px; } .item button.x:hover { color: var(--bad); }
+    .empty { color: var(--faint); font-size: 13px; padding: 4px 2px 10px; }
+    .row { display: flex; gap: 8px; align-items: center; } .row.wrap { flex-wrap: wrap; }
+    .row input, .row select { flex: 1; min-width: 0; }
+    select { background: var(--bg); color: var(--ink); border: 1px solid var(--rule); border-radius: 8px; font: inherit; padding: 8px 10px; }
+    label.field { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 6px; }
+    .btn { white-space: nowrap; }
+    .hint { font-size: 12.5px; color: var(--faint); margin-top: 10px; line-height: 1.5; }
+    .msg { min-height: 20px; font-size: 13px; margin-top: 10px; } .msg.ok { color: var(--signal); } .msg.err { color: var(--warn); }
+    a { color: var(--signal); }
+    .how { counter-reset: s; display: grid; gap: 12px; }
+    .how div { display: grid; grid-template-columns: 30px 1fr; gap: 12px; }
+    .how div::before { counter-increment: s; content: counter(s); width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--signal); color: var(--signal); display: grid; place-items: center; font-size: 13px; }
+    .how b { font-weight: 500; } .how span { color: var(--muted); }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <nav class="side">
+    <div class="brand">lortnoc <b>tahc</b></div>
+    <button class="navlink on" data-v="keys"><span class="ic">🔑</span> Your keys</button>
+    <button class="navlink" data-v="spaces"><span class="ic">◆</span> Spaces</button>
+    <button class="navlink" data-v="sites"><span class="ic">◎</span> Sites</button>
+    <button class="navlink" data-v="connection"><span class="ic">⇄</span> Connection</button>
+    <button class="navlink" data-v="about"><span class="ic">?</span> How it works</button>
+    <div class="side-foot">Everything here stays in this browser.<br>Hidden posts meant for you open by themselves; the rest stays ordinary text.</div>
+  </nav>
+
+  <main>
+    <div class="top">
+      <div><h1 id="title">Your keys</h1><p class="lede" id="lede">What you connect here decides which hidden posts open for you. A post never says what it needs — your extension simply tries these.</p></div>
+      <div class="pills"><span class="pill"><span class="dot" id="dCodec"></span>codec</span><span class="pill"><span class="dot" id="dGate"></span>gate</span><span class="pill"><span class="dot" id="dWorld"></span><span id="tWorld">World ID</span></span></div>
+    </div>
+
+    <!-- ---------------------------------------------------------------- keys -->
+    <section class="view on" id="v-keys" data-title="Your keys" data-lede="What you connect here decides which hidden posts open for you. A post never says what it needs — your extension simply tries these.">
+      <div class="grid">
+        <div class="card">
+          <h2>Passphrases <span class="state muted" id="passState"></span></h2>
+          <p class="sub">Words someone gave you. Stored as a derived key — never the words themselves.</p>
+          <div class="list" id="passList"></div>
+          <div class="row"><input type="password" id="passIn" placeholder="Add a passphrase you were given" autocomplete="off"><button class="btn" id="addPass">Add</button></div>
+          <div class="msg" id="passMsg"></div>
+        </div>
+        <div class="grid two">
+          <div class="card">
+            <h2>World ID <span class="state" id="worldState"></span></h2>
+            <p class="sub">Prove it once with World's app. Only what you choose to prove is shared — never who you are.</p>
+            <div class="row wrap"><button class="btn btn-ghost" id="wHuman">Verified human</button><button class="btn btn-ghost" id="wSelfie">Selfie Check</button></div>
+            <label class="field">Nationality (passport)</label>
+            <div class="row"><select id="natSel"></select><button class="btn btn-ghost" id="wNat">Prove</button></div>
+            <div class="hint" id="simRow" hidden>No phone? <a href="#" id="wSim">Use World's simulator</a> (staging demo, verified human only).</div>
+            <div class="msg" id="worldMsg"></div>
+          </div>
+          <div class="card">
+            <h2>Wallets <span class="state" id="walletState"></span></h2>
+            <p class="sub">One signature — nothing moves, nothing is spent. Posts for holders of your NFTs then open for you.</p>
+            <div class="list" id="walletList"></div>
+            <button class="btn btn-ghost" id="wallet">Connect a wallet</button>
+            <div class="hint">Opens a small page where your wallet can sign, then closes it.</div>
+            <div class="msg" id="walletMsg"></div>
+          </div>
+        </div>
+        <div class="hint"><a href="#" id="forget">Forget connected World ID and wallets</a> · Passphrases are removed one by one above.</div>
+      </div>
+    </section>
+
+    <!-- -------------------------------------------------------------- spaces -->
+    <section class="view" id="v-spaces" data-title="Spaces" data-lede="Communities with their own posts. Free spaces live on the gate; paid spaces are real ENS names whose owner, NFT collection and bans live on-chain.">
+      <div class="grid">
+        <div class="card">
+          <h2>Your spaces</h2>
+          <p class="sub">Spaces you own, joined, or follow by name.</p>
+          <div class="list" id="spaceList"></div>
+        </div>
+        <div class="grid two">
+          <div class="card">
+            <h2>Create a free space</h2>
+            <p class="sub">Members join with World ID. You can ban members from any post they sign.</p>
+            <div class="row"><input type="text" id="spaceName" placeholder="new-space-name" spellcheck="false"><button class="btn" id="createSpace">Create</button></div>
+            <div class="msg" id="spaceMsg"></div>
+          </div>
+          <div class="card">
+            <h2>Follow an ENS space</h2>
+            <p class="sub">So you can write to it: <span style="font-family:var(--mono);font-size:12px">name.space.lortnoctahc.eth</span></p>
+            <div class="row"><input type="text" id="ensName" placeholder="name" spellcheck="false"><button class="btn btn-ghost" id="addEns">Add</button></div>
+            <div class="msg" id="ensMsg"></div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Buy a space <span class="state muted">0.005 ETH</span></h2>
+          <p class="sub">A real ENS name for your community, gated by your NFT collection. You own it with a fresh key kept in this browser — not the wallet that pays.</p>
+          <label class="field">Name</label>
+          <div class="row"><input type="text" id="buyName" placeholder="name  →  name.space.lortnoctahc.eth" spellcheck="false"></div>
+          <label class="field">NFT collection readers must hold (ERC-721)</label>
+          <div class="row"><select id="nftChain" style="flex:0 0 150px"><option value="1">Ethereum</option><option value="8453">Base</option><option value="11155111">Sepolia</option><option value="84532">Base Sepolia</option></select><input type="text" id="nftAddress" placeholder="contract address 0x…" spellcheck="false"></div>
+          <div class="hint"><a href="#" id="useDemoPass">Use the demo pass</a> — Sepolia, anyone can mint one.</div>
+          <label class="field">Pay on</label>
+          <div class="row"><select id="buyChain"><option value="11155111">Sepolia (demo)</option><option value="1">Ethereum mainnet</option></select><button class="btn" id="buy">Buy</button></div>
+          <div class="msg" id="buyState"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- --------------------------------------------------------------- sites -->
+    <section class="view" id="v-sites" data-title="Sites" data-lede="On these sites the extension checks every page for posts meant for you, and shows a 🔒 on text boxes. Everywhere else it only runs when you ask.">
+      <div class="card">
+        <h2>Always on</h2>
+        <p class="sub">Switch a site on from the extension button while you're on it.</p>
+        <div class="list" id="siteList"></div>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- connection -->
+    <section class="view" id="v-connection" data-title="Connection" data-lede="The two services the extension talks to. Neither ever sees your message in the clear.">
+      <div class="grid two">
+        <div class="card">
+          <h2>Codec <span class="state" id="codecState"></span></h2>
+          <p class="sub">Turns encrypted bytes into ordinary words and back. Sees ciphertext only.</p>
+          <div class="row"><input type="text" id="codec" spellcheck="false"><button class="btn btn-ghost" id="saveCodec">Save</button></div>
+        </div>
+        <div class="card">
+          <h2>Gate <span class="state" id="gateState"></span></h2>
+          <p class="sub">Holds the key pieces for time, World ID and NFT rules, and hands them only to readers who qualify.</p>
+          <div class="row"><input type="text" id="gate" spellcheck="false"><button class="btn btn-ghost" id="saveGate">Save</button></div>
+        </div>
+      </div>
+      <div class="msg" id="connMsg"></div>
+    </section>
+
+    <!-- --------------------------------------------------------------- about -->
+    <section class="view" id="v-about" data-title="How it works" data-lede="Hide what you write inside what you write — on any page, readable only by who you choose.">
+      <div class="card how">
+        <div><p style="margin:0"><b>You write.</b> <span>In the extension, never in the page. Your message is encrypted under the rule you pick — a passphrase, verified humans, a nationality, holders of an NFT, a date, or a mix.</span></p></div>
+        <div><p style="margin:0"><b>It becomes ordinary words.</b> <span>The encrypted bytes are turned into plain chatter. Nothing marks it as a message — not even which rule it uses.</span></p></div>
+        <div><p style="margin:0"><b>Readers connect their keys once.</b> <span>Passphrases, World ID, wallets. Their extension quietly tries them on every post.</span></p></div>
+        <div><p style="margin:0"><b>Only posts meant for them open.</b> <span>For everyone else, it stays an ordinary post.</span></p></div>
+      </div>
+      <p class="hint">Honest limits: whoever runs the gate holds its key pieces — add a passphrase to a rule and the gate alone can't read it. A guessable passphrase can be guessed; the generated five words cannot.</p>
+    </section>
+  </main>
+</div>
+<script type="module" src="./home.ts"></script>
+</body>
+</html>
