@@ -185,7 +185,7 @@ if (D.lortnoc.spaces?.registry) {
   for (let b = sfrom; b <= head; b += 50000n) slogs.push(...await c.getLogs({ address: D.lortnoc.spaces.registry, event: labelRegistered, fromBlock: b, toBlock: b + 49999n > head ? head : b + 49999n }))
   const spaces = [...new Set(slogs.map((l) => l.args.label))]
   console.log(`  ${spaces.length} spaces on-chain`)
-  const CAIP = /^eip155:(1|8453|11155111|84532)\/erc721:0x[0-9a-fA-F]{40}$/
+  const CAIP = /^eip155:(1|10|8453|11155111|84532)\/erc721:0x[0-9a-fA-F]{40}$/
   for (const label of spaces) {
     const name = `${label}.${D.lortnoc.spaces.branchName}`
     const before = failures.length

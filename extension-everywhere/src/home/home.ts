@@ -147,7 +147,7 @@ $('forget').onclick = async (e) => {
 // spaces — the product: name → collection → create
 // ---------------------------------------------------------------------------
 const DEMO_PASS = '0xc85460a6690f8b06fdafd1b7730bdfa6261243f0'
-const CHAIN_NAME: Record<string, string> = { '1': 'Ethereum', '8453': 'Base', '11155111': 'Sepolia', '84532': 'Base Sepolia' }
+const CHAIN_NAME: Record<string, string> = { '1': 'Ethereum', '8453': 'Base', '11155111': 'Sepolia', '84532': 'Base Sepolia', '10': 'Optimism' }
 const ok = { name: false, col: false }
 let payOn: 1 | 11155111 = 11155111
 let priceEth = '0.005'

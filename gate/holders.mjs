@@ -5,15 +5,16 @@
 // verify    → recover the signer (EIP-191), the nonce was issued for this reader and is unused,
 //             then ERC-721/1155/20 balanceOf(signer) > 0 on the collection's chain.
 import { createPublicClient, http, fallback, verifyMessage, getAddress } from 'viem'
-import { mainnet, sepolia, base, baseSepolia } from 'viem/chains'
+import { mainnet, sepolia, base, baseSepolia, optimism } from 'viem/chains'
 
-const CHAINS = { 1: mainnet, 11155111: sepolia, 8453: base, 84532: baseSepolia }
+const CHAINS = { 1: mainnet, 11155111: sepolia, 8453: base, 84532: baseSepolia, 10: optimism }
 // Several RPCs per chain (measured 2026-09-26); viem's fallback moves on when one errors or times out.
 const RPC = {
   1: ['https://ethereum-rpc.publicnode.com', 'https://eth.drpc.org', 'https://1rpc.io/eth'],
   11155111: ['https://ethereum-sepolia-rpc.publicnode.com', 'https://sepolia.gateway.tenderly.co', 'https://1rpc.io/sepolia'],
   8453: ['https://base-rpc.publicnode.com', 'https://base.drpc.org', 'https://mainnet.base.org'],
   84532: ['https://base-sepolia-rpc.publicnode.com', 'https://sepolia.base.org'],
+  10: ['https://optimism-rpc.publicnode.com', 'https://optimism.drpc.org', 'https://mainnet.optimism.io'],
 }
 const BALANCE_ABI = [{ type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] }]
 

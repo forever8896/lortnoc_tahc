@@ -6,7 +6,7 @@
 //   3. the relayer turns the SpaceBought event into <label>.space.lortnoctahc.eth with the collection
 // Progress is kept in storage so the popup shows it when reopened.
 import { encodeFunctionData, keccak256, toHex, numberToHex, createPublicClient, http } from 'viem'
-import { sepolia, mainnet, base, baseSepolia } from 'viem/chains'
+import { sepolia, mainnet, base, baseSepolia, optimism } from 'viem/chains'
 import { formatEther } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import deployments from '../../../app/src/lib/live/spaces-deployment.json'
@@ -28,6 +28,7 @@ const COLLECTION_CHAINS = {
   8453: [base, 'https://base-rpc.publicnode.com'],
   11155111: [sepolia, 'https://ethereum-sepolia-rpc.publicnode.com'],
   84532: [baseSepolia, 'https://base-sepolia-rpc.publicnode.com'],
+  10: [optimism, 'https://optimism-rpc.publicnode.com'],
 } as const
 const ERC165 = [{ type: 'function', name: 'supportsInterface', stateMutability: 'view', inputs: [{ type: 'bytes4' }], outputs: [{ type: 'bool' }] }] as const
 
