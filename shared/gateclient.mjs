@@ -58,3 +58,40 @@ export function gateReleaser({ post, onDeny, proofFor, extraFor, onRelease }) {
     return null
   }
 }
+
+// ---------------------------------------------------------------------------
+// Sealed posts (shared/sealed.mjs)
+// ---------------------------------------------------------------------------
+/**
+ * For sealPost(): seals every gate check's share to the gate in ONE request, returns the 8-byte ref.
+ * @param {{gatePub: string, post: (path: string, body: object) => Promise<any>}} opts
+ */
+export function gateSealer({ gatePub, post }) {
+  return async (items) => {
+    const r = await post('/seal', {
+      items: items.map(({ leaf, share }) => {
+        const { check, ...params } = leaf
+        return { check, params, box: sealTo(gatePub, share, CTX.deposit) }
+      }),
+    })
+    if (!r?.ref) throw new Error(r?.error ?? r?.deny ?? 'the gate refused')
+    return fromHex(r.ref)
+  }
+}
+
+/**
+ * Ask the gate about every candidate on a page at once. Unknown refs (not gate posts, or not posts
+ * at all) are simply absent from the answer.
+ * @returns {Promise<Map<string, {shares: Uint8Array[], members: {space: string, memberId: string}[]}>>}
+ *   keyed by hex ref
+ */
+export async function unlockRefs({ post, token, refs, memberPub }) {
+  const me = genKeyPair()
+  const r = await post('/unlock', { token, readerPub: toHex(me.pub), refs: refs.map((x) => (typeof x === 'string' ? x : toHex(x))), memberPub })
+  const out = new Map()
+  for (const it of r?.results ?? []) {
+    const shares = (it.boxes ?? []).map((b) => openBox(me.priv, me.pub, b, CTX.release)).filter(Boolean)
+    out.set(it.ref, { shares, members: it.members ?? [] })
+  }
+  return out
+}

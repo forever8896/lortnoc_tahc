@@ -45,5 +45,9 @@ export default {
     async release(stored) {
       return Date.now() >= stored.params.after ? true : { deny: 'not yet', retryAt: stored.params.after }
     },
+    // Sealed posts: nothing to prove — the post simply appears once its time has come.
+    async unlock(stored) {
+      return Date.now() >= stored.params.after
+    },
   },
 }

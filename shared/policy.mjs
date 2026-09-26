@@ -68,14 +68,14 @@ const rand = (n) => crypto.getRandomValues(new Uint8Array(n))
 // Tree
 // ---------------------------------------------------------------------------
 /** Nodes: { and: [...] } | { or: [...] } | { check: '<id>', ...spec }. */
-function kind(node) {
+export function kind(node) {
   if (Array.isArray(node?.and)) return 'and'
   if (Array.isArray(node?.or)) return 'or'
   if (typeof node?.check === 'string') return 'leaf'
   throw new Error('policy: unknown node ' + JSON.stringify(node))
 }
 
-function moduleFor(node) {
+export function moduleFor(node) {
   const m = CHECKS[node.check]
   if (!m) throw new Error(`policy: unknown check "${node.check}"`)
   return m
@@ -137,7 +137,7 @@ export function describe(shape) {
 // ---------------------------------------------------------------------------
 // Shape encoding — public params only
 // ---------------------------------------------------------------------------
-function encodeShape(node, out = []) {
+export function encodeShape(node, out = []) {
   const k = kind(node)
   if (k === 'leaf') {
     const m = moduleFor(node)
@@ -149,7 +149,7 @@ function encodeShape(node, out = []) {
   return out
 }
 
-function decodeShape(bytes, at, depth = 0) {
+export function decodeShape(bytes, at, depth = 0) {
   if (at >= bytes.length) throw new Error('shape: truncated')
   const b = bytes[at]
   const type = b >> 5

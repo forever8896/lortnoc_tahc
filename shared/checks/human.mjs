@@ -73,6 +73,20 @@ export default {
   },
   // Gate side — `services.world` is gate/world.mjs; absent when World is not configured.
   gate: {
+    // Sealed posts: decided against the credentials the reader CONNECTED to their keyring (once),
+    // not a proof per post. The nullifier behind the credential still keys space membership + bans.
+    async unlock(stored, claims, services, { memberPub } = {}) {
+      const { preset = 'poh', space, country } = stored.params
+      const nullifier = preset === 'identity' ? claims.nat?.[country] : claims[preset]
+      if (!nullifier) return false
+      if (!space) return true
+      const known = space.startsWith('@') ? await services.ensSpaces?.exists(space) : services.spaces?.exists(space)
+      if (!known) return false
+      const m = services.spaces.admit(space, nullifier, memberPub)
+      if (m.deny) return false
+      if (space.startsWith('@') && (await services.ensSpaces?.isBanned(space, m.memberId))) return false
+      return { member: { space, memberId: m.memberId } }
+    },
     async challenge(stored, req, state, services) {
       if (!services.world) return { deny: 'World ID is not configured on this gate' }
       const { preset, space, country } = stored.params

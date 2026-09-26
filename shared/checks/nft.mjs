@@ -46,6 +46,18 @@ export default {
   },
   // Gate side — services.holders is gate/holders.mjs.
   gate: {
+    // Sealed posts: any wallet the reader connected to their keyring that holds the collection.
+    async unlock(stored, claims, services, { memberPub } = {}) {
+      if (!services.holders) return false
+      for (const address of claims.wallets ?? []) {
+        if (!(await services.holders.holds(stored.params.space, address).catch(() => false))) continue
+        const m = services.spaces.admit(stored.params.space, `wallet:${address.toLowerCase()}`, memberPub)
+        if (m.deny) continue
+        if (await services.ensSpaces?.isBanned(stored.params.space, m.memberId)) continue
+        return { member: { space: stored.params.space, memberId: m.memberId } }
+      }
+      return false
+    },
     async challenge(stored, req, state, services) {
       if (!services.holders) return { deny: 'NFT checks are not configured on this gate' }
       return services.holders.challenge(stored, req.readerPub, state)

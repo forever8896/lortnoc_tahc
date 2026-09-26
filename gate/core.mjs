@@ -18,6 +18,7 @@ import { genKeyPair, toHex, fromHex } from '../shared/keys.mjs'
 import { signerFrom } from '../shared/member.mjs'
 import { httpError } from './core-errors.mjs'
 import { createSpaces } from './spaces.mjs'
+import { createKeyring } from './keyring.mjs'
 
 export const REF_LEN = 8
 const MAX_PARAMS_BYTES = 2048
@@ -30,6 +31,8 @@ export function createGate({ dbPath = ':memory:', keyHex, world = null, ensSpace
     share TEXT NOT NULL, policy_hash TEXT NOT NULL, created_at INTEGER NOT NULL)`)
   db.exec(`CREATE TABLE IF NOT EXISTS gate_state (k TEXT PRIMARY KEY, v TEXT NOT NULL)`)
   db.exec(`CREATE TABLE IF NOT EXISTS check_state (check_id TEXT, ref TEXT, k TEXT, v TEXT, PRIMARY KEY (check_id, ref, k))`)
+  // Sealed posts (shared/sealed.mjs): every gate-held check of one post, under one reference.
+  db.exec(`CREATE TABLE IF NOT EXISTS sealed (ref TEXT PRIMARY KEY, items TEXT NOT NULL, created_at INTEGER NOT NULL)`)
 
   // The gate's own X25519 key: from the environment, else persisted in the database, else new.
   let priv = keyHex ? fromHex(keyHex) : null
@@ -42,6 +45,7 @@ export function createGate({ dbPath = ':memory:', keyHex, world = null, ensSpace
   const signer = signerFrom(priv)
   const spaces = createSpaces(db, { secret: signer.secret, signPriv: signer.priv, ensSpaces })
   services.spaces = spaces
+  const keyring = createKeyring(db, { world })
 
   /** Per-check durable state (e.g. spent nullifiers), namespaced so checks cannot collide. */
   const stateFor = (checkId, ref) => ({
@@ -113,8 +117,60 @@ export function createGate({ dbPath = ':memory:', keyHex, world = null, ensSpace
       return { box: sealTo(req.readerPub, fromHex(row.share), CTX.release), ...(verdict.member ? { member: verdict.member } : {}) }
     },
 
+    keyring,
+
+    /**
+     * Sealed posts, author side: store every gate-held check of one post under ONE reference.
+     * @param {{items: {check: string, params: object, box: {eph,ct}}[]}} req
+     */
+    seal(req) {
+      const items = req?.items
+      if (!Array.isArray(items) || !items.length || items.length > 6) throw httpError(400, 'items: 1..6 gate checks')
+      const stored = items.map((it) => {
+        const m = CHECKS[it?.check]
+        if (!m || m.kind !== 'attested' || !m.gate?.unlock) throw httpError(400, `"${it?.check}" is not a gate check`)
+        if (JSON.stringify(it.params ?? {}).length > MAX_PARAMS_BYTES) throw httpError(400, 'params too large')
+        m.validate?.(it.params)
+        const share = openBox(priv, pub, it.box ?? {}, CTX.deposit)
+        if (!share || share.length !== 16) throw httpError(400, 'share not sealed to this gate')
+        return { check: m.id, params: it.params, share: toHex(share) }
+      })
+      const ref = toHex(crypto.getRandomValues(new Uint8Array(REF_LEN)))
+      db.prepare('INSERT INTO sealed VALUES (?, ?, ?)').run(ref, JSON.stringify(stored), Date.now())
+      return { ref }
+    },
+
+    /**
+     * Sealed posts, reader side: one call for every candidate on a page. The reader cannot know which
+     * candidates are gate posts (or posts at all), so it asks about all of them; unknown refs are
+     * simply absent from the answer. For each known one, every check the reader's CONNECTED
+     * credentials satisfy releases its share, sealed to this request's readerPub.
+     * @param {{token?: string, readerPub: string, refs: string[], memberPub?: string}} req
+     */
+    async unlock(req) {
+      if (!/^[0-9a-f]{64}$/.test(req?.readerPub ?? '')) throw httpError(400, 'bad readerPub')
+      const refs = [...new Set((req.refs ?? []).filter((r) => /^[0-9a-f]{16}$/.test(r)))].slice(0, 60)
+      const claims = keyring.claimsOf(req.token)
+      const results = []
+      for (const ref of refs) {
+        const row = db.prepare('SELECT items FROM sealed WHERE ref = ?').get(ref)
+        if (!row) continue
+        const shares = []
+        const members = []
+        for (const it of JSON.parse(row.items)) {
+          const v = await CHECKS[it.check].gate.unlock({ check: it.check, params: it.params, ref }, claims, services, { memberPub: req.memberPub })
+          if (!v) continue
+          shares.push(fromHex(it.share))
+          if (v.member) members.push(v.member)
+        }
+        if (shares.length) results.push({ ref, boxes: shares.map((sh) => sealTo(req.readerPub, sh, CTX.release)), members })
+      }
+      return { results }
+    },
+
     stats() {
-      return db.prepare('SELECT check_id, COUNT(*) AS n FROM deposits GROUP BY check_id').all()
+      const sealedN = db.prepare('SELECT COUNT(*) AS n FROM sealed').get().n
+      return [...db.prepare('SELECT check_id, COUNT(*) AS n FROM deposits GROUP BY check_id').all(), ...(sealedN ? [{ check_id: 'sealed', n: sealedN }] : [])]
     },
     close: () => db.close(),
   }

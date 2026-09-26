@@ -55,7 +55,7 @@ export default {
   kind: 'inline',
   flags: { offlineGuessable: true },
   validate(node) {
-    if (!normalisePassphrase(node.passphrase ?? '') && !node.fromWire) throw new Error('passphrase: empty')
+    if (!normalisePassphrase(node.passphrase ?? '') && !node.fromWire && !node.key) throw new Error('passphrase: empty')
     if (node.hint && enc.encode(node.hint).length > MAX_HINT) throw new Error(`passphrase: hint over ${MAX_HINT} bytes`)
   },
   describe: (p) => (p.hint ? `Passphrase · hint: ${p.hint}` : 'Passphrase'),

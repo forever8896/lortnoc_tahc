@@ -22,6 +22,18 @@ export function parseCaip19(s) {
   return m ? { chainId: Number(m[1]), standard: m[2], address: getAddress(m[3]) } : null
 }
 
+/** What a reader signs to add a wallet to their keyring (once, not per post). */
+export const connectText = (readerPub, nonce) =>
+  `lortnoc tahc — connect this wallet to your keyring\nreader: ${readerPub}\nnonce: ${nonce}\n\nSigning costs nothing and moves nothing. Posts for holders of your NFTs will open for you.`
+
+export async function walletSigned({ message, address, sig }) {
+  try {
+    return await verifyMessage({ address: getAddress(address), message, signature: sig })
+  } catch {
+    return false
+  }
+}
+
 export const challengeText = (spaceName, ref, readerPub, nonce) =>
   `lortnoc tahc — prove you hold this space's NFT\nspace: ${spaceName}\npost: ${ref}\nreader: ${readerPub}\nnonce: ${nonce}\n\nSigning costs nothing and moves nothing.`
 
@@ -33,7 +45,19 @@ export function createHolders({ ensSpaces, balanceOf, now = () => Date.now() } =
     return c.readContract({ address, abi: BALANCE_ABI, functionName: 'balanceOf', args: [holder] })
   })
 
+  const held = new Map() // `${space}|${address}` → { at, yes } — balances change, so only briefly
   return {
+    /** Does `address` hold the NFT collection that `space`'s ENS record names? (cached 60 s) */
+    async holds(space, address) {
+      const k = `${space}|${address.toLowerCase()}`
+      const hit = held.get(k)
+      if (hit && now() - hit.at < 60_000) return hit.yes
+      const sp = await ensSpaces?.get(space)
+      const col = sp?.exists ? parseCaip19(sp.token) : null
+      const yes = !!col && BigInt(await balance(col, getAddress(address))) > 0n
+      held.set(k, { at: now(), yes })
+      return yes
+    },
     async challenge(stored, readerPub, state) {
       const sp = await ensSpaces?.get(stored.params.space)
       if (!sp?.exists) return { deny: `the space "${stored.params.space}" does not exist` }
