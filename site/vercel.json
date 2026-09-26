@@ -1,7 +1,25 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
-    { "source": "/onboarding", "destination": "/onboarding.html" },
-    { "source": "/install", "destination": "/install.html" }
+    {
+      "source": "/onboarding",
+      "destination": "/onboarding.html"
+    },
+    {
+      "source": "/install",
+      "destination": "/install.html"
+    },
+    {
+      "source": "/everywhere",
+      "destination": "/everywhere.html"
+    },
+    {
+      "source": "/everywhere/world",
+      "destination": "/everywhere-world.html"
+    },
+    {
+      "source": "/everywhere/ens",
+      "destination": "/everywhere-ens.html"
+    }
   ]
 }

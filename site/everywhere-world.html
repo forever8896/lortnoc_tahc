@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World ID in Everywhere | Lortnoc Tahc</title>
+<meta name="description" content="How Lortnoc Tahc Everywhere integrates World ID with IDKit: World's widget, connect once, double verification (World API + World Chain), and passport nationality.">
+<style>
+  :root{ --bg:#08080A; --ink:#EDEAE4; --signal:#12C4BE; --signal-rgb:18,196,190;
+    --muted:rgba(237,234,228,0.6); --faint:rgba(237,234,228,0.36); --rule:rgba(237,234,228,0.13);
+    --panel:#0e0e12; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.65; }
+  a{ color:var(--signal); }
+  .wrap{ max-width:980px; margin:0 auto; padding:0 clamp(18px,5vw,56px) 70px; }
+  nav{ display:flex; justify-content:space-between; align-items:center; padding:22px 0; }
+  nav .logo{ font-weight:600; color:var(--ink); text-decoration:none; } nav .logo b{ color:var(--signal); font-weight:600; }
+  nav .links a{ margin-left:20px; font-size:14px; color:var(--muted); text-decoration:none; }
+  .eyebrow{ font-family:var(--mono); font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--signal); }
+  h1{ font-size:clamp(30px,5vw,50px); line-height:1.08; letter-spacing:-.03em; margin:12px 0 14px; font-weight:600; }
+  h2{ font-size:clamp(21px,3vw,28px); letter-spacing:-.02em; margin:48px 0 12px; font-weight:600; }
+  h3{ font-size:16px; margin:0 0 6px; }
+  .lede{ color:var(--muted); font-size:17px; max-width:680px; }
+  p, li{ color:var(--muted); } b, strong{ color:var(--ink); }
+  code{ font-family:var(--mono); color:var(--signal); background:rgba(var(--signal-rgb),.08); padding:1px 6px; border-radius:4px; font-size:.9em; }
+  pre{ background:#050506; border:1px solid var(--rule); border-radius:12px; padding:13px 15px; overflow-x:auto; font-family:var(--mono); font-size:12.5px; color:var(--muted); margin:10px 0 0; white-space:pre-wrap; word-break:break-all; }
+  pre .c{ color:var(--faint); }
+  .card{ border:1px solid var(--rule); background:var(--panel); border-radius:16px; padding:20px 22px; margin:14px 0; }
+  .flow{ counter-reset:f; display:grid; gap:0; }
+  .flow > div{ counter-increment:f; display:grid; grid-template-columns:40px 1fr; gap:14px; padding:16px 0; border-top:1px solid var(--rule); }
+  .flow > div:first-child{ border-top:0; }
+  .flow > div::before{ content:counter(f); width:32px; height:32px; border-radius:50%; border:1px solid var(--signal); color:var(--signal); display:grid; place-items:center; font-size:14px; }
+  .flow p{ margin:4px 0 0; }
+  .checks{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; margin-top:12px; }
+  .checks div{ border:1px solid var(--rule); border-radius:12px; padding:12px 14px; font-size:14px; }
+  .checks div b{ display:block; margin-bottom:2px; }
+  .files a{ display:block; font-family:var(--mono); font-size:13px; padding:6px 0; border-bottom:1px dashed var(--rule); text-decoration:none; }
+  .files a span{ color:var(--faint); font-family:system-ui; font-size:13px; margin-left:8px; }
+  table{ width:100%; border-collapse:collapse; font-size:14px; margin-top:10px; }
+  td, th{ text-align:left; padding:9px 10px; border-bottom:1px solid var(--rule); vertical-align:top; } th{ color:var(--faint); font-weight:500; font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+  td.mono{ font-family:var(--mono); font-size:12.5px; word-break:break-all; }
+  .note{ border-left:2px solid var(--signal); padding:10px 16px; background:var(--panel); border-radius:0 12px 12px 0; margin:14px 0; }
+  code, a{ overflow-wrap:anywhere; }
+  .flow > div{ grid-template-columns:40px minmax(0,1fr); }
+  .checks{ grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr)); }
+  nav{ flex-wrap:wrap; gap:6px 20px; } nav .links a{ white-space:nowrap; }
+  @media(max-width:560px){ nav .links a{ margin:0 16px 0 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav><a class="logo" href="/everywhere">lortnoc <b>tahc</b> · everywhere</a><div class="links"><a href="/everywhere">Product</a><a href="/everywhere/ens">ENS v2</a><a href="https://github.com/forever8896/lortnoc_tahc">Source</a></div></nav>
+
+  <span class="eyebrow">World ID · IDKit 4.3 · verify, don't trust</span>
+  <h1>Real humans — and real passports — as a key.</h1>
+  <p class="lede">In Everywhere, World ID is one of the keys that can open a hidden post: <b>verified humans</b>, <b>Selfie Check</b>, or <b>citizens of a country</b> via passport Identity Check. It is only ever a <em>reader</em> rule — never needed to write, never an account, never a meter.</p>
+
+  <h2>What the reader sees</h2>
+  <div class="card">
+    <p style="margin:0">Extension ⚙ → <b>Keys → World ID</b> → <b>Verified human</b>, <b>Selfie</b>, or <b>Nationality → Prove</b>. World's own widget opens, they scan it with World App, and it's done — <b>once</b>. From then on, every post for verified humans (or for their nationality) simply opens when it appears on a page. No QR per post, and no post ever reveals that it asks for World ID: it's sealed, and only a reader whose keys open it learns what it asked for.</p>
+  </div>
+
+  <h2>Step by step — connecting World ID once</h2>
+  <div class="card flow">
+    <div><div><h3>The gate signs a request, bound to this reader</h3><p>The extension asks the gate (<code>POST /connect/world/challenge</code>). The gate signs an RP request with its RP signing key (<code>signRequest</code>), action <code>lortnoc-connect</code>, and a <b>signal</b> = request id ‖ the reader's keyring key — so a proof can only ever be used for this one request. Environment: <code>sandbox</code> for phones, <code>staging</code> for World's simulator.</p></div></div>
+    <div><div><h3>World's own widget, in an extension tab</h3><p><code>IDKitRequestWidget</code> from <code>@worldcoin/idkit</code> runs in its own tab (it needs ≥ 1024 px; below that it drops the QR for a deep link). Presets: <code>proofOfHuman</code>, <code>selfieCheck</code>, or <code>identityCheck</code> with <code>nationality</code> = ISO alpha-3 and a <code>legacy_signal</code> (see findings).</p></div></div>
+    <div><div><h3>World App proves it</h3><p>The reader scans with World App (World ID Sandbox app on staging). The proof returns to the widget over World's bridge; the widget's <code>handleVerify</code> hands it to the extension, which sends it to the gate (<code>POST /connect/world</code>). The widget shows success <b>only after the gate accepted it</b>.</p></div></div>
+    <div><div><h3>The gate checks everything, twice</h3><p>Its own checks first (below), then <b>both</b> World's v4 verify API <b>and</b> the <code>WorldIDVerifier</code> contract on World Chain, asked through three RPCs — at least two must say valid and none invalid.</p></div></div>
+    <div><div><h3>A keyring session</h3><p>The gate remembers only what was proven: a per-action nullifier per credential (<code>poh</code>, <code>selfie</code>, <code>nat.DNK</code>) behind a bearer token the extension keeps. No name, no document data, no IP.</p></div></div>
+    <div><div><h3>Posts open by themselves</h3><p>When a page is scanned, the extension asks the gate about every candidate at once (<code>POST /unlock</code>). For each sealed post whose rule the reader's connected credentials satisfy, the gate releases its key piece — sealed to a one-time key of that reader.</p></div></div>
+  </div>
+
+  <h2>What the gate checks on every proof</h2>
+  <div class="checks">
+    <div><b>Nonce</b>issued by this gate, single-use, not expired, for this reader key</div>
+    <div><b>Protocol · action · environment</b>4.0 (or 3.0 — nationality only), the action it signed, the environment it asked for</div>
+    <div><b>Credential &amp; signal</b>the credential the rule needs; the signal hash binds request id ‖ reader key</div>
+    <div><b>Nationality</b><code>identity_attested === true</code> and a document credential (passport / eID / MNC)</div>
+    <div><b>World verify API</b>POST <code>developer.world.org/api/v4/verify/&lt;rp_id&gt;</code></div>
+    <div><b>World Chain</b><code>WorldIDVerifier.verify(…)</code> — the exact arguments World's portal uses</div>
+  </div>
+
+  <h2>Spaces: bans that stick to a person</h2>
+  <p>In a space ("Verified humans of lentil-club.space"), the gate turns the World ID nullifier into a member pseudonym — <code>member-</code> + 12 hex of an HMAC with a gate secret — stable per space, unlinkable across spaces. Members can sign posts as that pseudonym (the gate countersigns only the hash). The owner bans a pseudonym in the space's ENS record; because World ID is one per person, the same human can't return with a new account.</p>
+
+  <h2>What we found integrating it</h2>
+  <div class="note"><b>A missing v4 signal is zero, not hash("").</b> Identity Check takes no signal, so IDKit omits <code>signal_hash</code>; World's portal treats that as <code>0x0</code> (<a href="https://github.com/worldcoin/developer-portal/blob/main/web/api/v4/verify/request-schema.ts">request-schema.ts</a>). Passing hash("") made every passport proof fail on-chain. Fixed in <code>verifierArgs()</code>, with regression tests.</div>
+  <div class="note"><b>The Sandbox app answers only <code>environment: sandbox</code></b> (<a href="https://github.com/worldcoin/developer-docs/blob/main/world-id/sandbox/sandbox-access.mdx">docs</a>) — a staging request shows "Verification unavailable". The gate issues sandbox for phones and staging only when the reader asks for the simulator.</div>
+  <div class="note"><b>Identity Check falls back to World ID 3.0 by design.</b> IDKit's preset sets <code>allow_legacy_proofs_override: Some(true)</code> (<a href="https://github.com/worldcoin/idkit/blob/main/rust/core/src/preset.rs">preset.rs</a>), so a phone holding an older document credential answers with a v3 <code>secure_document</code> proof. We accept v3 for nationality only, bound to the request through <code>legacy_signal</code>, verified by World's API (v3 has no on-chain verifier).</div>
+  <div class="note"><b>A tab closed with the browser's ×</b> can't tell anyone — the extension watches for it, and every step lands in the gate's activity trail.</div>
+
+  <h2>The code</h2>
+  <div class="card files">
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/gate/world.mjs">gate/world.mjs<span>request signing, every check, World API + World Chain</span></a>
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/gate/keyring.mjs">gate/keyring.mjs<span>connect once: challenge, verify, session claims</span></a>
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/shared/checks/human.mjs">shared/checks/human.mjs<span>the "human" rule: presets, nationality, spaces, unlock</span></a>
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/extension-everywhere/src/world/world.ts">extension-everywhere/src/world/world.ts<span>World's IDKitRequestWidget in a tab</span></a>
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/extension-everywhere/src/background/sealed.ts">extension-everywhere/src/background/sealed.ts<span>keyring connect + scanning + unlock</span></a>
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/gate/world-phone.mjs">gate/world-phone.mjs<span>a real-phone round trip from the terminal</span></a>
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/test/unit/world.test.mjs">test/unit/world.test.mjs<span>every refusal the gate must make, v3, environments</span></a>
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/test/browser/world-live.test.mjs">test/browser/world-live.test.mjs<span>live: widget + simulator + World API + World Chain</span></a>
+  </div>
+
+  <h2>Verify it yourself</h2>
+  <pre><span class="c"># the public gate — World ID configured, which environments it serves</span>
+curl -s https://lortnoc-gate.fly.dev/health
+
+<span class="c"># the gate's rules, with World's network verdicts faked — every refusal it must make</span>
+git clone https://github.com/forever8896/lortnoc_tahc && cd lortnoc_tahc
+npm ci --prefix shared && npm ci --prefix gate
+node --test test/unit/world.test.mjs test/unit/sealed-gate.test.mjs
+
+<span class="c"># live, against the public gate: World's widget + simulator + World API + World Chain</span>
+npm ci && npx playwright install chromium
+npm ci --prefix extension-everywhere
+WORLD_LIVE=1 GATE_URL=https://lortnoc-gate.fly.dev node --test test/browser/world-live.test.mjs</pre>
+
+  <h2>Identifiers</h2>
+  <table>
+    <tr><th>What</th><th>Value</th></tr>
+    <tr><td>World app id (public)</td><td class="mono">app_6f133d6629f0eccd6bc45d4230aafd05</td></tr>
+    <tr><td>RP id (public)</td><td class="mono">rp_df5f7a98b6caa910</td></tr>
+    <tr><td>WorldIDVerifier · staging &amp; sandbox (World Chain)</td><td class="mono"><a href="https://worldscan.org/address/0x703a6316c975DEabF30b637c155edD53e24657DB">0x703a6316c975DEabF30b637c155edD53e24657DB</a></td></tr>
+    <tr><td>WorldIDVerifier · production (World Chain)</td><td class="mono"><a href="https://worldscan.org/address/0x00000000009E00F9FE82CfeeBB4556686da094d7">0x00000000009E00F9FE82CfeeBB4556686da094d7</a></td></tr>
+    <tr><td>Public gate</td><td class="mono"><a href="https://lortnoc-gate.fly.dev/health">https://lortnoc-gate.fly.dev</a></td></tr>
+  </table>
+  <p style="margin-top:28px"><a href="/everywhere">← Everywhere</a> · <a href="/everywhere/ens">ENS v2 integration →</a></p>
+</div>
+</body>
+</html>

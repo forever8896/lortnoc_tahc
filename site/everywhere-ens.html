@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ENS v2 in Everywhere | Lortnoc Tahc</title>
+<meta name="description" content="How Lortnoc Tahc Everywhere uses ENS v2: spaces are real names under space.lortnoctahc.eth, each with its own resolver, per-record roles, and the gate reading them live. Verify with curl.">
+<style>
+  :root{ --bg:#08080A; --ink:#EDEAE4; --signal:#12C4BE; --signal-rgb:18,196,190;
+    --muted:rgba(237,234,228,0.6); --faint:rgba(237,234,228,0.36); --rule:rgba(237,234,228,0.13);
+    --panel:#0e0e12; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.65; }
+  a{ color:var(--signal); }
+  .wrap{ max-width:980px; margin:0 auto; padding:0 clamp(18px,5vw,56px) 70px; }
+  nav{ display:flex; justify-content:space-between; align-items:center; padding:22px 0; }
+  nav .logo{ font-weight:600; color:var(--ink); text-decoration:none; } nav .logo b{ color:var(--signal); font-weight:600; }
+  nav .links a{ margin-left:20px; font-size:14px; color:var(--muted); text-decoration:none; }
+  .eyebrow{ font-family:var(--mono); font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--signal); }
+  h1{ font-size:clamp(30px,5vw,50px); line-height:1.08; letter-spacing:-.03em; margin:12px 0 14px; font-weight:600; }
+  h2{ font-size:clamp(21px,3vw,28px); letter-spacing:-.02em; margin:48px 0 12px; font-weight:600; }
+  h3{ font-size:16px; margin:0 0 6px; }
+  .lede{ color:var(--muted); font-size:17px; max-width:680px; }
+  p, li{ color:var(--muted); } b, strong{ color:var(--ink); }
+  code{ font-family:var(--mono); color:var(--signal); background:rgba(var(--signal-rgb),.08); padding:1px 6px; border-radius:4px; font-size:.9em; }
+  pre{ background:#050506; border:1px solid var(--rule); border-radius:12px; padding:13px 15px; overflow-x:auto; font-family:var(--mono); font-size:12.5px; color:var(--muted); margin:10px 0 0; white-space:pre-wrap; word-break:break-all; }
+  pre .c{ color:var(--faint); }
+  .card{ border:1px solid var(--rule); background:var(--panel); border-radius:16px; padding:20px 22px; margin:14px 0; }
+  .flow{ counter-reset:f; display:grid; gap:0; }
+  .flow > div{ counter-increment:f; display:grid; grid-template-columns:40px 1fr; gap:14px; padding:16px 0; border-top:1px solid var(--rule); }
+  .flow > div:first-child{ border-top:0; }
+  .flow > div::before{ content:counter(f); width:32px; height:32px; border-radius:50%; border:1px solid var(--signal); color:var(--signal); display:grid; place-items:center; font-size:14px; }
+  .flow p{ margin:4px 0 0; }
+  .checks{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; margin-top:12px; }
+  .checks div{ border:1px solid var(--rule); border-radius:12px; padding:12px 14px; font-size:14px; }
+  .checks div b{ display:block; margin-bottom:2px; }
+  .files a{ display:block; font-family:var(--mono); font-size:13px; padding:6px 0; border-bottom:1px dashed var(--rule); text-decoration:none; }
+  .files a span{ color:var(--faint); font-family:system-ui; font-size:13px; margin-left:8px; }
+  table{ width:100%; border-collapse:collapse; font-size:14px; margin-top:10px; }
+  td, th{ text-align:left; padding:9px 10px; border-bottom:1px solid var(--rule); vertical-align:top; } th{ color:var(--faint); font-weight:500; font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+  td.mono{ font-family:var(--mono); font-size:12.5px; word-break:break-all; }
+  .note{ border-left:2px solid var(--signal); padding:10px 16px; background:var(--panel); border-radius:0 12px 12px 0; margin:14px 0; }
+  code, a{ overflow-wrap:anywhere; }
+  .flow > div{ grid-template-columns:40px minmax(0,1fr); }
+  .checks{ grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr)); }
+  nav{ flex-wrap:wrap; gap:6px 20px; } nav .links a{ white-space:nowrap; }
+  @media(max-width:560px){ nav .links a{ margin:0 16px 0 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav><a class="logo" href="/everywhere">lortnoc <b>tahc</b> · everywhere</a><div class="links"><a href="/everywhere">Product</a><a href="/everywhere/world">World ID</a><a href="https://github.com/forever8896/lortnoc_tahc">Source</a></div></nav>
+
+  <span class="eyebrow">ENS v2 · Sepolia 2026-09-15 · verify, don't trust</span>
+  <h1>A space is an ENS name. Its rules are its records.</h1>
+  <p class="lede">When you buy an <b>NFT Space</b> in Everywhere, you get a real ENS v2 name — <code>yourclub.space.lortnoctahc.eth</code> — with its <b>own resolver</b>, owned by <b>your wallet</b>. Which NFT collection opens its posts, and who is banned, live in that name's text records. The gate reads them from ENS on every unlock. We hold no admin key over your space.</p>
+
+  <h2>What the owner sees</h2>
+  <div class="card"><p style="margin:0">Extension ⚙ → <b>Spaces</b> → pick a name → pick a collection (contract + chain, checked live) → <b>Buy</b>. From then on, anyone posting can choose <b>"NFT holders of yourclub.space…"</b> or <b>"Verified humans of yourclub.space…"</b>, and only readers who qualify <em>right now</em> can open it. Change the collection or ban someone by editing your ENS records — in the extension, or in any ENS tool.</p></div>
+
+  <h2>Step by step — from purchase to an unlocked post</h2>
+  <div class="card flow">
+    <div><div><h3>Pay on Ethereum</h3><p><code>LortnocSpaces.buySpace(label, owner)</code> — 0.005 ETH (the first 10 get 90% off, enforced in the contract via <code>currentPrice()</code>). It emits <code>SpacePurchased</code>; the funds go straight to the treasury.</p></div></div>
+    <div><div><h3>The relayer issues the name</h3><p><code>POST /space</code> reads that purchase from chain and calls <code>SpaceRegistrar</code>, which in <b>one transaction</b> deploys the space's own <code>PermissionedResolver</code> proxy from ENS's canonical <code>VerifiableFactory</code>, writes <code>addr</code> + <code>eth.lortnoc.space.token</code>, grants every role to the owner, <b>revokes its own</b>, and registers the label in our <code>SpaceRegistry</code>.</p></div></div>
+    <div><div><h3>A real v2 registry tree</h3><p>RootRegistry → <code>eth</code> (ETHRegistry) → <code>lortnoctahc</code> (LortnocRegistry) → <code>space</code> (SpaceRegistry) → your label. Each hop is its own contract — v2 hierarchical registries. Standard ENS tools resolve it through the canonical UniversalResolver.</p></div></div>
+    <div><div><h3>The rules are records</h3><p><code>eth.lortnoc.space.token</code> = a CAIP-19 collection, e.g. <code>eip155:11155111/erc721:0xc854…43f0</code>. <code>eth.lortnoc.space.bans</code> = banned member pseudonyms. Owners can delegate <b>just</b> the bans record to a moderator — v2 per-record roles (Enhanced Access Control).</p></div></div>
+    <div><div><h3>The gate reads ENS live, and fails closed</h3><p>On every unlock, the gate resolves the space through the UniversalResolver, confirms it exists with <code>UniversalHelper.findExactOwner</code> (in v2 an unclaimed label resolves to empty records — "resolves" ≠ "exists"), then checks the reader's wallet holds the collection. If a read fails on every RPC, the post stays shut.</p></div></div>
+  </div>
+
+  <h2>Contracts (Sepolia)</h2>
+  <table>
+    <tr><th>Contract</th><th>Address</th></tr>
+    <tr><td>ENS UniversalResolver (canonical proxy)</td><td class="mono"><a href="https://sepolia.etherscan.io/address/0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe">0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe</a></td></tr>
+    <tr><td>ENS UniversalHelper</td><td class="mono"><a href="https://sepolia.etherscan.io/address/0x33f571aa8A160a21b877cF6E0Fb8806692b97DF5">0x33f571aa8A160a21b877cF6E0Fb8806692b97DF5</a></td></tr>
+    <tr><td>ENS VerifiableFactory</td><td class="mono"><a href="https://sepolia.etherscan.io/address/0x9e726Eb570beb6BCEb495AB8cdA7df517d4e841C">0x9e726Eb570beb6BCEb495AB8cdA7df517d4e841C</a></td></tr>
+    <tr><td>ENS PermissionedResolverImpl</td><td class="mono"><a href="https://sepolia.etherscan.io/address/0x14F09Fd05d4585759e54844DC9B00147131Cf243">0x14F09Fd05d4585759e54844DC9B00147131Cf243</a></td></tr>
+    <tr><td>LortnocRegistry (<code>lortnoctahc.eth</code>)</td><td class="mono"><a href="https://sepolia.etherscan.io/address/0x836FEEa0f638b9816a24a7D305bdf0Ee2d0C8b24">0x836FEEa0f638b9816a24a7D305bdf0Ee2d0C8b24</a></td></tr>
+    <tr><td>SpaceRegistry (<code>space.lortnoctahc.eth</code>)</td><td class="mono"><a href="https://sepolia.etherscan.io/address/0x4d19b7bb756125027D8433429D598bB3725E8867">0x4d19b7bb756125027D8433429D598bB3725E8867</a></td></tr>
+    <tr><td>SpaceRegistrar</td><td class="mono"><a href="https://sepolia.etherscan.io/address/0x05dcdfe5b66c5d90507de42ddaa656eec82309f0">0x05dcdfe5b66c5d90507de42ddaa656eec82309f0</a></td></tr>
+    <tr><td>LortnocSpaces v2 (purchase, early bird)</td><td class="mono"><a href="https://sepolia.etherscan.io/address/0x4e9c746fd4b895f66e9d0562109125abeaccb79c">0x4e9c746fd4b895f66e9d0562109125abeaccb79c</a></td></tr>
+    <tr><td>LortnocDemoPass (free test NFT)</td><td class="mono"><a href="https://sepolia.etherscan.io/address/0xc85460a6690f8b06fdafd1b7730bdfa6261243f0">0xc85460a6690f8b06fdafd1b7730bdfa6261243f0</a></td></tr>
+    <tr><td>LortnocSpaces v1 · Ethereum mainnet</td><td class="mono"><a href="https://etherscan.io/address/0x87997f3ca40693fb1e0c3c6f39f0f3fe287b8c67">0x87997f3ca40693fb1e0c3c6f39f0f3fe287b8c67</a></td></tr>
+  </table>
+
+  <h2>Verify with curl — no install, no key</h2>
+  <p>Every call is a plain <code>eth_call</code> against a public Sepolia RPC, for the live space <a href="https://explorer.ens.dev/ethglobal.space.lortnoctahc.eth"><code>ethglobal.space.lortnoctahc.eth</code></a>. DNS-encoded name <code>0x09657468676c6f62616c0573706163650b6c6f72746e6f63746168630365746800</code>, namehash <code>0xb6fbb3ad89d32a9704ce43358802d696b448675ceef370f66f3e076650986b31</code>.</p>
+
+  <h3 style="margin-top:22px">1 · addr — resolve through ENS's own UniversalResolver</h3>
+  <pre><span class="c"># UniversalResolver.resolve(dnsName, addr(node)) → (bytes result, address resolver)</span>
+curl -s https://ethereum-sepolia-rpc.publicnode.com -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"eth_call","params":[{"to":"0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe","data":"0x9061b923000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000000000000000000000000000000000000000002109657468676c6f62616c0573706163650b6c6f72746e6f637461686303657468000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000243b3b57deb6fbb3ad89d32a9704ce43358802d696b448675ceef370f66f3e076650986b3100000000000000000000000000000000000000000000000000000000"},"latest"]}'
+<span class="c"># decode: cast abi-decode "f()(bytes,address)" &lt;result&gt;
+# → owner 0xb9878655b160DcEb27E16C0206b1cFd9426Ae71a, resolver 0x8fe9E85E555c6E4DEAE2033dA1Fbe81415887431</span></pre>
+
+  <h3 style="margin-top:22px">2 · the rule — text record eth.lortnoc.space.token</h3>
+  <pre><span class="c"># UniversalResolver.resolve(dnsName, text(node, "eth.lortnoc.space.token"))</span>
+curl -s https://ethereum-sepolia-rpc.publicnode.com -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"eth_call","params":[{"to":"0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe","data":"0x9061b923000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000000000000000000000000000000000000000002109657468676c6f62616c0573706163650b6c6f72746e6f6374616863036574680000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008459d1d43cb6fbb3ad89d32a9704ce43358802d696b448675ceef370f66f3e076650986b31000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000176574682e6c6f72746e6f632e73706163652e746f6b656e00000000000000000000000000000000000000000000000000000000000000000000000000"},"latest"]}'
+<span class="c"># decode twice: cast abi-decode "f()(bytes,address)" &lt;result&gt;, then "f()(string)" on the bytes
+# → eip155:11155111/erc721:0xc85460a6690f8b06fdafd1b7730bdfa6261243f0</span></pre>
+
+  <h3 style="margin-top:22px">3 · it exists — UniversalHelper.findExactOwner</h3>
+  <pre>curl -s https://ethereum-sepolia-rpc.publicnode.com -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"eth_call","params":[{"to":"0x33f571aa8a160a21b877cf6e0fb8806692b97df5","data":"0x78b8187f0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000002109657468676c6f62616c0573706163650b6c6f72746e6f6374616863036574680000000000000000000000000000000000000000000000000000000000000000"},"latest"]}'
+<span class="c"># → the last 20 bytes are the owner: 0xb9878655b160DcEb27E16C0206b1cFd9426Ae71a</span></pre>
+
+  <h3 style="margin-top:22px">4 · the registry tree — LortnocRegistry.getSubregistry("space")</h3>
+  <pre>curl -s https://ethereum-sepolia-rpc.publicnode.com -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"eth_call","params":[{"to":"0x836FEEa0f638b9816a24a7D305bdf0Ee2d0C8b24","data":"0x35af6216000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000057370616365000000000000000000000000000000000000000000000000000000"},"latest"]}'
+<span class="c"># → SpaceRegistry 0x4d19b7bb756125027D8433429D598bB3725E8867</span></pre>
+
+  <h3 style="margin-top:22px">5 · its own resolver, from ENS's canonical factory</h3>
+  <pre><span class="c"># VerifiableFactory.verifyContract(resolver) → the implementation it was deployed from</span>
+curl -s https://ethereum-sepolia-rpc.publicnode.com -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"eth_call","params":[{"to":"0x9e726Eb570beb6BCEb495AB8cdA7df517d4e841C","data":"0x3d200b450000000000000000000000008fe9e85e555c6e4deae2033da1fbe81415887431"},"latest"]}'
+<span class="c"># → PermissionedResolverImpl 0x14f09fd05d4585759e54844dc9b00147131cf243 (ENS's, not ours)</span></pre>
+
+  <h3 style="margin-top:22px">6 · the whole proof, one command</h3>
+  <pre><span class="c"># read-only: reference addresses from ENS's GitHub, registry tree, ownership, factory, roles</span>
+git clone https://github.com/forever8896/lortnoc_tahc && cd lortnoc_tahc
+npm ci --prefix scripts/ens
+node scripts/ens/prove-v2.mjs ethglobal.space.lortnoctahc.eth
+node scripts/ens/preflight.mjs     <span class="c"># fails the moment ENS resets Sepolia again</span>
+
+<span class="c"># and the gate that reads it</span>
+curl -s https://lortnoc-gate.fly.dev/health</pre>
+
+  <h2>What the proof shows</h2>
+  <div class="checks">
+    <div><b>Canonical resolution</b>viem's default UniversalResolver is ENS's own proxy, walking ENS's RootRegistry</div>
+    <div><b>Every hop is a registry</b>each label has its own subregistry; the leaf knows its parent (<code>getParent</code>)</div>
+    <div><b>Ownership, ENS's way</b><code>findExactOwner</code> = the registry's owner = the <code>addr</code> record</div>
+    <div><b>Its own resolver</b>factory-verified <code>PermissionedResolverImpl</code>, not a shared resolver</div>
+    <div><b>Per-record roles</b>owner holds SET_TEXT; our registrar holds <em>no</em> role; a stranger's write reverts</div>
+    <div><b>Fails closed</b>the gate's ENS reads use fallback RPCs; if all fail, nothing unlocks</div>
+  </div>
+
+  <h2>The code</h2>
+  <div class="card files">
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/contracts/src/SpaceRegistrar.sol">contracts/src/SpaceRegistrar.sol<span>one tx: resolver proxy, records, roles, self-revoke, register</span></a>
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/contracts/src/LortnocSpaces.sol">contracts/src/LortnocSpaces.sol<span>purchase, early bird, treasury forwarding</span></a>
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/relayer/space.mjs">relayer/space.mjs<span>POST /space: read the purchase, issue the name</span></a>
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/gate/ens-spaces.mjs">gate/ens-spaces.mjs<span>live ENS reads: exists, token, bans — fail closed</span></a>
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/gate/holders.mjs">gate/holders.mjs<span>does this wallet hold the collection</span></a>
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/shared/checks/nft.mjs">shared/checks/nft.mjs<span>the "holders of a space" rule</span></a>
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/extension-everywhere/src/shared/ensWrite.ts">extension-everywhere/src/shared/ensWrite.ts<span>owner edits records from the extension</span></a>
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/scripts/ens/prove-v2.mjs">scripts/ens/prove-v2.mjs<span>the keyless proof above</span></a>
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/scripts/ens/preflight.mjs">scripts/ens/preflight.mjs<span>demo gate: fails if ENS reset Sepolia</span></a>
+    <a href="https://github.com/forever8896/lortnoc_tahc/blob/main/contracts/test/SpaceRegistrar.t.sol">contracts/test/SpaceRegistrar.t.sol<span>+ SpaceRegistrar.fork.t.sol against ENS's real bytecode</span></a>
+  </div>
+
+  <div class="note"><b>Honest limits.</b> ENS v2 lives on Sepolia today, and ENS resets Sepolia every month or so — names don't carry over, so we re-migrate (<code>preflight.mjs</code> tells us when). The purchase contract is also live on Ethereum mainnet; issuing mainnet names waits for ENS v2 on mainnet. Holder checks read chain state at unlock time, so selling the NFT closes future posts but can't un-read one already opened.</div>
+  <p style="margin-top:28px"><a href="/everywhere">← Everywhere</a> · <a href="/everywhere/world">World ID integration →</a></p>
+</div>
+</body>
+</html>

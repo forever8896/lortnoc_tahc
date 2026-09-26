@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Everywhere | Lortnoc Tahc</title>
+<meta name="description" content="Hide what you write inside what you write — on any page, readable only by who you choose. Browser extension, World ID and ENS v2.">
+<style>
+  :root{ --bg:#08080A; --ink:#EDEAE4; --signal:#12C4BE; --signal-rgb:18,196,190;
+    --muted:rgba(237,234,228,0.6); --faint:rgba(237,234,228,0.36); --rule:rgba(237,234,228,0.13);
+    --panel:#0e0e12; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.6; }
+  a{ color:var(--signal); }
+  .wrap{ max-width:1040px; margin:0 auto; padding:0 clamp(18px,5vw,56px); }
+  nav{ display:flex; justify-content:space-between; align-items:center; padding:22px 0; }
+  nav .logo{ font-weight:600; letter-spacing:-.01em; color:var(--ink); text-decoration:none; } nav .logo b{ color:var(--signal); font-weight:600; }
+  nav .links a{ margin-left:22px; font-size:14px; color:var(--muted); text-decoration:none; } nav .links a:hover{ color:var(--ink); }
+  .eyebrow{ font-family:var(--mono); font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--signal); }
+  header.hero{ padding:clamp(40px,8vw,96px) 0 40px; display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr); gap:44px; align-items:center; }
+  @media(max-width:860px){ header.hero{ grid-template-columns:1fr; } }
+  h1{ font-size:clamp(34px,5.4vw,60px); line-height:1.04; letter-spacing:-.035em; margin:14px 0 18px; font-weight:600; }
+  .lede{ color:var(--muted); font-size:18px; max-width:560px; margin:0 0 28px; }
+  .cta{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  .btn{ display:inline-flex; align-items:center; gap:10px; background:var(--signal); color:#04110f; font-weight:600; text-decoration:none; padding:14px 22px; border-radius:999px; }
+  .btn:hover{ background:var(--ink); }
+  .btn.ghost{ background:transparent; color:var(--ink); border:1px solid var(--rule); } .btn.ghost:hover{ border-color:var(--signal); }
+  .small{ font-size:13px; color:var(--faint); } .mono{ font-family:var(--mono); }
+  .demo{ border:1px solid var(--rule); border-radius:20px; background:linear-gradient(160deg,#101416,#0a0b0d); padding:22px; box-shadow:0 40px 80px -30px rgba(0,0,0,.7); }
+  .post{ background:#f6f4ef; color:#1d1d1f; border-radius:14px; padding:14px 16px; font-size:14px; line-height:1.5; }
+  .post .who{ font-weight:600; font-size:13px; margin-bottom:4px; } .post .who span{ color:#888; font-weight:400; }
+  .chip{ display:inline-block; margin-top:10px; font:600 12px system-ui; background:var(--signal); color:#001514; border-radius:999px; padding:5px 11px; }
+  .opened{ margin-top:14px; border:1px solid rgba(var(--signal-rgb),.35); border-radius:14px; padding:12px 14px; font-size:14px; }
+  .opened .k{ font-family:var(--mono); font-size:10.5px; color:var(--signal); letter-spacing:.14em; text-transform:uppercase; }
+  section{ padding:56px 0; border-top:1px solid var(--rule); }
+  h2{ font-size:clamp(24px,3.4vw,34px); letter-spacing:-.02em; margin:10px 0 14px; font-weight:600; }
+  .grid3{ display:grid; grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr)); gap:14px; margin-top:22px; }
+  .card{ border:1px solid var(--rule); background:var(--panel); border-radius:18px; padding:22px; }
+  .card h3{ margin:0 0 6px; font-size:17px; } .card p{ margin:0; color:var(--muted); font-size:14.5px; }
+  .num{ font-family:var(--mono); color:var(--signal); font-size:12px; letter-spacing:.14em; }
+  ol.steps{ counter-reset:s; list-style:none; padding:0; margin:22px 0 0; display:grid; gap:12px; }
+  ol.steps li{ counter-increment:s; display:grid; grid-template-columns:36px minmax(0,1fr); gap:14px; align-items:start; }
+  ol.steps li::before{ content:counter(s); width:32px; height:32px; border-radius:50%; border:1px solid var(--signal); color:var(--signal); display:grid; place-items:center; font-size:14px; }
+  code{ font-family:var(--mono); color:var(--signal); background:rgba(var(--signal-rgb),.08); padding:1px 6px; border-radius:4px; font-size:.92em; }
+  pre{ background:#050506; border:1px solid var(--rule); border-radius:12px; padding:13px 15px; overflow-x:auto; font-family:var(--mono); font-size:12.5px; color:var(--muted); margin:12px 0 0; }
+  .deep{ display:grid; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); gap:14px; margin-top:22px; }
+  .deep a.card{ text-decoration:none; color:var(--ink); transition:border-color .15s; } .deep a.card:hover{ border-color:var(--signal); }
+  .deep .go{ color:var(--signal); font-size:14px; margin-top:12px; display:block; }
+  .limits li{ color:var(--muted); margin:6px 0; } .limits b{ color:var(--ink); font-weight:600; }
+  footer{ padding:40px 0 60px; color:var(--faint); font-size:13px; border-top:1px solid var(--rule); }
+  .tag{ font-family:var(--mono); font-size:11px; color:#001514; background:var(--signal); border-radius:999px; padding:3px 9px; margin-left:6px; vertical-align:middle; }
+  code, a{ overflow-wrap:anywhere; }
+  .flow > div{ grid-template-columns:40px minmax(0,1fr); }
+  .checks{ grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr)); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav><a class="logo" href="/">lortnoc <b>tahc</b></a>
+    <div class="links"><a href="#how">How it works</a><a href="#install">Install</a><a href="/everywhere/world">World ID</a><a href="/everywhere/ens">ENS v2</a></div></nav>
+
+  <header class="hero">
+    <div>
+      <span class="eyebrow">Lortnoc Tahc Everywhere · browser extension</span>
+      <h1>Say it anywhere.<br>Only the right people can read it.</h1>
+      <p class="lede">Write a hidden message into any comment box, forum or feed. To everyone else it's an ordinary post — not even visibly a message. Readers who hold the right key see what you actually said.</p>
+      <div class="cta">
+        <a class="btn" href="https://github.com/forever8896/lortnoc_tahc/releases/download/ew-v0.2.0/lortnoc-tahc-everywhere-ew-v0.2.0.zip">↓ Download v0.2.0</a>
+        <a class="btn ghost" href="#install">How to install</a>
+      </div>
+      <p class="small" style="margin-top:14px">Chrome, Brave, Edge, Arc · built in public CI · SHA-256 <span class="mono">fb7d5e2b…ed3ade</span> · <a href="https://github.com/forever8896/lortnoc_tahc/releases/tag/ew-v0.2.0">release &amp; checksum</a></p>
+    </div>
+    <div class="demo" aria-label="What a hidden post looks like">
+      <div class="post"><div class="who">guest <span>· 3 min ago</span></div>that night could have started differently on stage again just going online since last month maybe going around at most once rather than maybe over three because after making me sign of myself they realised as quick away…</div>
+      <span class="chip">🔓 Hidden message for you</span>
+      <div class="opened"><div class="k">Opened with your keys · Citizens of DNK</div>hello denmark — meet at the usual place at nine.</div>
+    </div>
+  </header>
+
+  <section id="how">
+    <span class="eyebrow">How it works</span>
+    <h2>A message that says nothing about itself.</h2>
+    <div class="grid3">
+      <div class="card"><div class="num">01 · WRITE</div><h3>Pick who can read it</h3><p>Press <b>Ctrl+Shift+L</b> in any text box. Write your message, choose readers: a passphrase, verified humans, citizens of a country, holders of an NFT space, a date — or combine them.</p></div>
+      <div class="card"><div class="num">02 · POST</div><h3>It becomes ordinary words</h3><p>Your message is encrypted, then turned into plain chatter. No tag, no marker, no rule in the clear — nobody can tell it's a message, or who it's for.</p></div>
+      <div class="card"><div class="num">03 · READ</div><h3>Keys open what's yours</h3><p>Readers connect their keys once — passphrases, World ID, a wallet. Posts meant for them open by themselves; everything else stays an ordinary post.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <span class="eyebrow">NFT Spaces</span>
+    <h2>A private channel for your holders. <span class="tag">first 10 · 90% off</span></h2>
+    <p class="lede" style="font-size:16px">Buy a real ENS name — <code>yourspace.space.lortnoctahc.eth</code> — gated by your NFT collection. Only wallets holding it can read posts for the space; members sign as verified pseudonyms; you ban on-chain. 0.005 ETH once — the first 10 spaces cost 0.0005 ETH, enforced by the contract. Try it free on Sepolia with the demo collection.</p>
+    <div class="grid3">
+      <div class="card"><h3>🔒 Holders only</h3><p>The collection lives in the space's ENS record, not in the post. Change it once; every post follows.</p></div>
+      <div class="card"><h3>✓ Verified members</h3><p>Members post as a stable pseudonym. Readers see a real, unbanned member wrote it — never who.</p></div>
+      <div class="card"><h3>⛔ On-chain bans</h3><p>A ban is written to the space's ENS record. Every reader's gate enforces it — public and verifiable.</p></div>
+    </div>
+  </section>
+
+  <section id="install">
+    <span class="eyebrow">Install · 2 minutes</span>
+    <h2>Get it running</h2>
+    <ol class="steps">
+      <li><div><b>Download</b> <a href="https://github.com/forever8896/lortnoc_tahc/releases/download/ew-v0.2.0/lortnoc-tahc-everywhere-ew-v0.2.0.zip">lortnoc-tahc-everywhere-ew-v0.2.0.zip</a> and check it:
+        <pre>shasum -a 256 lortnoc-tahc-everywhere-ew-v0.2.0.zip
+# fb7d5e2bead0f46b6c2d1a08abfef222d895da3d68f9f3809aea15bcd0ed3ade
+gh attestation verify lortnoc-tahc-everywhere-ew-v0.2.0.zip -R forever8896/lortnoc_tahc</pre></div></li>
+      <li><div><b>Unzip it</b> somewhere it can stay, open <code>chrome://extensions</code> and switch on <b>Developer mode</b>.</div></li>
+      <li><div><b>Load unpacked</b> → pick the unzipped folder. Pin the extension.</div></li>
+      <li><div><b>Add your keys</b>: the extension button → ⚙ → <b>Keys</b> — a passphrase you were given, World ID (verified human, or your passport's nationality), a wallet.</div></li>
+      <li><div><b>Write</b>: click any text box, press <b>Ctrl+Shift+L</b>. <b>Read</b>: extension button → <b>Find hidden posts</b> — or switch on <b>Always on</b> for a site and it checks every page for you.</div></li>
+    </ol>
+  </section>
+
+  <section>
+    <span class="eyebrow">Under the hood · verify, don't trust</span>
+    <h2>How the integrations work</h2>
+    <div class="deep">
+      <a class="card" href="/everywhere/world"><h3>World ID · IDKit</h3><p>World's own widget, connect once, a gate that checks every proof twice — World's API and the verifier contract on World Chain — and passport nationality through Identity Check.</p><span class="go">Walkthrough, code &amp; tests →</span></a>
+      <a class="card" href="/everywhere/ens"><h3>ENS v2</h3><p>Every space is a real ENS v2 name with its own resolver. Owner, NFT collection and bans live in its records; the gate reads them the way ENS does. Check it with curl.</p><span class="go">Walkthrough, curl &amp; scripts →</span></a>
+    </div>
+  </section>
+
+  <section>
+    <span class="eyebrow">Honest limits</span>
+    <h2>What it doesn't do</h2>
+    <ul class="limits">
+      <li><b>The gate operator</b> holds the key pieces for time, World ID and NFT rules. Add a passphrase to a rule and the gate alone can't read the post.</li>
+      <li><b>The gate learns which of its posts your page showed</b> when your extension asks what you may open.</li>
+      <li><b>Cover text can look machine-written</b> to a trained detector. This hides who a post is for and that it's ours from casual and keyword censorship — not from a determined analyst.</li>
+      <li><b>A guessable passphrase can be guessed.</b> The generated five words cannot.</li>
+      <li><b>ENS v2 lives on Sepolia</b> until it reaches mainnet; space payments are on Ethereum mainnet.</li>
+    </ul>
+  </section>
+
+  <footer>lortnoc tahc · ETHGlobal Tokyo 2026 · <a href="https://github.com/forever8896/lortnoc_tahc">source</a> · <a href="/">lortnoctahc.com</a></footer>
+</div>
+</body>
+</html>
