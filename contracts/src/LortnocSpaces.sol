@@ -19,6 +19,9 @@ contract LortnocSpaces {
     address public treasury;
     uint256 public price;
     uint256 public spaceCount;
+    /// @notice Early-bird: the first `earlyCount` spaces cost `earlyPrice` (e.g. 10% of `price`).
+    uint256 public earlyPrice;
+    uint256 public earlyCount;
 
     /// @dev keccak256(label) → taken. First purchase wins; a label is never sold twice.
     mapping(bytes32 labelHash => bool) public taken;
@@ -27,6 +30,7 @@ contract LortnocSpaces {
         uint256 indexed id, string label, address indexed spaceOwner, bytes32 rulesHash, address indexed payer, uint256 price
     );
     event PriceChanged(uint256 price);
+    event EarlyBirdChanged(uint256 earlyPrice, uint256 earlyCount);
     event TreasuryChanged(address treasury);
     event OwnershipTransferred(address owner);
 
@@ -43,9 +47,11 @@ contract LortnocSpaces {
     }
 
     /// @param owner_ controls price and treasury — pass a COLD wallet, not the deploy key.
-    constructor(uint256 price_, address treasury_, address owner_) {
+    constructor(uint256 price_, uint256 earlyPrice_, uint256 earlyCount_, address treasury_, address owner_) {
         if (treasury_ == address(0) || owner_ == address(0)) revert ZeroAddress();
         price = price_;
+        earlyPrice = earlyPrice_;
+        earlyCount = earlyCount_;
         treasury = treasury_;
         owner = owner_;
     }
@@ -60,7 +66,7 @@ contract LortnocSpaces {
         if (!validLabel(label)) revert InvalidLabel();
         bytes32 h = keccak256(bytes(label));
         if (taken[h]) revert LabelTaken(label);
-        uint256 p = price;
+        uint256 p = currentPrice();
         if (msg.value < p) revert Underpaid(msg.value, p);
 
         taken[h] = true;
@@ -73,6 +79,16 @@ contract LortnocSpaces {
             (bool refunded,) = msg.sender.call{value: msg.value - p}("");
             if (!refunded) revert TransferFailed();
         }
+    }
+
+    /// @notice What the NEXT space costs: the early-bird price while fewer than `earlyCount` are sold.
+    function currentPrice() public view returns (uint256) {
+        return spaceCount < earlyCount ? earlyPrice : price;
+    }
+
+    /// @notice How many early-bird spaces are left.
+    function earlyLeft() external view returns (uint256) {
+        return spaceCount < earlyCount ? earlyCount - spaceCount : 0;
     }
 
     function available(string calldata label) external view returns (bool) {
@@ -94,6 +110,12 @@ contract LortnocSpaces {
     function setPrice(uint256 price_) external onlyOwner {
         price = price_;
         emit PriceChanged(price_);
+    }
+
+    function setEarlyBird(uint256 earlyPrice_, uint256 earlyCount_) external onlyOwner {
+        earlyPrice = earlyPrice_;
+        earlyCount = earlyCount_;
+        emit EarlyBirdChanged(earlyPrice_, earlyCount_);
     }
 
     function setTreasury(address treasury_) external onlyOwner {

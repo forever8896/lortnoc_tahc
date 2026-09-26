@@ -2,14 +2,25 @@
 // the right-click menu (reveal). Both inject the content script into ONE tab on demand; activeTab
 // is granted by the user gesture itself, so the extension holds no standing access to any site.
 import contentScript from '../content/index.ts?script'
-import { CODER, DEFAULT_CODEC_URL, DEFAULT_GATE_URL, LOCAL, GATE_PATHS } from '../shared/messages'
+import { CODER, DEFAULT_CODEC_URL, DEFAULT_GATE_URL, LOCAL, GATE_PATHS, RELAYER_URL } from '../shared/messages'
 import type { SwRequest, SwResponse } from '../shared/messages'
 import { looksLikeCover, canonicalCover } from '../../../shared/webframe.mjs'
 import { fromB64 } from '../../../shared/keys.mjs'
-import { buySpace, buyState, spaceAvailable, checkCollection, spaceInfo } from './buy'
+import { buySpace, buyState, spaceAvailable, checkCollection, spaceInfo, spacePrice } from './buy'
 import { openCandidates, sealedGet, keyringView, addPassphrase, removePassphrase, forgetConnected, worldConnect, walletConnect, onWidgetMessage } from './sealed'
 
 const TIMEOUT = 30_000 // gpt2 takes seconds; fail closed rather than hang
+
+/** Demo passes (relayer POST /demo/mint): testnet NFTs so anyone can try a holders-only space. */
+async function demoMint(to: string[]): Promise<SwResponse> {
+  try {
+    const r = await fetch(`${RELAYER_URL}/demo/mint`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ to }), signal: AbortSignal.timeout(90_000) })
+    const j = await r.json()
+    return r.ok ? { ok: true, data: j } : { ok: false, error: j.error ?? `relayer ${r.status}` }
+  } catch (e) {
+    return { ok: false, error: `relayer unreachable: ${String(e)}` }
+  }
+}
 
 async function codecBase(): Promise<string> {
   const got = await chrome.storage.local.get(LOCAL.codecUrl)
@@ -123,6 +134,8 @@ chrome.runtime.onMessage.addListener((msg: SwRequest, sender, sendResponse) => {
     buySpace(msg).then(sendResponse)
     return true
   }
+  if (msg.type === 'SPACE_PRICE') return void spacePrice(msg.chainId).then(sendResponse), true
+  if (msg.type === 'DEMO_MINT') return void demoMint(msg.to).then(sendResponse), true
   if (msg.type === 'SPACE_INFO') return void spaceInfo(msg.label).then(sendResponse), true
   if (msg.type === 'SPACE_AVAILABLE') return void spaceAvailable(msg.label).then(sendResponse), true
   if (msg.type === 'COLLECTION_CHECK') return void checkCollection(msg.token).then((bad) => sendResponse({ ok: !bad, error: bad ?? undefined })), true

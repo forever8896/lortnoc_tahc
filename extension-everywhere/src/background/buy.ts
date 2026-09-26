@@ -7,6 +7,7 @@
 // Progress is kept in storage so the popup shows it when reopened.
 import { encodeFunctionData, keccak256, toHex, numberToHex, createPublicClient, http } from 'viem'
 import { sepolia, mainnet, base, baseSepolia } from 'viem/chains'
+import { formatEther } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import deployments from '../../../app/src/lib/live/spaces-deployment.json'
 import { RELAYER_URL } from '../shared/messages'
@@ -71,6 +72,28 @@ export async function spaceInfo(label: string): Promise<SwResponse> {
   }
 }
 
+const PRICE_ABI = [
+  { type: 'function', name: 'currentPrice', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'price', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'earlyLeft', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+] as const
+const PAY_RPC = { 1: 'https://ethereum-rpc.publicnode.com', 11155111: 'https://ethereum-sepolia-rpc.publicnode.com' } as const
+
+/** What the next space costs right now on that chain — early bird included (LortnocSpaces.currentPrice). */
+export async function spacePrice(chainId: 1 | 11155111): Promise<SwResponse> {
+  const dep = (deployments as Record<string, { address: `0x${string}`; price: string }>)[chainId === 1 ? 'mainnet' : 'sepolia']
+  if (!dep) return { ok: false, error: 'no LortnocSpaces on that chain' }
+  const c = createPublicClient({ chain: chainId === 1 ? mainnet : sepolia, transport: http(PAY_RPC[chainId]) })
+  const read = (functionName: 'currentPrice' | 'price' | 'earlyLeft') => c.readContract({ address: dep.address, abi: PRICE_ABI, functionName })
+  try {
+    const [full, current, left] = await Promise.all([read('price'), read('currentPrice').catch(() => null), read('earlyLeft').catch(() => 0n)])
+    const now = current ?? full // a contract without an early bird (v1) has no currentPrice
+    return { ok: true, data: { current: now.toString(), full: full.toString(), currentEth: formatEther(now), fullEth: formatEther(full), earlyLeft: Number(left) } }
+  } catch {
+    return { ok: false, error: 'could not read the price' }
+  }
+}
+
 export async function buySpace(req: { label: string; token: string; chainId: 1 | 11155111; tabId: number }): Promise<SwResponse> {
   const { label, token, chainId, tabId } = req
   if (!/^[a-z0-9-]{3,32}$/.test(label) || label.startsWith('-') || label.endsWith('-')) return { ok: false, error: 'bad space name' }
@@ -95,11 +118,15 @@ export async function buySpace(req: { label: string; token: string; chainId: 1 |
   await saveEnsKey(label, { priv, address: owner, role: 'owner' })
   await setState({ label, step: 'waiting for your wallet', owner })
 
+  // the price is read LIVE (early bird: the first spaces cost less) — never the recorded one
+  const pr = await spacePrice(chainId)
+  const value = pr.ok ? BigInt((pr.data as { current: string }).current) : BigInt(dep.price)
+
   // 2. the buyer's wallet pays, on the current page
   const data = encodeFunctionData({ abi: BUY_ABI, functionName: 'buySpace', args: [label, owner, rulesHash(token)] })
   const [r] = await chrome.scripting.executeScript({
     target: { tabId }, world: 'MAIN',
-    args: [numberToHex(chainId), dep.address, data, numberToHex(BigInt(dep.price))],
+    args: [numberToHex(chainId), dep.address, data, numberToHex(value)],
     func: async (chainHex: string, to: string, data: string, value: string) => {
       const eth = (window as unknown as { ethereum?: { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum
       if (!eth) return { error: 'No wallet found on this page (MetaMask, Rabby, …).' }

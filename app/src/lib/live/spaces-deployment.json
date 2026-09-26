@@ -1,14 +1,30 @@
 {
   "sepolia": {
-    "address": "0xe0ef82657f1ca25c72b69e459a52635281b37592",
+    "address": "0x4e9c746fd4b895f66e9d0562109125abeaccb79c",
     "chainId": 11155111,
     "price": "5000000000000000",
+    "earlyPrice": "500000000000000",
+    "earlyCount": 10,
+    "previous": [
+      {
+        "address": "0xe0ef82657f1ca25c72b69e459a52635281b37592",
+        "chainId": 11155111,
+        "price": "5000000000000000",
+        "treasuryName": "lortnoctahc.eth",
+        "treasury": "0x08d1384214f15866F849BE148b8E8aB4a814D19E",
+        "owner": "0x08d1384214f15866F849BE148b8E8aB4a814D19E",
+        "deployTx": "0x9d2ba4773e995632ac56ddbc2000c3e3d74d112b50299de7b8074e9329dd4643",
+        "deployBlock": 11780206,
+        "deployedAt": "2026-09-25T15:46:27.490Z",
+        "retiredAt": "2026-09-26T13:06:42.330Z"
+      }
+    ],
     "treasuryName": "lortnoctahc.eth",
     "treasury": "0x08d1384214f15866F849BE148b8E8aB4a814D19E",
     "owner": "0x08d1384214f15866F849BE148b8E8aB4a814D19E",
-    "deployTx": "0x9d2ba4773e995632ac56ddbc2000c3e3d74d112b50299de7b8074e9329dd4643",
-    "deployBlock": 11780206,
-    "deployedAt": "2026-09-25T15:46:27.490Z"
+    "deployTx": "0xaa08e6b8d0a719214665d012941ca83866a8519006170ef25c868088355ea6d2",
+    "deployBlock": 11786403,
+    "deployedAt": "2026-09-26T13:06:42.330Z"
   },
   "mainnet": {
     "address": "0x87997f3ca40693fb1e0c3c6f39f0f3fe287b8c67",

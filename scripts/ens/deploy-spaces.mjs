@@ -19,6 +19,9 @@ import { ROOT, loadEnv } from './lib/ens.mjs'
 const NET = process.argv[2]
 if (!['sepolia', 'mainnet'].includes(NET)) throw new Error('usage: deploy-spaces.mjs sepolia|mainnet')
 const PRICE = parseEther('0.005')
+// early bird: the first EARLY_COUNT spaces at EARLY_PRICE (10% of PRICE by default)
+const EARLY_PRICE = parseEther(process.env.EARLY_PRICE ?? '0.0005')
+const EARLY_COUNT = BigInt(process.env.EARLY_COUNT ?? '10')
 const TREASURY_NAME = 'lortnoctahc.eth'
 const OUT = join(ROOT, 'app/src/lib/live/spaces-deployment.json')
 const RPC = { sepolia: 'https://ethereum-sepolia-rpc.publicnode.com', mainnet: 'https://ethereum-rpc.publicnode.com' }
@@ -55,7 +58,7 @@ const maxPriorityFeePerGas = process.env.TIP_GWEI ? gwei(process.env.TIP_GWEI) :
 const maxFeePerGas = process.env.MAX_FEE_GWEI ? gwei(process.env.MAX_FEE_GWEI) : est.maxFeePerGas + maxPriorityFeePerGas
 const nonce = process.env.DEPLOY_NONCE ? Number(process.env.DEPLOY_NONCE) : undefined
 console.log(`fees: tip ${formatEther(maxPriorityFeePerGas * 10n ** 9n)} gwei, max ${formatEther(maxFeePerGas * 10n ** 9n)} gwei${nonce !== undefined ? `, nonce ${nonce} (replacement)` : ''}`)
-const hash = await wc.deployContract({ abi, bytecode: art.bytecode.object, args: [PRICE, treasury, treasury], maxPriorityFeePerGas, maxFeePerGas, nonce })
+const hash = await wc.deployContract({ abi, bytecode: art.bytecode.object, args: [PRICE, EARLY_PRICE, EARLY_COUNT, treasury, treasury], maxPriorityFeePerGas, maxFeePerGas, nonce })
 console.log(`sent ${hash} — waiting`)
 const rcpt = await pc.waitForTransactionReceipt({ hash, timeout: 900_000 })
 if (rcpt.status !== 'success') fail(`deploy reverted (${hash})`)
@@ -65,6 +68,8 @@ console.log(`deployed ${address} (tx ${hash}, gas ${rcpt.gasUsed})`)
 const read = (functionName, args = []) => pc.readContract({ address, abi, functionName, args })
 if ((await pc.getCode({ address }))?.length > 2) ok('code present')
 ;(await read('price')) === PRICE ? ok('price 0.005 ETH') : fail('price mismatch')
+;(await read('earlyPrice')) === EARLY_PRICE && (await read('earlyCount')) === EARLY_COUNT ? ok(`early bird: first ${EARLY_COUNT} at ${formatEther(EARLY_PRICE)} ETH`) : fail('early bird mismatch')
+;(await read('currentPrice')) === EARLY_PRICE ? ok('currentPrice = early-bird price') : fail('currentPrice mismatch')
 getAddress(await read('treasury')) === getAddress(treasury) ? ok('treasury') : fail('treasury mismatch')
 getAddress(await read('owner')) === getAddress(treasury) ? ok('owner = cold wallet') : fail('owner mismatch')
 
@@ -80,12 +85,12 @@ if (NET === 'sepolia') {
   const br = await pc.waitForTransactionReceipt({ hash: bh, timeout: 300_000 })
   if (br.status !== 'success') fail('purchase reverted')
   const ev = br.logs.map((l) => { try { return decodeEventLog({ abi, ...l }) } catch { return null } }).find((e) => e?.eventName === 'SpaceBought')
-  ev?.args.label === label && ev.args.rulesHash === rules && ev.args.price === PRICE ? ok(`SpaceBought ${label}`) : fail('event mismatch')
-  ;(await pc.getBalance({ address: treasury })) - before === PRICE ? ok('treasury +0.005 ETH exactly (excess refunded)') : fail('treasury delta wrong')
+  ev?.args.label === label && ev.args.rulesHash === rules && ev.args.price === EARLY_PRICE ? ok(`SpaceBought ${label} at the early-bird price`) : fail('event mismatch')
+  ;(await pc.getBalance({ address: treasury })) - before === EARLY_PRICE ? ok(`treasury +${formatEther(EARLY_PRICE)} ETH exactly (excess refunded)`) : fail('treasury delta wrong')
   ;(await pc.getBalance({ address })) === 0n ? ok('contract holds nothing') : fail('contract kept funds')
   for (const [why, args, value] of [
     ['same label twice', [label, account.address, rules], PRICE],
-    ['underpaid', [`${label}-b`, account.address, rules], PRICE - 1n],
+    ['underpaid', [`${label}-b`, account.address, rules], EARLY_PRICE - 1n],
     ['invalid label', ['Bad Label', account.address, rules], PRICE],
   ]) {
     try {
@@ -98,6 +103,7 @@ if (NET === 'sepolia') {
 }
 
 const all = existsSync(OUT) ? JSON.parse(readFileSync(OUT, 'utf8')) : {}
-all[NET] = { address, chainId: chain.id, price: PRICE.toString(), treasuryName: TREASURY_NAME, treasury, owner: treasury, deployTx: hash, deployBlock: Number(rcpt.blockNumber), deployedAt: new Date().toISOString() }
+const prev = all[NET] ? [...(all[NET].previous ?? []), { ...all[NET], previous: undefined, retiredAt: new Date().toISOString() }] : undefined
+all[NET] = { address, chainId: chain.id, price: PRICE.toString(), earlyPrice: EARLY_PRICE.toString(), earlyCount: Number(EARLY_COUNT), ...(prev ? { previous: prev } : {}), treasuryName: TREASURY_NAME, treasury, owner: treasury, deployTx: hash, deployBlock: Number(rcpt.blockNumber), deployedAt: new Date().toISOString() }
 writeFileSync(OUT, JSON.stringify(all, null, 2) + '\n')
 console.log(`recorded → ${OUT}`)

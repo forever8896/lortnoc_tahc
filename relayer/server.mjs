@@ -31,6 +31,7 @@ import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519'
 import { decodeSuiPrivateKey } from '@mysten/sui/cryptography'
 import { verifyMessage } from 'viem'
 import { ticketMessage, claimScope } from '../shared/ticket.mjs'
+import { createDemoMinter } from './demo.mjs'
 import { createSpaceHandler, MAINNET, SEPOLIA } from './space.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -474,6 +475,23 @@ const handleSpace = SPACE_BRANCH
       log,
     })
   : null
+
+// ---- demo passes (relayer/demo.mjs): testnet NFTs so anyone can try a holders-only space -------
+const DEMO_PASS = ENS_D.lortnoc.spaces?.demoPass
+const demoMint = DEMO_PASS
+  ? createDemoMinter({
+      log,
+      // one after another; each send returns once the node has accepted it, so the next picks the next nonce
+      mintTo: (to) => ethWallet.writeContract({
+        address: DEMO_PASS, abi: parseAbi(['function mintTo(address) returns (uint256)']), functionName: 'mintTo', args: [to],
+      }),
+    })
+  : null
+app.post('/demo/mint', async (req, res) => {
+  if (!demoMint) return res.status(503).json({ error: 'no demo pass deployed' })
+  const r = await demoMint(req.body, req.ip ?? '?')
+  res.status(r.status).json({ ...r.body, collection: `eip155:11155111/erc721:${DEMO_PASS.toLowerCase()}` })
+})
 
 app.post('/space', async (req, res) => {
   if (!handleSpace) return res.status(503).json({ error: 'spaces are not deployed (ens-deployment.json lortnoc.spaces)' })

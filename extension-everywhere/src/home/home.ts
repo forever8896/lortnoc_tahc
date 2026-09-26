@@ -150,13 +150,28 @@ const DEMO_PASS = '0xc85460a6690f8b06fdafd1b7730bdfa6261243f0'
 const CHAIN_NAME: Record<string, string> = { '1': 'Ethereum', '8453': 'Base', '11155111': 'Sepolia', '84532': 'Base Sepolia' }
 const ok = { name: false, col: false }
 let payOn: 1 | 11155111 = 11155111
+let priceEth = '0.005'
+/** The live price on the chosen chain — early bird included (LortnocSpaces.currentPrice). */
+async function renderPrice() {
+  const r = await sw<{ currentEth: string; fullEth: string; earlyLeft: number }>({ type: 'SPACE_PRICE', chainId: payOn })
+  if (!r.ok) return
+  const { currentEth, fullEth, earlyLeft } = r.data
+  priceEth = currentEth
+  const early = earlyLeft > 0 && currentEth !== fullEth
+  $('priceNow').textContent = `${currentEth} ETH`
+  $('priceWas').hidden = !early
+  $('priceWas').textContent = `${fullEth} ETH`
+  $('early').hidden = !early
+  $('early').innerHTML = early ? `Early bird · 90% off <i>· ${earlyLeft} of 10 left${payOn === 11155111 ? ' on Sepolia' : ''}</i>` : ''
+  mark('s1', ok.name)
+}
 const label = () => $<HTMLInputElement>('buyName').value.trim().toLowerCase()
 const token = () => `eip155:${$<HTMLSelectElement>('nftChain').value}/erc721:${$<HTMLInputElement>('nftAddress').value.trim().toLowerCase()}`
 function mark(id: 's1' | 's2', done: boolean) {
   $(id).classList.toggle('done', done)
   const l = label()
   $<HTMLButtonElement>('buy').disabled = !(ok.name && ok.col)
-  $('buy').textContent = ok.name ? `Create ${l}.space · 0.005 ETH` : 'Create space · 0.005 ETH'
+  $('buy').textContent = ok.name ? `Create ${l}.space · ${priceEth} ETH` : `Create space · ${priceEth} ETH`
 }
 const check = (id: string, text: string, kind: 'ok' | 'bad' | '' = '') => Object.assign($(id), { textContent: text, className: `check ${kind}` })
 
@@ -203,7 +218,34 @@ $('useDemoPass').onclick = (e) => {
 document.querySelectorAll<HTMLButtonElement>('#net button').forEach((b) => (b.onclick = () => {
   document.querySelectorAll('#net button').forEach((x) => x.classList.toggle('on', x === b))
   payOn = Number(b.dataset.c) as 1 | 11155111
+  void renderPrice()
 }))
+void renderPrice()
+
+// ---------------------------------------------------------------------------
+// demo passes — free test NFTs (relayer POST /demo/mint), so anyone can try a holders-only space
+// ---------------------------------------------------------------------------
+$('demoMine').onclick = async (e) => {
+  e.preventDefault()
+  const r = await sw<View>({ type: 'KEYRING_VIEW' })
+  const w = r.ok ? r.data.claims?.wallets ?? [] : []
+  if (!w.length) return void say('demoMsg', 'Connect a wallet under Keys first.', 'err')
+  $<HTMLTextAreaElement>('demoTo').value = w.join('\n')
+}
+$('demoMint').onclick = async () => {
+  const to = $<HTMLTextAreaElement>('demoTo').value.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean)
+  if (!to.length) return void say('demoMsg', 'Add at least one wallet address.', 'err')
+  if (to.length > 5) return void say('demoMsg', 'Up to 5 at a time.', 'err')
+  say('demoMsg', 'Minting…')
+  $<HTMLButtonElement>('demoMint').disabled = true
+  const r = await sw<{ minted: { to: string; tx?: string; error?: string }[] }>({ type: 'DEMO_MINT', to })
+  $<HTMLButtonElement>('demoMint').disabled = false
+  if (!r.ok) return void say('demoMsg', r.error, 'err')
+  $('demoOut').innerHTML = r.data.minted.map((m) => `<div class="item"><span>${m.tx ? '✓' : '✗'} ${short(m.to)}</span>${m.tx
+    ? `<a class="quiet" href="https://sepolia.etherscan.io/tx/${m.tx}" target="_blank" rel="noopener">view</a>` : `<span class="quiet">${esc(m.error ?? '')}</span>`}</div>`).join('')
+  const n = r.data.minted.filter((m) => m.tx).length
+  say('demoMsg', n ? `${n} ${n === 1 ? 'pass' : 'passes'} on the way — they arrive in about 15 seconds.` : 'Nothing was minted.', n ? 'ok' : 'err')
+}
 
 /** Payment → ENS name → Ready, from the service worker's purchase state. */
 async function renderBuy() {

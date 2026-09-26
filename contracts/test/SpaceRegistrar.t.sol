@@ -171,7 +171,7 @@ contract SpaceRegistrarTest is Test {
     /// The purchase contract and the registrar must agree on every label, or someone can pay for
     /// a space we then refuse to create.
     function testFuzz_labelRuleMatchesLortnocSpaces(string calldata label) public {
-        LortnocSpaces spaces = new LortnocSpaces(0, address(1), address(this));
+        LortnocSpaces spaces = new LortnocSpaces(0, 0, 0, address(1), address(this));
         assertEq(registrar.validLabel(label), spaces.validLabel(label));
     }
 

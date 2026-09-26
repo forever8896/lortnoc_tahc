@@ -24,7 +24,7 @@ contract LortnocSpacesTest is Test {
     );
 
     function setUp() public {
-        spaces = new LortnocSpaces(PRICE, treasury, owner);
+        spaces = new LortnocSpaces(PRICE, 0, 0, treasury, owner); // early bird off: the base rules
         vm.deal(buyer, 1 ether);
     }
 
@@ -118,5 +118,56 @@ contract LortnocSpacesTest is Test {
         spaces.buySpace{value: sent}("fuzz-space", creator, RULES);
         assertEq(address(spaces).balance, 0);
         assertEq(treasury.balance, PRICE);
+    }
+
+    // ---- early bird: the first N spaces at a lower price ------------------------------------------
+    uint256 constant EARLY = 0.0005 ether;
+
+    function _early() internal returns (LortnocSpaces e) {
+        e = new LortnocSpaces(PRICE, EARLY, 10, treasury, owner);
+    }
+
+    function _label(uint256 i) internal pure returns (string memory) {
+        return string(abi.encodePacked("space-", vm.toString(i)));
+    }
+
+    function test_earlyBird_firstTen_atTenPercent_thenFullPrice() public {
+        LortnocSpaces e = _early();
+        for (uint256 i = 1; i <= 10; i++) {
+            assertEq(e.currentPrice(), EARLY);
+            assertEq(e.earlyLeft(), 11 - i);
+            vm.expectEmit(true, true, true, true);
+            emit SpaceBought(i, _label(i), creator, RULES, buyer, EARLY);
+            vm.prank(buyer);
+            e.buySpace{value: EARLY}(_label(i), creator, RULES);
+        }
+        assertEq(treasury.balance, 10 * EARLY);
+        assertEq(e.currentPrice(), PRICE);
+        assertEq(e.earlyLeft(), 0);
+        vm.prank(buyer);
+        vm.expectRevert(abi.encodeWithSelector(LortnocSpaces.Underpaid.selector, EARLY, PRICE));
+        e.buySpace{value: EARLY}("eleventh", creator, RULES);
+        vm.prank(buyer);
+        e.buySpace{value: PRICE}("eleventh", creator, RULES);
+        assertEq(treasury.balance, 10 * EARLY + PRICE);
+        assertEq(address(e).balance, 0);
+    }
+
+    function test_earlyBird_payingFullPrice_getsTheDifferenceBack() public {
+        LortnocSpaces e = _early();
+        vm.prank(buyer);
+        e.buySpace{value: PRICE}("lentil-club", creator, RULES);
+        assertEq(treasury.balance, EARLY);
+        assertEq(buyer.balance, 1 ether - EARLY);
+    }
+
+    function test_earlyBird_onlyOwner_canChangeIt() public {
+        LortnocSpaces e = _early();
+        vm.expectRevert(LortnocSpaces.NotOwner.selector);
+        e.setEarlyBird(0, 0);
+        vm.prank(owner);
+        e.setEarlyBird(0.001 ether, 3);
+        assertEq(e.currentPrice(), 0.001 ether);
+        assertEq(e.earlyLeft(), 3);
     }
 }

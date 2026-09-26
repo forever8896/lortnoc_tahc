@@ -34,6 +34,8 @@ export type SwRequest =
   | { type: 'BUY_STATE' }
   | { type: 'SPACE_AVAILABLE'; label: string }
   | { type: 'SPACE_INFO'; label: string }
+  | { type: 'SPACE_PRICE'; chainId: 1 | 11155111 }
+  | { type: 'DEMO_MINT'; to: string[] }
   | { type: 'COLLECTION_CHECK'; token: string }
   | { type: 'SITE_STATE'; origin: string }
   | { type: 'SITE_SET'; origin: string; on: boolean }
