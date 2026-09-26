@@ -92,15 +92,29 @@ function toast(text: string | null) {
 }
 
 /** Deep scan: collect text blocks here; the service worker filters by shape and asks the codec. */
-async function scan(): Promise<number> {
-  const blocks = collectBlocks(document.body).filter((b) => !b.dataset.lortnocChip)
+async function scan(quiet = false): Promise<number> {
+  const blocks = collectBlocks(document.body).filter((b) => !b.dataset.lortnocChip && !b.dataset.lortnocSeen)
   if (!blocks.length) return 0
-  toast('lortnoc tahc · looking for hidden posts…')
+  if (!quiet) toast('lortnoc tahc · looking for hidden posts…')
   const found = await confirmPosts(blocks).catch(() => [])
+  // remember what was checked, so the automatic re-scan only looks at NEW text
+  for (const b of blocks) b.dataset.lortnocSeen = '1'
   found.forEach(addChip)
-  toast(found.length ? `lortnoc tahc · found ${found.length}` : null)
-  setTimeout(() => toast(null), 2500)
+  if (found.length || !quiet) {
+    toast(found.length ? `lortnoc tahc · found ${found.length} hidden` : null)
+    setTimeout(() => toast(null), 2500)
+  }
   return found.length
+}
+
+/** "Always on" sites: find hidden posts on load, and again when new posts appear (feeds, replies). */
+function autoScan() {
+  void scan(true)
+  let t: ReturnType<typeof setTimeout> | undefined
+  new MutationObserver(() => {
+    clearTimeout(t)
+    t = setTimeout(() => void scan(true), 1500)
+  }).observe(document.body, { childList: true, subtree: true })
 }
 
 function run(a: Action) {
@@ -111,7 +125,8 @@ function run(a: Action) {
     const r = getSelection()?.rangeCount ? getSelection()!.getRangeAt(0).getBoundingClientRect() : undefined
     openFrame('reveal', `#t=${encodeURIComponent(a.text)}`, r)
   } else if (a.action === 'scan') {
-    void scan().then((n) => n || openFrame('reveal', '#none'))
+    // blocks with a chip were already found (e.g. by the automatic scan) — only "none" if there are none
+    void scan().then((n) => n || document.querySelector('[data-lortnoc-chip]:not(button)') || openFrame('reveal', '#none'))
   }
 }
 
@@ -169,6 +184,7 @@ if (!W.__lortnocEverywhere) {
       AUTO = !!r?.data?.on
       const t = editableFrom(document.activeElement)
       if (AUTO && t && !frame) showPill(t)
+      if (AUTO) autoScan()
     })
     .catch(() => {})
   document.addEventListener('focusout', () => setTimeout(() => {

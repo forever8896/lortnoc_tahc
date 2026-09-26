@@ -335,6 +335,9 @@ describe('"Always on for this site": the focus pill', () => {
     await sheet.click('#go')
     await sheet.waitForSelector('.status.ok', { timeout: 60_000 })
     assert.ok((await page.inputValue('#c')).length > 50)
+    // Posting reloads the page; on an Always-on site the hidden post is found with NO click
+    await page.click('button:has-text("Post")')
+    await page.locator('button:has-text("Reveal")').first().waitFor({ state: 'visible', timeout: 30_000 })
     // Same page on a hostname that was NOT switched on: no script, no pill.
     const other = await ctx.newPage()
     await other.goto(siteUrl.replace('127.0.0.1', 'localhost'))
