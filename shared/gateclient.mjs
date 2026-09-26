@@ -44,12 +44,12 @@ export function gateReleaser({ post, onDeny, proofFor, extraFor, onRelease }) {
       try {
         proof = await proofFor({ check, ...req, post })
       } catch (e) {
-        onDeny?.({ check, deny: e?.message ?? 'proof cancelled' })
+        onDeny?.({ check, deny: e instanceof Error ? e.message : `proof failed: ${String(e)}` })
         return null
       }
       if (proof === null) return null // the check needs nothing from this reader, or they declined
     }
-    const r = await post('/release', { ...req, proof, ...(extraFor ? extraFor(check, params ?? {}) : {}) })
+    const r = await post("/release", { ...req, proof, ...(extraFor ? await extraFor(check, params ?? {}) : {}) })
     if (r?.box) {
       onRelease?.(r)
       return openBox(me.priv, me.pub, r.box, CTX.release)

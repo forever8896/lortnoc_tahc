@@ -1,5 +1,6 @@
 import { sw, LOCAL, DEFAULT_CODEC_URL } from '../shared/messages'
 import type { HealthData } from '../shared/messages'
+import { createSpace, ownedSpaces, memberships } from '../shared/spaces'
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
 
@@ -29,3 +30,25 @@ chrome.commands.getAll().then((cs) => {
   if (k) $('key').textContent = k
 })
 void health()
+
+async function renderSpaces() {
+  const [own, mem] = await Promise.all([ownedSpaces(), memberships()])
+  const rows = [
+    ...Object.keys(own).map((s) => `<div>👑 <b>${s}</b> <span class="muted">— you own it</span></div>`),
+    ...Object.entries(mem).filter(([s, m]) => m.memberId && !own[s]).map(([s, m]) => `<div>✓ <b>${s}</b> <span class="muted">— ${m.memberId}</span></div>`),
+  ]
+  $('spaceList').innerHTML = rows.join('') || '<span class="muted">none yet</span>'
+}
+$('createSpace').onclick = async () => {
+  const name = $<HTMLInputElement>('spaceName').value.trim().toLowerCase()
+  if (!/^[a-z0-9-]{3,32}$/.test(name)) return void ($('status').textContent = 'Space names are 3–32 of a-z, 0-9 and -.')
+  try {
+    await createSpace(name)
+    $<HTMLInputElement>('spaceName').value = ''
+    $('status').textContent = `Created ${name}. Lock posts to "Members of a space" to use it.`
+    void renderSpaces()
+  } catch (e) {
+    $('status').textContent = `Couldn’t create it: ${e instanceof Error ? e.message : e}`
+  }
+}
+void renderSpaces()

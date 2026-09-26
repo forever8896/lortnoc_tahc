@@ -26,7 +26,11 @@ export default defineManifest({
     },
   },
   permissions: ['storage', 'activeTab', 'scripting', 'contextMenus'],
-  host_permissions: ['http://localhost/*', 'http://127.0.0.1/*', 'https://lortnoc-codec.fly.dev/*'],
+  // World ID: IDKit talks to World's bridge. (The staging simulator is reached via the gate.)
+  host_permissions: ['http://localhost/*', 'http://127.0.0.1/*', 'https://lortnoc-codec.fly.dev/*',
+    'https://bridge.worldcoin.org/*'],
+  // IDKit ships WebAssembly; MV3 extension pages need 'wasm-unsafe-eval' to instantiate it.
+  content_security_policy: { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'" },
   web_accessible_resources: [
     { resources: ['src/sheet/index.html', 'src/reveal/index.html', 'assets/*', 'icons/*', 'fonts/*'], matches: ['<all_urls>'] },
   ],

@@ -81,6 +81,8 @@ createServer(async (req, res) => {
     if (req.url === '/space') return send(res, 200, gate.spaces.register(body), origin)
     if (req.url === '/member/sign') return send(res, 200, gate.spaces.attest(body), origin)
     if (req.url === '/ban') return send(res, 200, gate.spaces.ban(body), origin)
+    // staging demo helper: the gate plays courier to World's simulator (see world.mjs simulate)
+    if (req.url === '/dev/simulate') return send(res, 200, world ? await world.simulate(body.connectUrl) : { deny: 'no World ID' }, origin)
     if (req.url === '/release') return send(res, 200, await gate.release(body), origin)
     return send(res, 404, { error: 'not found' }, origin)
   } catch (e) {

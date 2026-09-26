@@ -21,10 +21,26 @@
           <button class="btn btn-small" id="try">Open</button>
         </div>
       </div>
+      <div id="world" hidden>
+        <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">
+          <div>
+            <div style="font-weight:500">Prove you're a real human</div>
+            <div class="small muted" id="worldHow">Scan with World App. Nothing about who you are is shared — only that you're a unique human.</div>
+          </div>
+          <canvas id="qr" width="132" height="132" style="border-radius:8px;background:#fff"></canvas>
+        </div>
+        <div class="row" style="margin-top:8px;flex-wrap:wrap">
+          <button class="btn btn-small" id="sim" hidden>Use World ID simulator (staging demo)</button>
+          <button class="btn btn-ghost btn-small" id="cancelWorld">Cancel</button>
+        </div>
+      </div>
+      <button class="btn btn-small" id="verifyHuman" hidden style="margin-top:8px">Verify with World ID</button>
       <div class="small muted" id="identity" hidden>Named-people posts open with your lortnoc identity — coming with the identity update.</div>
     </div>
     <div id="out" hidden>
+      <div class="small" id="author" hidden style="margin-bottom:6px"></div>
       <div class="plain" id="plain"></div>
+      <button class="btn btn-ghost btn-small" id="ban" hidden style="margin-top:8px"></button>
       <div class="small muted" id="note" style="margin-top:8px"></div>
     </div>
   </div>

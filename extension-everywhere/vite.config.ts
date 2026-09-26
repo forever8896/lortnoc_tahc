@@ -12,9 +12,13 @@ export default defineConfig({
   server: { port: 5175, strictPort: true, fs: { allow: [repoRoot] } },
   // shared/*.mjs import @noble/* and @scure/* by bare name; resolve them from THIS workspace's
   // node_modules so the bundle carries one copy, not one per directory that imports them.
-  resolve: { dedupe: ['@noble/hashes', '@noble/ciphers', '@noble/curves', '@scure/bip39'] },
+  // NOT deduped: IDKit (World ID) depends on @noble/hashes v1 (subpath './sha3'), our shared/ code on
+  // v2 ('./sha3.js'). Forcing one copy broke the build; each package gets the major it was built for.
+  resolve: { dedupe: ['@noble/ciphers', '@noble/curves', '@scure/bip39'] },
   build: {
     target: 'esnext',
+    // OUT_DIR lets tests/agents build a private copy without touching the dist/ a human has loaded.
+    outDir: process.env.OUT_DIR ?? 'dist',
     rollupOptions: {
       // The sheet and the reveal card are extension pages loaded as iframes INTO other sites; they
       // are not reachable from the manifest, so they are listed as inputs explicitly.

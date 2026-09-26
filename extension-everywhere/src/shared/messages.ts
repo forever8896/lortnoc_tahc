@@ -25,18 +25,23 @@ export type SwRequest =
   | { type: 'ENCODE'; ciphertextB64: string }
   | { type: 'DECODE'; coverText: string }
   | { type: 'GATE_HEALTH' }
-  | { type: 'GATE'; path: '/deposit' | '/release'; body: unknown }
+  | { type: 'GATE'; path: GatePath; body: unknown }
+  | { type: 'WORLD_SIM'; connectUrl: string }
+
+/** Gate routes the extension may call (the service worker refuses anything else). */
+export const GATE_PATHS = ['/deposit', '/challenge', '/release', '/space', '/member/sign', '/ban', '/dev/simulate'] as const
+export type GatePath = (typeof GATE_PATHS)[number]
 
 export type SwResponse<T = unknown> = { ok: true; data: T } | { ok: false; error: string; status?: number }
 
 export type HealthData = { model: string; digest: string; ready: boolean; paused?: boolean; message?: string }
 export type EncodeData = { coverText: string }
 export type DecodeData = { ciphertext: string }
-export type GateHealth = { ok: boolean; pub: string; checks: string[] }
+export type GateHealth = { ok: boolean; pub: string; signPub: string; checks: string[]; world?: { env: string } | null }
 
 /** `post` for shared/gateclient.mjs, routed through the service worker (it has the host permission). */
 export async function gatePost(path: string, body: unknown): Promise<any> {
-  const r = await sw<unknown>({ type: 'GATE', path: path as '/deposit' | '/release', body })
+  const r = await sw<unknown>({ type: 'GATE', path: path as GatePath, body })
   return r.ok ? r.data : { error: r.error }
 }
 

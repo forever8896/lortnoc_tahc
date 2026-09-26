@@ -2,7 +2,7 @@
 // the right-click menu (reveal). Both inject the content script into ONE tab on demand; activeTab
 // is granted by the user gesture itself, so the extension holds no standing access to any site.
 import contentScript from '../content/index.ts?script'
-import { CODER, DEFAULT_CODEC_URL, DEFAULT_GATE_URL, LOCAL } from '../shared/messages'
+import { CODER, DEFAULT_CODEC_URL, DEFAULT_GATE_URL, LOCAL, GATE_PATHS } from '../shared/messages'
 import type { SwRequest, SwResponse } from '../shared/messages'
 
 const TIMEOUT = 30_000 // gpt2 takes seconds; fail closed rather than hang
@@ -27,8 +27,20 @@ async function post(url: string, body: unknown): Promise<Response> {
 }
 
 async function handle(msg: SwRequest): Promise<SwResponse> {
+  if (msg.type === 'WORLD_SIM') {
+    // STAGING DEMO ONLY. World's simulator rejects calls with an extension Origin, so the gate —
+    // which already talks to World — relays the request (gate/world.mjs simulate()).
+    try {
+      const r = await post(`${await gateBase()}/dev/simulate`, { connectUrl: msg.connectUrl })
+      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; deny?: string }
+      return j.ok ? { ok: true, data: {} } : { ok: false, error: j.deny ?? `gate ${r.status}` }
+    } catch (e) {
+      return { ok: false, error: `gate unreachable: ${String(e)}` }
+    }
+  }
   if (msg.type === 'GATE_HEALTH' || msg.type === 'GATE') {
     try {
+      if (msg.type === 'GATE' && !GATE_PATHS.includes(msg.path)) return { ok: false, error: 'unknown gate route' }
       const g = await gateBase()
       const r = msg.type === 'GATE_HEALTH'
         ? await fetch(`${g}/health`, { signal: AbortSignal.timeout(8_000) })

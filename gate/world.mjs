@@ -82,6 +82,26 @@ export function createWorld({
 
   return {
     env,
+    /**
+     * STAGING ONLY — ask World's simulator to play World App for a request. Called by the gate, not
+     * the browser: the simulator rejects calls carrying an extension Origin ("Invalid Origin",
+     * measured 2026-09-26). The connect URL carries a bridge encryption key for a FAKE staging
+     * identity; it is forwarded, never stored or logged.
+     */
+    async simulate(connectUrl) {
+      if (env !== 'staging') return { deny: 'the simulator exists only on staging' }
+      if (!/^https:\/\/[a-z.]*world\.org\/verify\?/.test(connectUrl ?? '')) return { deny: 'not a World ID connect URL' }
+      const r = await fetch('https://simulator.worldcoin.org/api/mcp', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
+          params: { name: 'complete_test_request', arguments: { connect_url: connectUrl } } }),
+        signal: AbortSignal.timeout(60_000),
+      })
+      const t = await r.text()
+      const err = /\\?"error\\?"\s*:\s*\\?"([a-z_]+)/.exec(t)?.[1] ?? (/"error":\{/.test(t) ? 'simulator refused' : null)
+      return err ? { deny: `simulator: ${err}` } : { ok: true }
+    },
     /** Per-post action, or per-space when the post belongs to a space (bans need a stable nullifier). */
     actionFor: (ref, space) => (space ? spaceAction(space) : actionFor(ref)),
     /** Sign a request for one post + one reader. The nonce is remembered as issued. */

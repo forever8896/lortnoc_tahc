@@ -7,6 +7,8 @@ import { generatePassphrase } from '../../../shared/checks/passphrase.mjs'
 import { toB64, fromHex } from '../../../shared/keys.mjs'
 import { gateDepositor } from '../../../shared/gateclient.mjs'
 import { sw, LOCAL, gatePost } from '../shared/messages'
+import { contentHash, withAuthor } from '../../../shared/member.mjs'
+import { ownedSpaces, memberships, attestAsMember } from '../shared/spaces'
 import type { EncodeData, ContentToFrame, FrameToContent, GateHealth } from '../shared/messages'
 
 type CheckDraft =
@@ -14,12 +16,14 @@ type CheckDraft =
   | { check: 'passphrase'; passphrase: string; hint: string }
   | { check: 'recipients'; keys: string }
   | { check: 'after'; when: string }
+  | { check: 'human'; preset: 'poh' | 'selfie'; space: string }
 
 const LABELS: Record<CheckDraft['check'], string> = {
   public: 'Anyone with the extension',
   passphrase: 'Anyone with the passphrase',
   recipients: 'Named people',
   after: 'Opens after a time',
+  human: 'Verified humans (World ID)',
 }
 /** datetime-local value for `h` hours from now, in the user's own time zone */
 const localIn = (h: number) => {
@@ -30,9 +34,13 @@ const fresh = (check: CheckDraft['check']): CheckDraft =>
   check === 'public' ? { check }
   : check === 'passphrase' ? { check, passphrase: generatePassphrase(), hint: '' }
   : check === 'after' ? { check, when: localIn(1) }
+  : check === 'human' ? { check, preset: 'poh', space: '' }
   : { check, keys: '' }
 
 let groups: CheckDraft[][] = [[fresh('public')]]
+/** Spaces you own or joined — offered in the World ID check and for "post as member". */
+let knownSpaces: string[] = []
+let memberOf: Record<string, string> = {}
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
 const msgEl = $<HTMLTextAreaElement>('msg')
@@ -53,6 +61,7 @@ const fit = () => requestAnimationFrame(() => toParent({ lortnoc: 'resize', heig
 function leaf(d: CheckDraft) {
   if (d.check === 'public') return { check: 'public' }
   if (d.check === 'passphrase') return { check: 'passphrase', passphrase: d.passphrase, ...(d.hint.trim() ? { hint: d.hint.trim() } : {}) }
+  if (d.check === 'human') return { check: 'human', preset: d.preset, ...(d.space ? { space: d.space } : {}) }
   if (d.check === 'after') {
     const t = new Date(d.when).getTime()
     if (!Number.isFinite(t)) throw new Error('Pick when it should open.')
@@ -123,6 +132,16 @@ function checkEl(d: CheckDraft, remove: () => void): HTMLElement {
     row.append(pw, regen)
     fields.append(row, input(d.hint, (v) => (d.hint = v), 'Hint shown to readers (optional, public)'),
       note('Share the passphrase privately. The generated one is five random words; a guessable one (a name, a place) can be cracked offline by anyone who sees the post.'))
+  } else if (d.check === 'human') {
+    const sel = document.createElement('select')
+    sel.innerHTML = `<option value="poh">Proof of Human (Orb) — one per person</option><option value="selfie">Selfie Check — keeps bots out</option>`
+    sel.value = d.preset
+    sel.onchange = () => (d.preset = sel.value as 'poh' | 'selfie')
+    const sp = document.createElement('select')
+    sp.innerHTML = `<option value="">Any verified human</option>` + knownSpaces.map((x) => `<option value="${x}">Members of ${x}</option>`).join('')
+    sp.value = d.space
+    sp.onchange = () => (d.space = sp.value)
+    fields.append(sel, sp, note('Readers prove they are a unique real person — never who they are, never gender, age or nationality. Keeps bots and sock-puppets out. Add "or passphrase" so people without World ID can still get in.'))
   } else if (d.check === 'after') {
     const i = Object.assign(document.createElement('input'), { type: 'datetime-local', value: d.when })
     i.oninput = () => ((d.when = i.value), renderHonesty())
@@ -175,12 +194,21 @@ async function go() {
     setStatus('Locking it…')
     const policy = buildPolicy()
     let deposit
-    if (JSON.stringify(policy).includes('"check":"after"')) {
+    const usesGate = /"check":"(after|human)"/.test(JSON.stringify(policy))
+    if (usesGate) {
       const g = await sw<GateHealth>({ type: 'GATE_HEALTH' })
-      if (!g.ok) throw new Error(`The gate is unreachable (${g.error}) — needed for timed messages.`)
+      if (!g.ok) throw new Error(`The gate is unreachable (${g.error}) — needed for timed and World ID messages.`)
+      if (JSON.stringify(policy).includes('"check":"human"') && !g.data.checks.includes('human'))
+        throw new Error('This gate has no World ID configured.')
       deposit = gateDepositor({ gatePub: g.data.pub, post: gatePost })
     }
-    const frame = await sealMessage(text, policy, { deposit })
+    let body = text
+    const asSpace = $<HTMLSelectElement>('postAs').value
+    if (asSpace) {
+      setStatus(`Signing as your member name in ${asSpace}…`)
+      body = withAuthor(text, { space: asSpace, ...(await attestAsMember(asSpace, contentHash(text))) })
+    }
+    const frame = await sealMessage(body, policy, { deposit })
     setStatus('Turning it into ordinary text…')
     const r = await sw<EncodeData>({ type: 'ENCODE', ciphertextB64: toB64(frame) })
     if (!r.ok) throw new Error(r.error)
@@ -222,6 +250,15 @@ document.addEventListener('keydown', (e) => {
 if (location.hash === '#nofield') $('nofield').hidden = false
 chrome.storage.local.get(LOCAL.marker).then((g) => {
   if (g[LOCAL.marker] === false) $<HTMLInputElement>('marker').checked = false
+})
+Promise.all([ownedSpaces(), memberships()]).then(([own, mem]) => {
+  knownSpaces = [...new Set([...Object.keys(own), ...Object.keys(mem).filter((k) => mem[k].memberId)])].sort()
+  memberOf = Object.fromEntries(Object.entries(mem).filter(([, m]) => m.memberId).map(([k, m]) => [k, m.memberId!]))
+  const pa = $<HTMLSelectElement>('postAs')
+  pa.innerHTML = `<option value="">Post anonymously</option>` +
+    Object.entries(memberOf).map(([k, id]) => `<option value="${k}">Post as ${id} (verified member of ${k})</option>`).join('')
+  $('postAsRow').hidden = !Object.keys(memberOf).length
+  render()
 })
 render()
 msgEl.focus()
