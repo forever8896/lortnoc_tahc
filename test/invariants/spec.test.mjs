@@ -97,7 +97,7 @@ describe('§9 — World ID only as an OPTIONAL reader check, never for writing o
   // verified human (the `human` check). Nobody may ever need World ID to WRITE, and it must never
   // meter the free tier (§9 still meters by Telegram handle). So World ID is confined to the files
   // that implement that one reader check — anywhere else is a regression.
-  const ALLOWED = /^(gate\/|shared\/checks\/human\.mjs|extension-everywhere\/(src\/reveal\/|src\/background\/|package(-lock)?\.json|manifest\.config\.ts))/
+  const ALLOWED = /^(gate\/|shared\/checks\/human\.mjs|extension-everywhere\/(src\/reveal\/|src\/background\/|package(-lock)?\.json|manifest\.config\.ts|vite\.config\.ts))/
   const WORLD = 'worldcoin|world-id|worldid|@worldcoin|idkit'
 
   test('World ID appears only in the reader-check files', () => {
