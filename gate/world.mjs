@@ -50,6 +50,18 @@ export const actionFor = (ref) => `lortnoc-read-${ref}`
 export const spaceAction = (space) => `lortnoc-space-${space}`
 export const signalFor = (ref, readerPub) => `0x${ref}${readerPub}`
 
+/**
+ * WorldIDVerifier.verify arguments for one response item — exactly as World's portal builds them
+ * (developer-portal web/api/v4/verify/uniqueness-proof/verify-v4.ts).
+ * Identity Check takes no signal, and IDKit then omits signal_hash. In v4 an absent signal is ZERO
+ * (portal request-schema.ts: "V4 default signal_hash is zero, unlike v3 which uses keccak256 of empty
+ * string"). Using hash('') here made every passport proof fail on-chain (measured 2026-09-26).
+ */
+export function verifierArgs(proof, action, rpId, r0 = proof.responses[0]) {
+  return [BigInt(r0.nullifier), BigInt(hashSignal(action)), BigInt('0x' + rpId.slice(3)), BigInt(proof.nonce), BigInt(r0.signal_hash ?? '0x0'),
+    BigInt(r0.expires_at_min), BigInt(r0.issuer_schema_id), BigInt(r0.credential_genesis_issued_at_min || 0), r0.proof.map(BigInt)]
+}
+
 export function createWorld({
   appId, rpId, env = 'staging', signingKey, stagingToken, rpcs = DEFAULT_RPCS,
   // injectable for tests
@@ -63,7 +75,6 @@ export function createWorld({
   const envs = String(env).split(',').map((e) => e.trim()).filter((e) => e in VERIFIER)
   if (!envs.length) throw new Error(`WORLD_ENV must be production, staging and/or sandbox (got "${env}")`)
   env = envs[0]
-  const numericRp = BigInt('0x' + rpId.slice(3))
 
   const api = verifyApi ?? (async (proof, env) => {
     // sandbox proofs go to the same endpoint and, like staging, need the staging window (portal
@@ -76,11 +87,8 @@ export function createWorld({
     return r.ok && j.success ? { ok: true, environment: j.environment } : { ok: false, reason: j.code ?? `http ${r.status}` }
   })
 
-  const chain = verifyChain ?? (async (proof, action, env) => {
-    const r0 = proof.responses[0]
-    // Identity Check takes no signal; the empty signal's hash is what the circuit then commits to.
-    const args = [BigInt(r0.nullifier), BigInt(hashSignal(action)), numericRp, BigInt(proof.nonce), BigInt(r0.signal_hash ?? hashSignal('')),
-      BigInt(r0.expires_at_min), BigInt(r0.issuer_schema_id), BigInt(r0.credential_genesis_issued_at_min || 0), r0.proof.map(BigInt)]
+  const chain = verifyChain ?? (async (proof, action, env, r0 = proof.responses[0]) => {
+    const args = verifierArgs(proof, action, rpId, r0)
     const verdicts = await Promise.all(rpcs.map(async (url) => {
       try {
         await createPublicClient({ transport: http(url, { timeout: 10_000 }) })
@@ -140,7 +148,12 @@ export function createWorld({
     /** @returns {Promise<{ok: true, nullifier: string} | {deny: string}>} */
     async verify(proof, { ref, readerPub, preset = 'poh', action = actionFor(ref) }, state) {
       // (preset 'identity' = Identity Check on nationality — see the branch below)
-      const r0 = proof?.responses?.[0]
+      // A proof may carry several responses (World's own API accepts if ANY verifies). Use the one
+      // with the credential this check asks for — not blindly the first.
+      const all = Array.isArray(proof?.responses) ? proof.responses : []
+      const r0 = all.find((r) => (preset === 'identity'
+        ? DOCUMENT_CREDENTIALS.has(r?.identifier) || DOCUMENT_SCHEMAS.has(Number(r?.issuer_schema_id))
+        : r?.identifier === CREDENTIAL[preset])) ?? all[0]
       if (!r0 || !Array.isArray(r0.proof) || r0.proof.length !== 5) return { deny: 'malformed proof' }
       // single-use nonce, issued by us, for THIS reader, not expired
       const issued = state.get(`nonce:${proof.nonce}`)
@@ -167,7 +180,7 @@ export function createWorld({
       // burn the nonce BEFORE the slow network checks, so a racing duplicate cannot pass twice
       state.set(`nonce:${proof.nonce}`, JSON.stringify({ ...n, used: true }))
 
-      const [a, c] = await Promise.all([api(proof, e), chain(proof, action, e)])
+      const [a, c] = await Promise.all([api(proof, e), chain(proof, action, e, r0)])
       if (!c.ok) return { deny: `World Chain verifier did not confirm (${(c.verdicts ?? []).join('/') || 'invalid'})` }
       if (a.ok === false) return { deny: `World verify API refused (${a.reason})` }
       return { ok: true, nullifier: r0.nullifier, api: a.skipped ? 'skipped' : 'ok', verdicts: c.verdicts }

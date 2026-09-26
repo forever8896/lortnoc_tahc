@@ -15,7 +15,7 @@
 // PRIVACY (PRD §8 Layer 4): request IPs are used for rate limiting in memory only and are never
 // logged or stored.
 import { createServer } from 'node:http'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readFileSync, existsSync } from 'node:fs'
@@ -86,7 +86,21 @@ createServer(async (req, res) => {
     if (req.url === '/ban') return send(res, 200, gate.spaces.ban(body), origin)
     // staging demo helper: the gate plays courier to World's simulator (see world.mjs simulate)
     if (req.url === '/dev/simulate') return send(res, 200, world ? await world.simulate(body.connectUrl) : { deny: 'no World ID' }, origin)
-    if (req.url === '/release') return send(res, 200, await gate.release(body), origin)
+    if (req.url === '/release') {
+      const r = await gate.release(body)
+      // Say WHY a proof was refused — the reason only, never the reader or the IP. A refused World ID
+      // proof is also kept (just the last one, gitignored) so a failure can be diagnosed without a
+      // rescan; it holds a per-action pseudonym (nullifier), not an identity.
+      if (r?.deny && !r.retryAt) {
+        console.log(`release refused: ${r.deny}`)
+        if (body?.proof?.protocol_version) {
+          try {
+            writeFileSync(join(dirname(DB), 'world-last-refused.json'), JSON.stringify({ at: new Date().toISOString(), deny: r.deny, proof: body.proof }, null, 1))
+          } catch {}
+        }
+      }
+      return send(res, 200, r, origin)
+    }
     return send(res, 404, { error: 'not found' }, origin)
   } catch (e) {
     return send(res, e.status ?? 500, { error: e.status ? e.message : 'internal error' }, origin)

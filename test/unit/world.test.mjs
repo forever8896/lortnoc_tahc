@@ -7,7 +7,7 @@ import { createGate } from '../../gate/core.mjs'
 import { gateDepositor, gateReleaser } from '../../shared/gateclient.mjs'
 import { sealMessage, openMessage, inspect } from '../../shared/webframe.mjs'
 import { fakeWorld, proofFor, proofFrom } from '../lib/world-fake.mjs'
-import { confirmed } from '../../gate/world.mjs'
+import { confirmed, verifierArgs } from '../../gate/world.mjs'
 
 const FAST = [{ t: 1, m: 64, p: 1 }]
 
@@ -209,5 +209,27 @@ describe('human (World ID) — several environments on one gate (sandbox for pho
   })
   test('an unknown environment name is a configuration error, not a silent default', () => {
     assert.throws(() => fakeWorld({ env: 'prod' }), /WORLD_ENV/)
+  })
+})
+
+describe('human (World ID) — what the gate asks World Chain (regression: passport proofs failed on-chain)', () => {
+  const base = { nonce: '0x05', responses: [{ nullifier: '0x01', expires_at_min: '100', issuer_schema_id: 9303, proof: ['1', '2', '3', '4', '5'] }] }
+  test('Identity Check has no signal_hash: the verifier gets ZERO, not hash("")', () => {
+    const args = verifierArgs(base, 'lortnoc-read-00', 'rp_0123456789abcdef')
+    assert.equal(args[4], 0n)
+    assert.equal(args[6], 9303n)
+  })
+  test('a signal_hash, when present, is passed through unchanged', () => {
+    const p = { ...base, responses: [{ ...base.responses[0], signal_hash: '0x2a' }] }
+    assert.equal(verifierArgs(p, 'a', 'rp_0123456789abcdef')[4], 42n)
+  })
+  test('the response with the required credential is used, not blindly the first', async () => {
+    const w = fakeWorld()
+    const st = new Map()
+    const ref = 'ab'.repeat(8), reader = 'cd'.repeat(32)
+    const q = w.challenge(ref, reader, st, 'identity', undefined, 'DNK')
+    const p = proofFrom(q)
+    p.responses.unshift({ ...p.responses[0], identifier: 'proof_of_human', issuer_schema_id: 1 })
+    assert.equal((await w.verify(p, { ref, readerPub: reader, preset: 'identity', action: q.action }, st)).ok, true)
   })
 })
