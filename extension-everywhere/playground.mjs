@@ -156,6 +156,7 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--rule);border-b
   </div>
 
   <div class="eyebrow">Try it</div>
+  <div class="card small" style="margin-bottom:8px"><b>First, once:</b> extension icon → switch on <b>Always on for localhost</b>. Hidden replies then get a <b>🔒 Reveal</b> button by themselves, and a 🔒 appears on the reply box. Without it: extension icon → <b>Find hidden posts</b> after each page load.</div>
   <div class="try">
     <details class="t" open><summary><b>1 · Hide a message</b><span class="tag">no setup</span></summary><ol>
       <li>Click the reply box on the left, press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd>.</li>
