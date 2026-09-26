@@ -202,7 +202,7 @@ async function scanOpens(p) {
 async function openNth(page, i) {
   await page.locator('button:has-text("Hidden message")').nth(i).click()
   const card = await frameOf(page, 'reveal')
-  await card.waitForSelector('#out:not([hidden])', { timeout: 30_000 })
+  await card.waitForFunction(() => document.getElementById('plain')?.textContent, null, { timeout: 30_000 }) // #out unhides before #plain fills
   return card
 }
 

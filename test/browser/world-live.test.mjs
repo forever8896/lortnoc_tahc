@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const GATE_PORT = 8796
 const CODEC_PORT = 8795
+const GATE = process.env.GATE_URL ?? `http://127.0.0.1:${GATE_PORT}`
 let skip = process.env.WORLD_LIVE ? null : 'set WORLD_LIVE=1 (live World ID, network)'
 let chromium, gate, codec, site, siteUrl, DIST
 const comments = [], dirs = []
@@ -31,11 +32,12 @@ before(async () => {
   execFileSync('npm', ['run', 'build', '--prefix', join(ROOT, 'extension-everywhere')], { env: { ...process.env, OUT_DIR: DIST }, stdio: 'ignore' })
   const db = mkdtempSync(join(tmpdir(), 'lortnoc-gate-'))
   dirs.push(db)
-  gate = spawn(process.execPath, [join(ROOT, 'gate/server.mjs')], { env: { ...process.env, PORT: String(GATE_PORT), GATE_DB: join(db, 'g.sqlite') }, stdio: 'ignore' })
+  // GATE_URL=https://lortnoc-gate.fly.dev → run against the PUBLIC gate (a production smoke test)
+  if (!process.env.GATE_URL) gate = spawn(process.execPath, [join(ROOT, 'gate/server.mjs')], { env: { ...process.env, PORT: String(GATE_PORT), GATE_DB: join(db, 'g.sqlite') }, stdio: 'ignore' })
   codec = spawn('python3', ['server.py'], { cwd: join(ROOT, 'codec'), env: { ...process.env, PORT: String(CODEC_PORT), CODEC_BACKEND: 'markov' }, stdio: 'ignore' })
   for (let i = 0; i < 80; i++) {
     try {
-      const h = await (await fetch(`http://127.0.0.1:${GATE_PORT}/health`)).json()
+      const h = await (await fetch(`${GATE}/health`)).json()
       if ((await fetch(`http://127.0.0.1:${CODEC_PORT}/health`)).ok) {
         if (!h.checks.includes('human')) skip = 'gate has no World ID configured'
         break
@@ -69,7 +71,7 @@ async function profile() {
   const ctx = await chromium.launchPersistentContext(dir, { channel: 'chromium', args: [`--disable-extensions-except=${DIST}`, `--load-extension=${DIST}`] })
   open.push(ctx)
   const sw = ctx.serviceWorkers()[0] ?? (await ctx.waitForEvent('serviceworker'))
-  await sw.evaluate(([c, g]) => chrome.storage.local.set({ codecUrl: c, gateUrl: g }), [`http://127.0.0.1:${CODEC_PORT}`, `http://127.0.0.1:${GATE_PORT}`])
+  await sw.evaluate(([c, g]) => chrome.storage.local.set({ codecUrl: c, gateUrl: g }), [`http://127.0.0.1:${CODEC_PORT}`, GATE])
   sw.__ctx = ctx
   sw.__extId = new URL(sw.url()).host
   return { ctx, sw }
@@ -140,7 +142,8 @@ async function scanOpens(p) {
 async function readFirst(page, which = 'first') {
   await page.locator('button:has-text("Hidden message")')[which]().click()
   const card = await frameOf(page, 'reveal')
-  await card.waitForSelector('#out:not([hidden])', { timeout: 30_000 })
+  // the card unhides #out before it fills #plain — wait for the text itself
+  await card.waitForFunction(() => document.getElementById('plain')?.textContent, null, { timeout: 30_000 })
   return card
 }
 

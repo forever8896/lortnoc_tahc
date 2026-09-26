@@ -6,7 +6,8 @@
 
 export const DEFAULT_CODEC_URL = 'https://lortnoc-codec.fly.dev'
 /** The gate holds shares for attested checks (time lock, World ID, tokens). Local until hosted. */
-export const DEFAULT_GATE_URL = 'http://localhost:8790'
+// the public gate (gate/fly.toml); a local one (node gate/server.mjs) can be set under Settings → Connection
+export const DEFAULT_GATE_URL = 'https://lortnoc-gate.fly.dev'
 /** Turns a paid space purchase into its ENS name (relayer POST /space, PRD §23.2). */
 export const RELAYER_URL = 'https://lortnoc-relayer.fly.dev'
 

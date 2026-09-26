@@ -1,7 +1,7 @@
 {
   "name": "lortnoc-tahc-everywhere",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Hide what you write inside what you write — on any page, readable only by who you choose.",
   "scripts": {

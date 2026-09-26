@@ -17,7 +17,8 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from '
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
 const PORT = Number(process.env.PORT ?? 5190)
-const GATE = process.env.GATE_URL ?? 'http://localhost:8790'
+// the public gate by default (what the extension uses); GATE_URL=http://localhost:8790 for a local one
+const GATE = process.env.GATE_URL ?? 'https://lortnoc-gate.fly.dev'
 const CODEC = process.env.CODEC_URL ?? 'https://lortnoc-codec.fly.dev'
 const DATA = join(HERE, '.lab')
 const BOARD = join(DATA, 'board.json')
@@ -318,8 +319,8 @@ createServer(async (req, res) => {
 }).listen(PORT, () => console.log(`lortnoc lab  →  http://localhost:${PORT}`))
 
 // The gate: reuse a running one, otherwise start it (and stop it again when the lab stops).
-const running = await fetch(`${GATE}/health`, { signal: AbortSignal.timeout(1500) }).then((r) => r.ok).catch(() => false)
-if (running) console.log(`gate         →  ${GATE} (already running — reusing it)`)
+const running = await fetch(`${GATE}/health`, { signal: AbortSignal.timeout(4000) }).then((r) => r.ok).catch(() => false)
+if (running || !/localhost|127\.0\.0\.1/.test(GATE)) console.log(`gate         →  ${GATE}${running ? '' : ' (not answering)'}`)
 else {
   const gate = spawn(process.execPath, [join(ROOT, 'gate/server.mjs')], { stdio: 'inherit' })
   const stop = () => (gate.kill(), process.exit(0))

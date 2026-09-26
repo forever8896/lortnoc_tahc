@@ -15,7 +15,7 @@
 // PRIVACY (PRD §8 Layer 4): request IPs are used for rate limiting in memory only and are never
 // logged or stored.
 import { createServer } from 'node:http'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync, renameSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readFileSync, existsSync } from 'node:fs'
@@ -29,6 +29,15 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT ?? 8790)
 const DB = process.env.GATE_DB ?? join(HERE, '.data', 'gate.sqlite')
 mkdirSync(dirname(DB), { recursive: true })
+// Restore / migrate: a database uploaded next to the live one as <name>.import.sqlite (e.g. with
+// `fly ssh sftp put`) replaces it at the next start. Used to move a gate — key, deposits, sessions —
+// between hosts without ever putting the database (it holds the gate's private key) in an image.
+const IMPORT = DB.replace(/\.sqlite$/, '.import.sqlite')
+if (IMPORT !== DB && existsSync(IMPORT)) {
+  renameSync(IMPORT, DB)
+  for (const x of ['-wal', '-shm']) rmSync(DB + x, { force: true })
+  console.log('gate: imported database from', IMPORT)
+}
 // gate/.env (gitignored) → process.env, without overriding what the environment already set.
 if (existsSync(join(HERE, '.env'))) {
   for (const l of readFileSync(join(HERE, '.env'), 'utf8').split('\n')) {

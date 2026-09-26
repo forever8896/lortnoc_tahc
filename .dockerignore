@@ -48,3 +48,11 @@ bench
 **/.dev-profiles
 **/.cache
 **/*.pkl
+
+# The gate's local database holds the gate's PRIVATE key and every deposited share — it is moved to
+# the production volume deliberately (fly sftp), never through an image layer or the build context.
+gate/.data
+**/.lab
+research-tokyo
+extension-everywhere
+showcase
