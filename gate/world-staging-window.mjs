@@ -35,8 +35,9 @@ if (json.error || json.result?.isError) {
 }
 const out = json.result?.structuredContent ?? JSON.parse(json.result?.content?.[0]?.text ?? '{}')
 const token = out.staging_verification_token
-const lines = text.split('\n').filter((l) => !l.startsWith('WORLD_STAGING_TOKEN='))
+const lines = text.split('\n').filter((l) => !l.startsWith('WORLD_STAGING_TOKEN=') && !l.startsWith('WORLD_STAGING_EXPIRES='))
 if (enabled && token) lines.push(`WORLD_STAGING_TOKEN=${token}`)
+if (enabled && out.staging_verification_expires_at) lines.push(`WORLD_STAGING_EXPIRES=${out.staging_verification_expires_at}`)
 writeFileSync(ENV, lines.join('\n').replace(/\n*$/, '\n'))
 console.log(enabled
   ? `✓ staging window OPEN until ${out.staging_verification_expires_at} — token saved to gate/.env (not shown)`

@@ -11,7 +11,8 @@
     "test:browser": "node test/run.mjs browser",
     "test:integration": "node test/run.mjs integration",
     "test:watch": "node --import ./test/lib/resolve-ts.mjs --test --watch test/unit/*.test.mjs",
-    "codec": "cd codec && python3 server.py"
+    "codec": "cd codec && python3 server.py",
+    "lab": "node extension-everywhere/playground.mjs"
   },
   "devDependencies": {
     "playwright": "^1.62.0"

@@ -80,3 +80,4 @@ lortnoc-tahc-extension-*.zip.sha256
 
 # gate/ local database (holds key shares)
 /gate/.data/
+/extension-everywhere/.lab/
