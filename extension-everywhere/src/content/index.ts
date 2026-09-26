@@ -12,6 +12,9 @@ import { insertCover, editableTarget, editableFrom } from './insert'
 type Action = { action: 'compose' } | { action: 'reveal'; text: string } | { action: 'scan' }
 
 const W = window as unknown as { __lortnocEverywhere?: boolean }
+/** Show the focus pill only on sites the user switched to "Always on" — asked, not guessed: the
+ *  same script also arrives by a one-off click (shortcut / right-click) on sites that are not. */
+let AUTO = false
 const EXT_ORIGIN = new URL(chrome.runtime.getURL('')).origin
 const Z = '2147483647'
 
@@ -112,6 +115,43 @@ function run(a: Action) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// The focus pill — only on sites the user switched to "Always on". A small 🔒 at the corner of the
+// focused box; clicking it opens the sheet aimed at that box. We only watch WHICH box is focused,
+// never what is typed into it (typing happens in the sheet).
+// ---------------------------------------------------------------------------
+let pill: HTMLButtonElement | null = null
+let pillFor: HTMLElement | null = null
+function showPill(box: HTMLElement) {
+  if (!pill) {
+    pill = document.createElement('button')
+    pill.type = 'button'
+    pill.dataset.lortnocChip = '1'
+    pill.textContent = '🔒'
+    pill.title = 'Write this hidden — lortnoc tahc'
+    Object.assign(pill.style, {
+      position: 'fixed', zIndex: Z, width: '28px', height: '28px', borderRadius: '50%', border: '0', cursor: 'pointer',
+      background: '#12C4BE', color: '#000', font: '14px/28px system-ui', padding: '0', boxShadow: '0 4px 14px rgba(0,0,0,.3)',
+    } as CSSStyleDeclaration)
+    // mousedown, not click: keep focus in the box so it stays the target
+    pill.addEventListener('mousedown', (e) => {
+      e.preventDefault()
+      target = pillFor
+      openFrame('sheet')
+      hidePill()
+    })
+    document.documentElement.appendChild(pill)
+  }
+  pillFor = box
+  const r = box.getBoundingClientRect()
+  pill.style.left = `${Math.min(r.right - 34, innerWidth - 36)}px`
+  pill.style.top = `${Math.max(4, r.bottom - 34)}px`
+  pill.style.display = 'block'
+}
+function hidePill() {
+  if (pill) pill.style.display = 'none'
+}
+
 // Injected once per action, so register listeners once per page.
 if (!W.__lortnocEverywhere) {
   W.__lortnocEverywhere = true
@@ -122,7 +162,18 @@ if (!W.__lortnocEverywhere) {
   document.addEventListener('focusin', (e) => {
     const t = editableFrom(e.composedPath()[0] ?? e.target)
     if (t && frame) target = t
+    if (t && !frame && AUTO) showPill(t)
   }, true)
+  chrome.runtime.sendMessage({ type: 'SITE_STATE', origin: location.origin })
+    .then((r: { ok?: boolean; data?: { on?: boolean } }) => {
+      AUTO = !!r?.data?.on
+      const t = editableFrom(document.activeElement)
+      if (AUTO && t && !frame) showPill(t)
+    })
+    .catch(() => {})
+  document.addEventListener('focusout', () => setTimeout(() => {
+    if (!editableFrom(document.activeElement)) hidePill()
+  }, 150), true)
   document.addEventListener('keydown', (e) => e.key === 'Escape' && closeFrame(), true)
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg?.lortnocAction) run(msg.lortnocAction as Action)

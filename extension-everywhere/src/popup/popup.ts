@@ -52,3 +52,27 @@ $('createSpace').onclick = async () => {
   }
 }
 void renderSpaces()
+
+// "Always on for this site": Chrome asks for THIS origin only, from this click.
+chrome.tabs.query({ active: true, currentWindow: true }).then(async ([tab]) => {
+  let origin = ''
+  try {
+    const u = new URL(tab?.url ?? '')
+    if (u.protocol === 'https:' || u.protocol === 'http:') origin = u.origin
+  } catch {}
+  if (!origin) return
+  $('siteName').textContent = new URL(origin).host
+  $('siteRow').hidden = false
+  const box = $<HTMLInputElement>('site')
+  const st = await chrome.runtime.sendMessage({ type: 'SITE_STATE', origin })
+  box.checked = !!st?.data?.on
+  box.onchange = async () => {
+    if (box.checked) {
+      const granted = await chrome.permissions.request({ origins: [`${origin}/*`] })
+      if (!granted) return void (box.checked = false)
+    }
+    const r = await chrome.runtime.sendMessage({ type: 'SITE_SET', origin, on: box.checked })
+    box.checked = !!r?.data?.on
+    $('status').textContent = box.checked ? 'On. Reload the page, then click a text box.' : 'Off for this site.'
+  }
+})

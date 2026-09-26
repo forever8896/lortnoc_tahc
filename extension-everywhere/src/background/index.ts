@@ -29,6 +29,23 @@ async function post(url: string, body: unknown): Promise<Response> {
 }
 
 async function handle(msg: SwRequest): Promise<SwResponse> {
+  if (msg.type === 'SITE_STATE' || msg.type === 'SITE_SET') {
+    // "Always on for this site": the permission is requested by the POPUP (it needs the click);
+    // here we only (un)register the content script for that one origin.
+    const id = `auto:${msg.origin}`
+    if (msg.type === 'SITE_SET') {
+      await chrome.scripting.unregisterContentScripts({ ids: [id] }).catch(() => {})
+      if (msg.on) {
+        await chrome.scripting.registerContentScripts([{
+          id, matches: [`${msg.origin}/*`], js: [contentScript], runAt: 'document_idle', persistAcrossSessions: true,
+        }])
+      } else {
+        await chrome.permissions.remove({ origins: [`${msg.origin}/*`] }).catch(() => {})
+      }
+    }
+    const on = (await chrome.scripting.getRegisteredContentScripts({ ids: [id] })).length > 0
+    return { ok: true, data: { on } }
+  }
   if (msg.type === 'FIND_POSTS') {
     // Deep scan, step 1 (shape, free) then step 2 (codec + frame check), a few at a time.
     const candidates = msg.texts.map((t, i) => ({ t, i })).filter(({ t }) => looksLikeCover(t)).slice(0, 40)

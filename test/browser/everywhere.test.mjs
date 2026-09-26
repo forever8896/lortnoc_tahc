@@ -292,3 +292,34 @@ describe('inserting when no box was focused (measured failure, 2026-09-26)', () 
     assert.ok((await page.inputValue('#c')).length > 50, 'the kept cover text was inserted — no re-encoding')
   })
 })
+
+describe('"Always on for this site": the focus pill', () => {
+  test('on an opted-in site, focusing a box shows 🔒; clicking it writes into that box', { timeout: 120_000 }, async (t) => {
+    if (skip) return t.skip(skip)
+    comments.length = 0
+    const { ctx, sw } = await profile()
+    const origin = new URL(siteUrl).origin
+    // What the popup's switch does once Chrome has granted this one origin.
+    const ext = await ctx.newPage()
+    await ext.goto(`chrome-extension://${new URL(sw.url()).host}/src/popup/index.html`)
+    const r = await ext.evaluate((origin) => chrome.runtime.sendMessage({ type: 'SITE_SET', origin, on: true }), origin)
+    assert.equal(r.data.on, true)
+    const page = await ctx.newPage()
+    await page.goto(siteUrl) // loaded fresh: the registered script runs with NO click
+    await page.click('#c')
+    const pill = page.locator('button[title="Write this hidden — lortnoc tahc"]')
+    await pill.waitFor({ state: 'visible', timeout: 10_000 })
+    await pill.dispatchEvent('mousedown')
+    const sheet = await frameOf(page, 'sheet')
+    await sheet.fill('#msg', 'from the pill')
+    await sheet.click('#go')
+    await sheet.waitForSelector('.status.ok', { timeout: 60_000 })
+    assert.ok((await page.inputValue('#c')).length > 50)
+    // Same page on a hostname that was NOT switched on: no script, no pill.
+    const other = await ctx.newPage()
+    await other.goto(siteUrl.replace('127.0.0.1', 'localhost'))
+    await other.click('#c')
+    await other.waitForTimeout(1500)
+    assert.equal(await other.locator('button[title="Write this hidden — lortnoc tahc"]').count(), 0)
+  })
+})

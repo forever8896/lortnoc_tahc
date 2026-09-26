@@ -27,6 +27,8 @@ export type SwRequest =
   | { type: 'GATE'; path: GatePath; body: unknown }
   | { type: 'WORLD_SIM'; connectUrl: string }
   | { type: 'FIND_POSTS'; texts: string[] }
+  | { type: 'SITE_STATE'; origin: string }
+  | { type: 'SITE_SET'; origin: string; on: boolean }
 
 /** Gate routes the extension may call (the service worker refuses anything else). */
 export const GATE_PATHS = ['/deposit', '/challenge', '/release', '/space', '/member/sign', '/ban', '/dev/simulate'] as const

@@ -29,6 +29,9 @@ export default defineManifest({
   // World ID: IDKit talks to World's bridge. (The staging simulator is reached via the gate.)
   host_permissions: ['http://localhost/*', 'http://127.0.0.1/*', 'https://lortnoc-codec.fly.dev/*',
     'https://bridge.worldcoin.org/*'],
+  // Per-site opt-in ("Always on for this site"): asked for one origin at a time from the popup,
+  // never at install. Only such sites run the content script without a click.
+  optional_host_permissions: ['https://*/*', 'http://*/*'],
   // IDKit ships WebAssembly; MV3 extension pages need 'wasm-unsafe-eval' to instantiate it.
   content_security_policy: { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'" },
   web_accessible_resources: [
