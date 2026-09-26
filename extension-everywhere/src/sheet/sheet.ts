@@ -37,7 +37,7 @@ const fresh = (check: CheckDraft['check']): CheckDraft =>
 let groups: CheckDraft[][] = [[fresh('public')]]
 
 /** The ready-made choices. Each is only a starting point: "Edit rules" opens it in the builder. */
-type Preset = 'public' | 'passphrase' | 'human' | 'human-or-pass' | 'citizens' | 'after' | `space:${string}` | `nft:${string}`
+type Preset = 'public' | 'passphrase' | 'human' | 'human-or-pass' | 'citizens' | 'after' | 'holders' | 'spacehumans' | `space:${string}` | `nft:${string}`
 let editing = false
 function presetGroups(p: Preset): CheckDraft[][] {
   if (p === 'passphrase') return [[fresh('passphrase')]]
@@ -45,6 +45,9 @@ function presetGroups(p: Preset): CheckDraft[][] {
   if (p === 'human-or-pass') return [[fresh('human'), fresh('passphrase')]]
   if (p === 'citizens') return [[{ check: 'human', preset: 'identity', space: '', country: '' }]]
   if (p === 'after') return [[fresh('after')]]
+  // any space by name — the field under the dropdown fills it in (yours are suggested)
+  if (p === 'holders') return [[{ check: 'nft', space: ensList[0] ? `@${ensList[0]}` : '' }]]
+  if (p === 'spacehumans') return [[{ check: 'human', preset: 'poh', space: ensList[0] ? `@${ensList[0]}` : '' }]]
   if (p.startsWith('space:')) return [[{ check: 'human', preset: 'poh', space: p.slice(6) }]]
   if (p.startsWith('nft:')) return [[{ check: 'nft', space: p.slice(4) }]]
   return [[fresh('public')]]
@@ -400,6 +403,20 @@ function renderDetail(p: Preset) {
     row.append(Object.assign(document.createElement('span'), { className: 'small muted', textContent: 'Citizens of' }), countrySelect(citizen, 'country'))
     box.append(row)
   }
+  // a space rule (NFT holders / verified humans of a space): the space name, checked on ENS as you type
+  const inSpace = editing || !['holders', 'spacehumans'].includes(p) ? undefined
+    : groups.flat().find((d) => d.check === 'nft' || (d.check === 'human' && d.preset === 'poh')) as { check: string; space: string } | undefined
+  if (inSpace) {
+    const row = Object.assign(document.createElement('div'), { className: 'row' })
+    const [field, st] = spaceField(inSpace)
+    field.id = 'spaceName'
+    const lead = Object.assign(document.createElement('span'), { className: 'small muted', textContent: inSpace.check === 'nft' ? 'Holders of' : 'Verified humans of' })
+    lead.style.whiteSpace = 'nowrap'
+    row.append(lead,
+      field, Object.assign(document.createElement('span'), { className: 'small muted', textContent: '.space' }), st)
+    box.append(row)
+    if (!inSpace.space) setTimeout(() => field.focus(), 0)
+  }
   const after = editing ? undefined : groups.flat().find((d) => d.check === 'after') as Extract<CheckDraft, { check: 'after' }> | undefined
   if (after) {
     const i = Object.assign(document.createElement('input'), { type: 'datetime-local', value: after.when, id: 'when' })
@@ -428,6 +445,8 @@ function fillPresets() {
     ['human', 'Verified humans (World ID)'],
     ['human-or-pass', 'Verified humans, or the passphrase'],
     ['citizens', 'Citizens of a country (passport, World ID)'],
+    ['holders', 'NFT holders of a space…'],
+    ['spacehumans', 'Verified humans of a space…'],
     ...ensList.flatMap((x) => [
       [`space:@${x}`, `Verified humans of ${x}.space`],
       [`nft:@${x}`, `NFT holders of ${x}.space`],
