@@ -192,3 +192,19 @@ describe('ENS spaces (@name → name.space.lortnoctahc.eth) — ENS read faked, 
     assert.throws(() => s.gate.spaces.register({ space: '@garden', ownerPub: k.pub, sig: sign(k.priv, MSG.register('@garden', k.pub)) }), /space names/)
   })
 })
+
+describe('ENS spaces fail CLOSED when a read errors (regression: an RPC hiccup read as "nobody is banned")', async () => {
+  const { createEnsSpaces } = await import('../../gate/ens-spaces.mjs')
+  test('a failed read: the space does not exist for that request, and everyone counts as banned', async () => {
+    let down = true
+    const ens = createEnsSpaces({ read: async () => {
+      if (down) throw new Error('rpc down')
+      return { owner: '0x' + '11'.repeat(20), token: '', bans: '' }
+    } })
+    assert.equal(await ens.exists('@club'), false)
+    assert.equal(await ens.isBanned('@club', 'member-aaaaaaaaaaaa'), true)
+    down = false // …and the failure was NOT cached: the next read sees the truth
+    assert.equal(await ens.exists('@club'), true)
+    assert.equal(await ens.isBanned('@club', 'member-aaaaaaaaaaaa'), false)
+  })
+})

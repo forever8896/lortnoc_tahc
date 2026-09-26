@@ -145,9 +145,17 @@ for (let b = from; b <= head; b += 50000n) logs.push(...await c.getLogs({ addres
 const labels = [...new Set(logs.map((l) => l.args.label))]
 console.log(`  ${labels.length} handles on-chain: ${labels.join(', ') || '(none)'}`)
 if (!labels.length) warn('no handles — nothing for a judge to resolve')
+const BRANCHES = new Set([D.lortnoc.spaces?.branchName?.split('.')[0]].filter(Boolean)) // 'space' — a registry, not a person
 for (const label of labels) {
   const name = `${label}.${D.lortnoc.parentName}`
   const before = failures.length
+  if (BRANCHES.has(label)) {
+    // A branch (space.lortnoctahc.eth) holds the paid spaces: it must have ITS OWN registry — no pubkey.
+    const sub = await rd(D.lortnoc.registry, regAbi, 'getSubregistry', [label]).catch(() => ZERO)
+    if (!isAddressEqual(sub, D.lortnoc.spaces.registry)) fail(`${name}: branch subregistry ${sub} != SpaceRegistry ${D.lortnoc.spaces.registry}`)
+    else pass(`${name} is the spaces branch → SpaceRegistry ${sub}`)
+    continue
+  }
   const f = (m) => fail(`${name}: ${m}`)
   try {
     const [addr, pubkey, resolver, exact, regOwner, regRes, expiry] = await Promise.all([
@@ -167,6 +175,34 @@ for (const label of labels) {
     if (Number(expiry) > parentExpiry) warn(`${name}: expires after the parent (${new Date(Number(expiry) * 1000).toISOString().slice(0, 10)}) — only as long as the parent is renewed`)
     if (failures.length === before) pass(`${name} owner=${exact} addr=${addr} pubkey=${pubkey.slice(0, 10)}…`)
   } catch (e) { f(`canonical resolution threw ${short(e)}`) }
+}
+
+// ---- [5] every paid space: <label>.space.lortnoctahc.eth, read the canonical way -------------------
+if (D.lortnoc.spaces?.registry) {
+  console.log('\n[5] every paid space via canonical UR + UniversalHelper')
+  const sfrom = BigInt(D.lortnoc.spaces.registrarDeployBlock ?? D.lortnoc.registrarDeployBlock ?? 0)
+  const slogs = []
+  for (let b = sfrom; b <= head; b += 50000n) slogs.push(...await c.getLogs({ address: D.lortnoc.spaces.registry, event: labelRegistered, fromBlock: b, toBlock: b + 49999n > head ? head : b + 49999n }))
+  const spaces = [...new Set(slogs.map((l) => l.args.label))]
+  console.log(`  ${spaces.length} spaces on-chain`)
+  const CAIP = /^eip155:(1|8453|11155111|84532)\/erc721:0x[0-9a-fA-F]{40}$/
+  for (const label of spaces) {
+    const name = `${label}.${D.lortnoc.spaces.branchName}`
+    const before = failures.length
+    const f = (m) => fail(`${name}: ${m}`)
+    try {
+      const [addr, token, resolver, exact] = await Promise.all([
+        c.getEnsAddress({ name }), c.getEnsText({ name, key: 'eth.lortnoc.space.token' }), c.getEnsResolver({ name }),
+        rd(D.ens.universalHelper, helperAbi, 'findExactOwner', [dns(name)]),
+      ])
+      if (isAddressEqual(exact, ZERO)) f('findExactOwner = 0 (expired, or not reachable from the canonical root)')
+      if (!addr || !isAddressEqual(addr, exact)) f(`addr ${addr} != owner ${exact}`)
+      if (token && !CAIP.test(token)) f(`token record "${token}" is not an ERC-721 CAIP-19 on a supported chain`)
+      const impl = await rd(D.ens.verifiableFactory, facAbi, 'verifyContract', [resolver]).catch(() => ZERO)
+      if (!isAddressEqual(impl, D.ens.permissionedResolverImpl)) f(`resolver ${resolver} is not factory-verified`)
+      if (failures.length === before) pass(`${name} owner=${exact} ${token ? 'NFT ' + token.split(':').pop().slice(0, 10) + '…' : '(no NFT gate)'}`)
+    } catch (e) { f(`canonical resolution threw ${short(e)}`) }
+  }
 }
 
 console.log(`\n${failures.length ? `\x1b[31mPREFLIGHT FAILED — ${failures.length} problem(s)\x1b[0m` : '\x1b[32mPREFLIGHT PASSED\x1b[0m'}`)

@@ -4,15 +4,16 @@
 // challenge → a message naming the space, the post reference, the reader key and a single-use nonce.
 // verify    → recover the signer (EIP-191), the nonce was issued for this reader and is unused,
 //             then ERC-721/1155/20 balanceOf(signer) > 0 on the collection's chain.
-import { createPublicClient, http, verifyMessage, getAddress } from 'viem'
+import { createPublicClient, http, fallback, verifyMessage, getAddress } from 'viem'
 import { mainnet, sepolia, base, baseSepolia } from 'viem/chains'
 
 const CHAINS = { 1: mainnet, 11155111: sepolia, 8453: base, 84532: baseSepolia }
+// Several RPCs per chain (measured 2026-09-26); viem's fallback moves on when one errors or times out.
 const RPC = {
-  1: 'https://ethereum-rpc.publicnode.com',
-  11155111: 'https://ethereum-sepolia-rpc.publicnode.com',
-  8453: 'https://base-rpc.publicnode.com',
-  84532: 'https://base-sepolia-rpc.publicnode.com',
+  1: ['https://ethereum-rpc.publicnode.com', 'https://eth.drpc.org', 'https://1rpc.io/eth'],
+  11155111: ['https://ethereum-sepolia-rpc.publicnode.com', 'https://sepolia.gateway.tenderly.co', 'https://1rpc.io/sepolia'],
+  8453: ['https://base-rpc.publicnode.com', 'https://base.drpc.org', 'https://mainnet.base.org'],
+  84532: ['https://base-sepolia-rpc.publicnode.com', 'https://sepolia.base.org'],
 }
 const BALANCE_ABI = [{ type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] }]
 
@@ -41,7 +42,7 @@ export function createHolders({ ensSpaces, balanceOf, now = () => Date.now() } =
   const balance = balanceOf ?? (async ({ chainId, address }, holder) => {
     const chain = CHAINS[chainId]
     if (!chain) throw new Error(`unsupported chain ${chainId}`)
-    const c = createPublicClient({ chain, transport: http(RPC[chainId], { timeout: 10_000 }) })
+    const c = createPublicClient({ chain, transport: fallback(RPC[chainId].map((u) => http(u, { timeout: 8_000 }))) })
     return c.readContract({ address, abi: BALANCE_ABI, functionName: 'balanceOf', args: [holder] })
   })
 
