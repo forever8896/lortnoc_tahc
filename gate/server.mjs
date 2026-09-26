@@ -69,7 +69,7 @@ createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return send(res, 204, {}, origin)
   if (limited(req.socket.remoteAddress ?? '?')) return send(res, 429, { error: 'slow down' }, origin)
   try {
-    if (req.method === 'GET' && req.url === '/health') {
+    if (req.method === 'GET' && (req.url === '/health' || req.url === '/')) {
       return send(res, 200, { ok: true, pub: gate.pub, signPub: gate.signPub, checks: gate.checks, world: gate.world, deposits: gate.stats() }, origin)
     }
     if (req.method !== 'POST') return send(res, 404, { error: 'not found' }, origin)
