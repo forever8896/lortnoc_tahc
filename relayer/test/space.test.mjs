@@ -311,3 +311,10 @@ test('the allowlist never touches mainnet purchases', async () => {
   const w = world({ chainId: 1, rcpt: receipt({ logs: [spaceLog({ address: SPACES[1] })] }), head: 102n, sepoliaPayers: [] })
   assert.equal((await w.handler(body({ chainId: 1 }))).status, 200)
 })
+
+test('a purchase on a retired LortnocSpaces is still honoured; an unlisted contract is not', async () => {
+  const RETIRED = '0x00000000000000000000000000000000000000aa'
+  const logs = [spaceLog({ address: RETIRED })]
+  assert.ok(findPurchase({ logs }, [SPACES[11155111], RETIRED], 'lentil-club'))
+  assert.equal(findPurchase({ logs }, SPACES[11155111], 'lentil-club'), null)
+})

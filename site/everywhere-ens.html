@@ -60,14 +60,15 @@
 
   <h2>Step by step — from purchase to an unlocked post</h2>
   <div class="card flow">
-    <div><div><h3>Pay on Ethereum</h3><p><code>LortnocSpaces.buySpace(label, owner)</code> — 0.005 ETH (the first 10 get 90% off, enforced in the contract via <code>currentPrice()</code>). It emits <code>SpacePurchased</code>; the funds go straight to the treasury.</p></div></div>
+    <div><div><h3>Pay on Ethereum</h3><p><code>LortnocSpaces.buySpace(label, owner)</code> — 0.005 ETH (the first 10 get 90% off, enforced in the contract via <code>currentPrice()</code>). It emits <code>SpaceBought</code>; the funds go straight to the treasury. Spaces are sold on mainnet only — the relayer refuses Sepolia purchases.</p></div></div>
     <div><div><h3>The relayer issues the name</h3><p><code>POST /space</code> reads that purchase from chain and calls <code>SpaceRegistrar</code>, which in <b>one transaction</b> deploys the space's own <code>PermissionedResolver</code> proxy from ENS's canonical <code>VerifiableFactory</code>, writes <code>addr</code> + <code>eth.lortnoc.space.token</code>, grants every role to the owner, <b>revokes its own</b>, and registers the label in our <code>SpaceRegistry</code>.</p></div></div>
     <div><div><h3>A real v2 registry tree</h3><p>RootRegistry → <code>eth</code> (ETHRegistry) → <code>lortnoctahc</code> (LortnocRegistry) → <code>space</code> (SpaceRegistry) → your label. Each hop is its own contract — v2 hierarchical registries. Standard ENS tools resolve it through the canonical UniversalResolver.</p></div></div>
     <div><div><h3>The rules are records</h3><p><code>eth.lortnoc.space.token</code> = a CAIP-19 collection, e.g. <code>eip155:11155111/erc721:0xc854…43f0</code>. <code>eth.lortnoc.space.bans</code> = banned member pseudonyms. Owners can delegate <b>just</b> the bans record to a moderator — v2 per-record roles (Enhanced Access Control).</p></div></div>
     <div><div><h3>The gate reads ENS live, and fails closed</h3><p>On every unlock, the gate resolves the space through the UniversalResolver, confirms it exists with <code>UniversalHelper.findExactOwner</code> (in v2 an unclaimed label resolves to empty records — "resolves" ≠ "exists"), then checks the reader's wallet holds the collection. If a read fails on every RPC, the post stays shut.</p></div></div>
   </div>
 
-  <h2>Contracts (Sepolia)</h2>
+  <h2>Contracts</h2>
+  <p>ENS v2 and the registries are on Sepolia (where ENS v2 lives today); the purchase is on Ethereum mainnet.</p>
   <table>
     <tr><th>Contract</th><th>Address</th></tr>
     <tr><td>ENS UniversalResolver (canonical proxy)</td><td class="mono"><a href="https://sepolia.etherscan.io/address/0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe">0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe</a></td></tr>
@@ -77,9 +78,10 @@
     <tr><td>LortnocRegistry (<code>lortnoctahc.eth</code>)</td><td class="mono"><a href="https://sepolia.etherscan.io/address/0x836FEEa0f638b9816a24a7D305bdf0Ee2d0C8b24">0x836FEEa0f638b9816a24a7D305bdf0Ee2d0C8b24</a></td></tr>
     <tr><td>SpaceRegistry (<code>space.lortnoctahc.eth</code>)</td><td class="mono"><a href="https://sepolia.etherscan.io/address/0x4d19b7bb756125027D8433429D598bB3725E8867">0x4d19b7bb756125027D8433429D598bB3725E8867</a></td></tr>
     <tr><td>SpaceRegistrar</td><td class="mono"><a href="https://sepolia.etherscan.io/address/0x05dcdfe5b66c5d90507de42ddaa656eec82309f0">0x05dcdfe5b66c5d90507de42ddaa656eec82309f0</a></td></tr>
-    <tr><td>LortnocSpaces v2 (purchase, early bird)</td><td class="mono"><a href="https://sepolia.etherscan.io/address/0x4e9c746fd4b895f66e9d0562109125abeaccb79c">0x4e9c746fd4b895f66e9d0562109125abeaccb79c</a></td></tr>
+    <tr><td>LortnocSpaces v2 · Sepolia (our live tests only)</td><td class="mono"><a href="https://sepolia.etherscan.io/address/0x4e9c746fd4b895f66e9d0562109125abeaccb79c">0x4e9c746fd4b895f66e9d0562109125abeaccb79c</a></td></tr>
     <tr><td>LortnocDemoPass (free test NFT)</td><td class="mono"><a href="https://sepolia.etherscan.io/address/0xc85460a6690f8b06fdafd1b7730bdfa6261243f0">0xc85460a6690f8b06fdafd1b7730bdfa6261243f0</a></td></tr>
-    <tr><td>LortnocSpaces v1 · Ethereum mainnet</td><td class="mono"><a href="https://etherscan.io/address/0x87997f3ca40693fb1e0c3c6f39f0f3fe287b8c67">0x87997f3ca40693fb1e0c3c6f39f0f3fe287b8c67</a></td></tr>
+    <tr><td><b>LortnocSpaces v2 · Ethereum mainnet</b> (where spaces are sold)</td><td class="mono"><a href="https://etherscan.io/address/0xd21f911570aad19d39e750fe0aa4e2ad161cbdd5">0xd21f911570aad19d39e750fe0aa4e2ad161cbdd5</a></td></tr>
+    <tr><td>LortnocSpaces v1 · Ethereum mainnet (retired, no sales)</td><td class="mono"><a href="https://etherscan.io/address/0x87997f3ca40693fb1e0c3c6f39f0f3fe287b8c67">0x87997f3ca40693fb1e0c3c6f39f0f3fe287b8c67</a></td></tr>
   </table>
 
   <h2>Verify with curl — no install, no key</h2>

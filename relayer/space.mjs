@@ -44,11 +44,12 @@ export function validateSpaceRequest(body) {
   return { ok: true, req: { chainId, txHash: txHash.toLowerCase(), label, token } }
 }
 
-/** The `SpaceBought` for `label` emitted BY `spacesAddress` in this receipt, or null. A log with the
+/** The `SpaceBought` for `label` emitted BY `spacesAddress` (one address, or a list: the current contract
+ *  and the ones it replaced) in this receipt, or null. A log with the
  *  same topic from any other contract is ignored — anyone can emit that event. */
 export function findPurchase(receipt, spacesAddress, label) {
   for (const log of receipt.logs ?? []) {
-    if (!log.address || log.address.toLowerCase() !== spacesAddress.toLowerCase()) continue
+    if (!log.address || ![spacesAddress].flat().some((a) => a.toLowerCase() === log.address.toLowerCase())) continue
     let ev
     try {
       ev = decodeEventLog({ abi: [SPACE_BOUGHT], data: log.data, topics: log.topics })
@@ -74,7 +75,7 @@ const same = (a, b) => typeof a === 'string' && typeof b === 'string' && a.toLow
 /**
  * @param {object} deps
  * @param {Record<number, {getTransactionReceipt: Function, getBlockNumber: Function}>} deps.readers  public client per purchase chain
- * @param {Record<number, string>} deps.spaces      LortnocSpaces address per chain (spaces-deployment.json)
+ * @param {Record<number, string|string[]>} deps.spaces  LortnocSpaces address(es) per chain — current first, then retired
  * @param {(label: string) => Promise<string>} deps.spaceOwnerOf   SpaceRegistry.findOwner on Sepolia
  * @param {(label: string, owner: string, token: string) => Promise<string>} deps.claimSpace  claimSpaceFor; resolves to the mined tx hash
  * @param {(owner: string) => Promise<string|null>} [deps.payStipend]  best-effort Sepolia gas

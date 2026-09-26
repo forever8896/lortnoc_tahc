@@ -449,7 +449,9 @@ const handleSpace = SPACE_BRANCH
   ? createSpaceHandler({
       readers: { [MAINNET]: mainnetReader, [SEPOLIA]: eth },
       spaces: Object.fromEntries(
-        [[MAINNET, SPACES_D.mainnet?.address], [SEPOLIA, SPACES_D.sepolia?.address]].filter(([, a]) => a),
+        // current contract + the ones it replaced: a purchase made on a retired one is still honoured
+        [[MAINNET, SPACES_D.mainnet], [SEPOLIA, SPACES_D.sepolia]].filter(([, d]) => d?.address)
+          .map(([c, d]) => [c, [d.address, ...(d.previous ?? []).map((p) => p.address)]]),
       ),
       branchName: SPACE_BRANCH.branchName ?? `space.${PARENT}`,
       // real money only: a Sepolia purchase counts when WE paid it (the live tests), nobody else's
