@@ -25,16 +25,28 @@ export function gateDepositor({ gatePub, post }) {
 /**
  * For open(): asks the gate for a share, sealed to a key generated for this one request.
  * `onDeny(reason)` lets the UI say "opens at …" instead of a bare failure.
- * `proofFor(check, readerPub)` lets a check attach its proof (World ID binds its signal to readerPub).
+ * `proofFor({check, ref, readerPub, policyHash, post})` lets a check attach its proof — World ID asks
+ * the gate for a /challenge bound to this post + readerPub, then has the reader prove it.
  * @param {{post: (path: string, body: object) => Promise<any>, onDeny?: (d: any) => void,
- *          proofFor?: (check: string, readerPub: string) => Promise<any>}} opts
+ *          proofFor?: (req: {check: string, ref: string, readerPub: string, policyHash: string,
+ *                            post: Function}) => Promise<any>}} opts
  */
 export function gateReleaser({ post, onDeny, proofFor }) {
   return async ({ check, ref, policyHash }) => {
     const me = genKeyPair()
     const readerPub = toHex(me.pub)
-    const proof = proofFor ? await proofFor(check, readerPub) : undefined
-    const r = await post('/release', { ref: toHex(ref), readerPub, policyHash: toHex(policyHash), proof })
+    const req = { ref: toHex(ref), readerPub, policyHash: toHex(policyHash) }
+    let proof
+    if (proofFor) {
+      try {
+        proof = await proofFor({ check, ...req, post })
+      } catch (e) {
+        onDeny?.({ check, deny: e?.message ?? 'proof cancelled' })
+        return null
+      }
+      if (proof === null) return null // the check needs nothing from this reader, or they declined
+    }
+    const r = await post('/release', { ...req, proof })
     if (r?.box) return openBox(me.priv, me.pub, r.box, CTX.release)
     onDeny?.({ check, ...(r ?? { deny: 'no answer' }) })
     return null

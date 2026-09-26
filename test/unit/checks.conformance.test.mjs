@@ -8,16 +8,18 @@ import { compile, open, parse } from '../../shared/policy.mjs'
 import { genKeyPair } from '../../shared/keys.mjs'
 import { createGate } from '../../gate/core.mjs'
 import { gateDepositor, gateReleaser } from '../../shared/gateclient.mjs'
+import { fakeWorld, proofFor } from '../lib/world-fake.mjs'
 
 const FAST = [{ t: 1, m: 64, p: 1 }, { t: 1, m: 128, p: 1 }]
 const MSG = new TextEncoder().encode('conformance')
 const me = genKeyPair(), other = genKeyPair()
 
 // One real gate for every attested check, called in-process.
-const gate = createGate()
-const post = async (path, body) => (path === '/deposit' ? gate.deposit(body) : gate.release(body))
+const gate = createGate({ world: fakeWorld() })
+const post = async (path, body) =>
+  path === '/deposit' ? gate.deposit(body) : path === '/challenge' ? gate.challenge(body) : gate.release(body)
 const deposit = gateDepositor({ gatePub: gate.pub, post })
-const release = gateReleaser({ post })
+const release = gateReleaser({ post, proofFor: proofFor() })
 const HOUR = 3600_000
 
 /** Per check: a spec, inputs that satisfy it, inputs that must not, and secrets that must never
@@ -34,6 +36,12 @@ const FIXTURES = {
     spec: { after: Date.now() - HOUR },
     passing: { release },
     failing: {}, // no gate → no share
+    secrets: [],
+  },
+  human: {
+    spec: { preset: 'poh' },
+    passing: { release },
+    failing: {}, // no proof → no share
     secrets: [],
   },
   recipients: {

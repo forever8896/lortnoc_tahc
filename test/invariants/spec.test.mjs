@@ -92,10 +92,26 @@ describe('§4 — the X overlay is DOM-only too (no API token, no OAuth)', () =>
   })
 })
 
-describe('§9 — this project must not use World ID', () => {
-  test('no World ID SDK, widget or verification call', () => {
-    const hits = grepSource('worldcoin|world-id|worldid|@worldcoin|idkit')
-    assert.deepEqual(hits, [], `World ID appeared (§9 forbids it):\n${hits.join('\n')}`)
+describe('§9 — World ID only as an OPTIONAL reader check, never for writing or metering', () => {
+  // Decided 2026-09-25 (docs/PRD-universal.md §11, §22.5): an author may require readers to be a
+  // verified human (the `human` check). Nobody may ever need World ID to WRITE, and it must never
+  // meter the free tier (§9 still meters by Telegram handle). So World ID is confined to the files
+  // that implement that one reader check — anywhere else is a regression.
+  const ALLOWED = /^(gate\/|shared\/checks\/human\.mjs|extension-everywhere\/(src\/reveal\/|src\/background\/|package(-lock)?\.json|manifest\.config\.ts))/
+  const WORLD = 'worldcoin|world-id|worldid|@worldcoin|idkit'
+
+  test('World ID appears only in the reader-check files', () => {
+    const outside = grepSource(WORLD).filter((line) => !ALLOWED.test(line))
+    assert.deepEqual(outside, [], `World ID appeared outside the optional reader check:\n${outside.join('\n')}`)
+  })
+  test('the writing path and the metering path never touch it', () => {
+    const writing = grepSource(WORLD).filter((l) => /^(extension-everywhere\/src\/sheet\/|extension\/|extension-x\/|codec\/|app\/|relayer\/)/.test(l))
+    assert.deepEqual(writing, [], `World ID reached a writing or metering surface:\n${writing.join('\n')}`)
+  })
+  test('the human check says what World ID cannot prove', () => {
+    const human = source('shared/checks/human.mjs')
+    assert.match(human, /does\s+(\/\/\s*)?NOT prove gender/i, 'the honest limit must stay written at the check')
+    assert.match(human, /OPTIONAL/, 'the check must state that it is optional')
   })
 })
 

@@ -8,9 +8,10 @@ import publicCheck from './public.mjs'
 import passphrase from './passphrase.mjs'
 import recipients from './recipients.mjs'
 import after from './after.mjs'
+import human from './human.mjs'
 
 export const CHECKS = Object.freeze(
-  Object.fromEntries([publicCheck, passphrase, recipients, after].map((m) => [m.id, m])),
+  Object.fromEntries([publicCheck, passphrase, recipients, after, human].map((m) => [m.id, m])),
 )
 
 const TAGS = new Map(Object.values(CHECKS).map((m) => [m.tag, m]))

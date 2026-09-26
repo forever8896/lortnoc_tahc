@@ -1,0 +1,123 @@
+// World ID for the gate — the `human` check's server side (docs/PRD-universal.md §5, §13.2, §22.5).
+//
+// Two calls:
+//   challenge(ref, readerPub, state) — sign an IDKit 4 RP request for THIS post and THIS reader:
+//       action = per-post (v4 proofs are one-time per action per human: a static action would let a
+//                person read ONE gated post ever)
+//       signal = ref ‖ readerPub (the proof is useless for another post or another reader)
+//       nonce  = recorded as issued, single use
+//   verify(proof, expected, state) — everything World's API does NOT check, then World's verdict:
+//       nonce issued-and-unused · protocol 4.0 · action · environment · signal hash · credential type
+//       → World's /api/v4/verify (when available) AND the WorldIDVerifier contract on World Chain,
+//         read through independent RPCs: at least two must say valid and none may say invalid. verify() returns nothing on success, so
+//         one RPC answering "ok" is indistinguishable from a valid proof — measured: a single public
+//         RPC once "accepted" a tampered proof (gate/world-roundtrip.mjs history).
+//
+// Everything network-facing is injectable, so test/unit/world.test.mjs exercises every refusal
+// without World's servers.
+import { signRequest } from '@worldcoin/idkit-core/signing'
+import { hashSignal } from '@worldcoin/idkit-core/hashing'
+import { createPublicClient, http } from 'viem'
+
+export const VERIFIER = {
+  production: '0x00000000009E00F9FE82CfeeBB4556686da094d7',
+  staging: '0x703a6316c975DEabF30b637c155edD53e24657DB',
+}
+export const DEFAULT_RPCS = [
+  'https://worldchain-mainnet.g.alchemy.com/public',
+  'https://worldchain.drpc.org',
+  'https://worldchain-mainnet.gateway.tenderly.co',
+]
+const CREDENTIAL = { poh: 'proof_of_human', selfie: 'selfie' }
+const VERIFIER_ABI = [{
+  type: 'function', name: 'verify', stateMutability: 'view', outputs: [],
+  inputs: ['uint256', 'uint256', 'uint64', 'uint256', 'uint256', 'uint64', 'uint64', 'uint256', 'uint256[5]'].map((type) => ({ type })),
+}]
+
+/** RPC verdicts → confirmed? At least two must say valid and none may say invalid: verify() returns
+ *  nothing on success, so one lying or glitching RPC must never be enough (measured, see header). */
+export const confirmed = (verdicts) =>
+  verdicts.filter((v) => v === 'valid').length >= 2 && !verdicts.includes('invalid')
+
+export const actionFor = (ref) => `lortnoc-read-${ref}`
+export const signalFor = (ref, readerPub) => `0x${ref}${readerPub}`
+
+export function createWorld({
+  appId, rpId, env = 'staging', signingKey, stagingToken, rpcs = DEFAULT_RPCS,
+  // injectable for tests
+  now = () => Date.now(),
+  verifyApi,
+  verifyChain,
+} = {}) {
+  if (!appId || !rpId || !signingKey) return null // World not configured: the check is simply unavailable
+  const numericRp = BigInt('0x' + rpId.slice(3))
+
+  const api = verifyApi ?? (async (proof) => {
+    if (env === 'staging' && !stagingToken) return { skipped: 'no staging window' }
+    const headers = { 'content-type': 'application/json' }
+    if (env === 'staging') headers['x-staging-verification-token'] = stagingToken
+    const r = await fetch(`https://developer.world.org/api/v4/verify/${rpId}`, { method: 'POST', headers, body: JSON.stringify(proof) })
+    const j = await r.json().catch(() => ({}))
+    return r.ok && j.success ? { ok: true, environment: j.environment } : { ok: false, reason: j.code ?? `http ${r.status}` }
+  })
+
+  const chain = verifyChain ?? (async (proof, action) => {
+    const r0 = proof.responses[0]
+    const args = [BigInt(r0.nullifier), BigInt(hashSignal(action)), numericRp, BigInt(proof.nonce), BigInt(r0.signal_hash),
+      BigInt(r0.expires_at_min), BigInt(r0.issuer_schema_id), BigInt(r0.credential_genesis_issued_at_min || 0), r0.proof.map(BigInt)]
+    const verdicts = await Promise.all(rpcs.map(async (url) => {
+      try {
+        await createPublicClient({ transport: http(url, { timeout: 10_000 }) })
+          .readContract({ address: VERIFIER[env], abi: VERIFIER_ABI, functionName: 'verify', args })
+        return 'valid'
+      } catch (e) {
+        // A revert is a real "invalid"; anything else (timeout, 5xx) is "unknown".
+        return /revert/i.test(e.shortMessage ?? e.message ?? '') ? 'invalid' : 'unknown'
+      }
+    }))
+    return { ok: confirmed(verdicts), verdicts }
+  })
+
+  return {
+    env,
+    /** Sign a request for one post + one reader. The nonce is remembered as issued. */
+    challenge(ref, readerPub, state, preset = 'poh') {
+      const action = actionFor(ref)
+      const s = signRequest({ signingKeyHex: signingKey.replace(/^0x/, ''), action })
+      state.set(`nonce:${s.nonce}`, JSON.stringify({ readerPub, expiresAt: s.expiresAt * 1000 }))
+      return {
+        app_id: appId,
+        action,
+        signal: signalFor(ref, readerPub),
+        environment: env,
+        preset,
+        rp_context: { rp_id: rpId, nonce: s.nonce, created_at: s.createdAt, expires_at: s.expiresAt, signature: s.sig },
+      }
+    },
+
+    /** @returns {Promise<{ok: true, nullifier: string} | {deny: string}>} */
+    async verify(proof, { ref, readerPub, preset = 'poh' }, state) {
+      const r0 = proof?.responses?.[0]
+      if (!r0 || !Array.isArray(r0.proof) || r0.proof.length !== 5) return { deny: 'malformed proof' }
+      // single-use nonce, issued by us, for THIS reader, not expired
+      const issued = state.get(`nonce:${proof.nonce}`)
+      if (!issued) return { deny: 'nonce was not issued by this gate' }
+      const n = JSON.parse(issued)
+      if (n.used) return { deny: 'nonce already used' }
+      if (n.readerPub !== readerPub) return { deny: 'proof was requested by a different reader' }
+      if (now() > n.expiresAt + 10 * 60_000) return { deny: 'challenge expired' }
+      if (proof.protocol_version !== '4.0') return { deny: 'not a World ID 4.0 proof' }
+      if (proof.action !== undefined && proof.action !== actionFor(ref)) return { deny: 'proof is for another post' }
+      if (proof.environment !== undefined && proof.environment !== env) return { deny: `proof is from ${proof.environment}, gate expects ${env}` }
+      if (r0.identifier !== CREDENTIAL[preset]) return { deny: `needs ${CREDENTIAL[preset]}, got ${r0.identifier}` }
+      if (r0.signal_hash !== hashSignal(signalFor(ref, readerPub))) return { deny: 'proof is bound to another post or reader' }
+      // burn the nonce BEFORE the slow network checks, so a racing duplicate cannot pass twice
+      state.set(`nonce:${proof.nonce}`, JSON.stringify({ ...n, used: true }))
+
+      const [a, c] = await Promise.all([api(proof), chain(proof, actionFor(ref))])
+      if (!c.ok) return { deny: `World Chain verifier did not confirm (${(c.verdicts ?? []).join('/') || 'invalid'})` }
+      if (a.ok === false) return { deny: `World verify API refused (${a.reason})` }
+      return { ok: true, nullifier: r0.nullifier, api: a.skipped ? 'skipped' : 'ok' }
+    },
+  }
+}

@@ -19,7 +19,8 @@ import { genKeyPair, toHex, fromHex } from '../shared/keys.mjs'
 export const REF_LEN = 8
 const MAX_PARAMS_BYTES = 2048
 
-export function createGate({ dbPath = ':memory:', keyHex } = {}) {
+export function createGate({ dbPath = ':memory:', keyHex, world = null } = {}) {
+  const services = { world }
   const db = new DatabaseSync(dbPath)
   db.exec(`CREATE TABLE IF NOT EXISTS deposits (
     ref TEXT PRIMARY KEY, check_id TEXT NOT NULL, params TEXT NOT NULL,
@@ -45,7 +46,8 @@ export function createGate({ dbPath = ':memory:', keyHex } = {}) {
 
   return {
     pub: toHex(pub),
-    checks: Object.values(CHECKS).filter((m) => m.kind === 'attested').map((m) => m.id),
+    checks: Object.values(CHECKS).filter((m) => m.kind === 'attested' && (m.id !== 'human' || world)).map((m) => m.id),
+    world: world ? { env: world.env } : null,
 
     /**
      * @param {{check: string, params: object, box: {eph,ct}, policyHash: string}} req
@@ -69,6 +71,23 @@ export function createGate({ dbPath = ':memory:', keyHex } = {}) {
      * @param {{ref: string, readerPub: string, policyHash: string, proof?: object}} req
      * @returns {Promise<{box: {eph,ct}} | {deny: string, retryAt?: number}>}
      */
+    /**
+     * Some attested checks need a round trip before the reader can prove anything — World ID must sign
+     * a request bound to this post and reader first. Checks without `gate.challenge` do not use it.
+     * @param {{ref: string, readerPub: string, policyHash: string}} req
+     */
+    challenge(req) {
+      if (!/^[0-9a-f]{16}$/.test(req?.ref ?? '')) throw httpError(400, 'bad ref')
+      if (!/^[0-9a-f]{64}$/.test(req.readerPub ?? '')) throw httpError(400, 'bad readerPub')
+      const row = db.prepare('SELECT * FROM deposits WHERE ref = ?').get(req.ref)
+      if (!row) return { deny: 'unknown reference' }
+      if (row.policy_hash !== req.policyHash) return { deny: 'reference does not belong to this post' }
+      const m = CHECKS[row.check_id]
+      if (!m.gate.challenge) return { deny: 'this check needs no challenge' }
+      const stored = { check: row.check_id, params: JSON.parse(row.params), ref: row.ref, policyHash: row.policy_hash }
+      return m.gate.challenge(stored, req, stateFor(row.check_id, row.ref), services)
+    },
+
     async release(req) {
       if (!/^[0-9a-f]{16}$/.test(req?.ref ?? '')) throw httpError(400, 'bad ref')
       if (!/^[0-9a-f]{64}$/.test(req.readerPub ?? '')) throw httpError(400, 'bad readerPub')
@@ -79,7 +98,7 @@ export function createGate({ dbPath = ':memory:', keyHex } = {}) {
       if (row.policy_hash !== req.policyHash) return { deny: 'reference does not belong to this post' }
       const m = CHECKS[row.check_id]
       const stored = { check: row.check_id, params: JSON.parse(row.params), ref: row.ref, policyHash: row.policy_hash }
-      const verdict = await m.gate.release(stored, req, stateFor(row.check_id, row.ref))
+      const verdict = await m.gate.release(stored, req, stateFor(row.check_id, row.ref), services)
       if (verdict !== true) return typeof verdict === 'object' ? verdict : { deny: 'refused' }
       return { box: sealTo(req.readerPub, fromHex(row.share), CTX.release) }
     },
