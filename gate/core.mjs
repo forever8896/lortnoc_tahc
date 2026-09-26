@@ -23,7 +23,7 @@ import { createKeyring } from './keyring.mjs'
 export const REF_LEN = 8
 const MAX_PARAMS_BYTES = 2048
 
-export function createGate({ dbPath = ':memory:', keyHex, world = null, ensSpaces = null, holders = null } = {}) {
+export function createGate({ dbPath = ':memory:', keyHex, world = null, ensSpaces = null, holders = null, debug = null } = {}) {
   const services = { world, ensSpaces, holders }
   const db = new DatabaseSync(dbPath)
   db.exec(`CREATE TABLE IF NOT EXISTS deposits (
@@ -45,7 +45,8 @@ export function createGate({ dbPath = ':memory:', keyHex, world = null, ensSpace
   const signer = signerFrom(priv)
   const spaces = createSpaces(db, { secret: signer.secret, signPriv: signer.priv, ensSpaces })
   services.spaces = spaces
-  const keyring = createKeyring(db, { world })
+  const keyring = createKeyring(db, { world, debug })
+  let unlockN = 0
 
   /** Per-check durable state (e.g. spent nullifiers), namespaced so checks cannot collide. */
   const stateFor = (checkId, ref) => ({
@@ -137,6 +138,7 @@ export function createGate({ dbPath = ':memory:', keyHex, world = null, ensSpace
       })
       const ref = toHex(crypto.getRandomValues(new Uint8Array(REF_LEN)))
       db.prepare('INSERT INTO sealed VALUES (?, ?, ?)').run(ref, JSON.stringify(stored), Date.now())
+      debug?.flow(`seal:${ref}`, 'New sealed post')('gate stored its checks', true, { ref, checks: stored.map((x) => ({ check: x.check, ...x.params })) })
       return { ref }
     },
 
@@ -152,6 +154,8 @@ export function createGate({ dbPath = ':memory:', keyHex, world = null, ensSpace
       const refs = [...new Set((req.refs ?? []).filter((r) => /^[0-9a-f]{16}$/.test(r)))].slice(0, 60)
       const claims = keyring.claimsOf(req.token)
       const results = []
+      const t = debug ? debug.flow(`unlock:${++unlockN}`, `Page scan · ${refs.length} candidate${refs.length === 1 ? '' : 's'}`) : () => {}
+      t('reader keyring', null, { token: req.token ? 'present' : 'none', human: !!claims.poh, selfie: !!claims.selfie, nationalities: Object.keys(claims.nat ?? {}), wallets: claims.wallets ?? [] })
       for (const ref of refs) {
         const row = db.prepare('SELECT items FROM sealed WHERE ref = ?').get(ref)
         if (!row) continue
@@ -159,12 +163,15 @@ export function createGate({ dbPath = ':memory:', keyHex, world = null, ensSpace
         const members = []
         for (const it of JSON.parse(row.items)) {
           const v = await CHECKS[it.check].gate.unlock({ check: it.check, params: it.params, ref }, claims, services, { memberPub: req.memberPub })
+          t(`post ${ref.slice(0, 8)} · ${it.check}`, !!v, { ...it.params, ...(v?.member ? { member: v.member.memberId } : {}) })
           if (!v) continue
           shares.push(fromHex(it.share))
           if (v.member) members.push(v.member)
         }
         if (shares.length) results.push({ ref, boxes: shares.map((sh) => sealTo(req.readerPub, sh, CTX.release)), members })
       }
+      if (!results.length) t('result', null, { opened: 0, note: refs.length ? 'no candidate is a gate post this reader qualifies for' : 'nothing to check' })
+      else t('result', true, { opened: results.length })
       return { results }
     },
 

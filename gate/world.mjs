@@ -17,6 +17,7 @@
 // without World's servers.
 import { signRequest } from '@worldcoin/idkit-core/signing'
 import { hashSignal } from '@worldcoin/idkit-core/hashing'
+import { short } from './debug.mjs'
 import { createPublicClient, http } from 'viem'
 
 export const VERIFIER = {
@@ -84,7 +85,8 @@ export function createWorld({
     if (env !== 'production') headers['x-staging-verification-token'] = stagingToken
     const r = await fetch(`https://developer.world.org/api/v4/verify/${rpId}`, { method: 'POST', headers, body: JSON.stringify(proof) })
     const j = await r.json().catch(() => ({}))
-    return r.ok && j.success ? { ok: true, environment: j.environment } : { ok: false, reason: j.code ?? `http ${r.status}` }
+    return r.ok && j.success ? { ok: true, environment: j.environment }
+      : { ok: false, reason: j.code ?? `http ${r.status}`, detail: j.detail ?? j.results?.map((x) => x.detail ?? x.code).join('; '), status: r.status }
   })
 
   const chain = verifyChain ?? (async (proof, action, env, r0 = proof.responses[0]) => {
@@ -146,41 +148,56 @@ export function createWorld({
     },
 
     /** @returns {Promise<{ok: true, nullifier: string} | {deny: string}>} */
-    async verify(proof, { ref, readerPub, preset = 'poh', action = actionFor(ref) }, state) {
+    async verify(proof, { ref, readerPub, preset = 'poh', action = actionFor(ref), trace = () => {} }, state) {
       // (preset 'identity' = Identity Check on nationality — see the branch below)
+      // Every check reports itself to `trace` (gate/debug.mjs), pass or fail, so a refusal at the booth
+      // says exactly which step said no and what it saw.
+      const deny = (step, why, detail = {}) => (trace(step, false, { why, ...detail }), { deny: why })
+      const pass = (step, detail = {}) => trace(step, true, detail)
       // A proof may carry several responses (World's own API accepts if ANY verifies). Use the one
       // with the credential this check asks for — not blindly the first.
       const all = Array.isArray(proof?.responses) ? proof.responses : []
+      trace('proof received', null, {
+        environment: proof?.environment, protocol: proof?.protocol_version, action: proof?.action,
+        identity_attested: proof?.identity_attested, nonce: short(proof?.nonce),
+        responses: all.map((r) => ({ identifier: r?.identifier, issuer_schema_id: r?.issuer_schema_id, signal_hash: r?.signal_hash ? short(r.signal_hash) : 'absent', nullifier: short(r?.nullifier) })),
+      })
       const r0 = all.find((r) => (preset === 'identity'
         ? DOCUMENT_CREDENTIALS.has(r?.identifier) || DOCUMENT_SCHEMAS.has(Number(r?.issuer_schema_id))
         : r?.identifier === CREDENTIAL[preset])) ?? all[0]
-      if (!r0 || !Array.isArray(r0.proof) || r0.proof.length !== 5) return { deny: 'malformed proof' }
+      if (!r0 || !Array.isArray(r0.proof) || r0.proof.length !== 5) return deny('proof shape', 'malformed proof')
       // single-use nonce, issued by us, for THIS reader, not expired
       const issued = state.get(`nonce:${proof.nonce}`)
-      if (!issued) return { deny: 'nonce was not issued by this gate' }
+      if (!issued) return deny('nonce', 'nonce was not issued by this gate')
       const n = JSON.parse(issued)
-      if (n.used) return { deny: 'nonce already used' }
-      if (n.readerPub !== readerPub) return { deny: 'proof was requested by a different reader' }
-      if (n.ref !== undefined && n.ref !== ref) return { deny: 'proof is for another post' }
-      if (now() > n.expiresAt + 10 * 60_000) return { deny: 'challenge expired' }
-      if (proof.protocol_version !== '4.0') return { deny: 'not a World ID 4.0 proof' }
-      if (proof.action !== undefined && proof.action !== action) return { deny: 'proof is for another post' }
+      if (n.used) return deny('nonce', 'nonce already used')
+      if (n.readerPub !== readerPub) return deny('reader', 'proof was requested by a different reader')
+      if (n.ref !== undefined && n.ref !== ref) return deny('post', 'proof is for another post')
+      if (now() > n.expiresAt + 10 * 60_000) return deny('expiry', 'challenge expired', { expiredAt: new Date(n.expiresAt).toISOString() })
+      pass('nonce · reader · expiry')
+      if (proof.protocol_version !== '4.0') return deny('protocol', 'not a World ID 4.0 proof', { got: proof.protocol_version })
+      if (proof.action !== undefined && proof.action !== action) return deny('action', 'proof is for another post', { got: proof.action, want: action })
       const e = n.env ?? env // the environment THIS request was issued for
-      if (proof.environment !== undefined && proof.environment !== e) return { deny: `proof is from ${proof.environment}, the request was for ${e}` }
+      if (proof.environment !== undefined && proof.environment !== e) return deny('environment', `proof is from ${proof.environment}, the request was for ${e}`)
+      pass('protocol · action · environment', { environment: e })
       if (preset === 'identity') {
         // Nationality: World App only answers with a proof when the passport matches; the backend
         // must still check it said so (docs: "identity_attested so your backend can tell").
-        if (proof.identity_attested !== true) return { deny: 'World ID did not attest the required nationality' }
+        if (proof.identity_attested !== true) return deny('nationality attested', 'World ID did not attest the required nationality', { identity_attested: proof.identity_attested })
         if (!DOCUMENT_CREDENTIALS.has(r0.identifier) && !DOCUMENT_SCHEMAS.has(Number(r0.issuer_schema_id)))
-          return { deny: `needs a passport / eID credential, got ${r0.identifier}` }
+          return deny('credential', `needs a passport / eID credential, got ${r0.identifier}`, { issuer_schema_id: r0.issuer_schema_id })
+        pass('nationality attested · passport credential', { identifier: r0.identifier, issuer_schema_id: r0.issuer_schema_id })
       } else {
-        if (r0.identifier !== CREDENTIAL[preset]) return { deny: `needs ${CREDENTIAL[preset]}, got ${r0.identifier}` }
-        if (r0.signal_hash !== hashSignal(signalFor(ref, readerPub))) return { deny: 'proof is bound to another post or reader' }
+        if (r0.identifier !== CREDENTIAL[preset]) return deny('credential', `needs ${CREDENTIAL[preset]}, got ${r0.identifier}`)
+        if (r0.signal_hash !== hashSignal(signalFor(ref, readerPub))) return deny('signal', 'proof is bound to another post or reader')
+        pass('credential · signal', { identifier: r0.identifier })
       }
       // burn the nonce BEFORE the slow network checks, so a racing duplicate cannot pass twice
       state.set(`nonce:${proof.nonce}`, JSON.stringify({ ...n, used: true }))
 
       const [a, c] = await Promise.all([api(proof, e), chain(proof, action, e, r0)])
+      trace('World Chain verifier', c.ok, { verdicts: c.verdicts, contract: VERIFIER[e] })
+      trace('World verify API', a.ok === false ? false : a.skipped ? null : true, a.ok === false ? { code: a.reason, detail: a.detail, status: a.status } : a.skipped ? { skipped: a.skipped } : {})
       if (!c.ok) return { deny: `World Chain verifier did not confirm (${(c.verdicts ?? []).join('/') || 'invalid'})` }
       if (a.ok === false) return { deny: `World verify API refused (${a.reason})` }
       return { ok: true, nullifier: r0.nullifier, api: a.skipped ? 'skipped' : 'ok', verdicts: c.verdicts }

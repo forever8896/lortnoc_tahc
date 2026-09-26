@@ -169,6 +169,19 @@ async function openWorldTab(id: string, request: unknown, openerTabId?: number, 
   await chrome.storage.session.set({ [`worldTab:${id}`]: tab.id })
   return { ok: true, data: { tabId: tab.id } }
 }
+// A World ID tab closed with the browser's × (not the widget's own): the widget cannot say so — tell
+// whoever waits (a keyring connection here, a reveal card) that it ended without a proof.
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  const all = await chrome.storage.session.get(null)
+  for (const [k, v] of Object.entries(all)) {
+    if (!k.startsWith('worldTab:') || v !== tabId) continue
+    const m = { type: 'WORLD_WIDGET_CLOSED' as const, id: k.slice('worldTab:'.length) }
+    await chrome.storage.session.remove(k)
+    onWidgetMessage(m)
+    void chrome.runtime.sendMessage(m).catch(() => {})
+  }
+})
+
 /** Close THE widget tab recorded at open (never the sender's tab — the card's sender is the site). */
 async function closeWorldTab(id: string): Promise<SwResponse> {
   const keys = [`worldOpener:${id}`, `worldTab:${id}`, `world:${id}`]

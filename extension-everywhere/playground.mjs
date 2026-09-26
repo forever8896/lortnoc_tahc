@@ -110,6 +110,22 @@ details.t summary::-webkit-details-marker{display:none}
 details.t summary .tag{font-family:var(--mono);font-size:10px;color:var(--faint);border:1px solid var(--rule);border-radius:99px;padding:2px 8px;white-space:nowrap}
 details.t[open] summary{border-bottom:1px solid var(--rule)}
 details.t ol{margin:0;padding:10px 14px 12px 32px}details.t li{margin:3px 0}
+
+.tabs{display:flex;gap:4px;margin-top:14px;border-bottom:1px solid var(--rule)}
+.tab{background:none;border:0;color:var(--muted);font:500 13px Jost,system-ui;padding:8px 10px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab.on{color:var(--ink);border-bottom-color:var(--signal)}
+#actBadge{font-family:var(--mono);font-size:10px;color:#000;background:var(--signal);border-radius:99px;padding:1px 6px;display:none}
+.flow{background:var(--panel);border:1px solid var(--rule);border-radius:12px;margin-bottom:8px;overflow:hidden}
+.flow.bad{border-color:#f0806a66}.flow.good{border-color:#12c4be55}
+.flow-h{display:flex;justify-content:space-between;gap:8px;padding:10px 12px;cursor:pointer;align-items:baseline}
+.flow-h b{font-weight:500}.flow-h .when{font-family:var(--mono);font-size:10.5px;color:var(--faint);white-space:nowrap}
+.verdict{font-size:12px;margin-top:2px}.verdict.bad{color:var(--bad)}.verdict.good{color:var(--signal)}.verdict.wait{color:var(--warn)}
+.steps{border-top:1px solid var(--rule);padding:6px 12px 10px}
+.st2{display:grid;grid-template-columns:16px 1fr auto;gap:8px;padding:4px 0;font-size:12.5px;border-bottom:1px dashed var(--rule)}
+.st2:last-child{border-bottom:0}.st2 .ic.ok{color:var(--signal)}.st2 .ic.bad{color:var(--bad)}.st2 .ic.na{color:var(--faint)}
+.st2 .t{font-family:var(--mono);font-size:10px;color:var(--faint)}
+.kv{grid-column:2/4;font-family:var(--mono);font-size:10.5px;color:var(--muted);word-break:break-all;margin-top:2px}
+.kv .why{color:var(--bad)}
 kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--rule);border-bottom-width:2px;border-radius:5px;padding:1px 5px;color:var(--ink)}
 .q{color:var(--signal)}
 .held{display:flex;gap:6px;flex-wrap:wrap}.chip{font-family:var(--mono);font-size:11px;border:1px solid var(--rule);border-radius:99px;padding:3px 9px;color:var(--muted)}
@@ -137,6 +153,13 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--rule);border-b
 
 <aside class="lab">
   <div class="brand">lortnoc <b>tahc</b><small>lab</small></div>
+  <div class="tabs"><button class="tab on" data-v="guideView">Guide</button><button class="tab" data-v="activityView">Gate activity <span id="actBadge"></span></button></div>
+  <div id="activityView" hidden>
+    <div class="small muted" style="margin:10px 0">Every step the gate takes — and the extension's half of it — live. Newest first. Nothing secret is shown: no IPs, keys or messages; nullifiers shortened.</div>
+    <div class="row" style="justify-content:space-between;margin:0 0 8px"><label class="small muted"><input type="checkbox" id="showScans"> show page scans</label><button class="link" id="clearAct" style="color:var(--muted)">clear view</button></div>
+    <div id="flows"><div class="small muted">Waiting for activity…</div></div>
+  </div>
+  <div id="guideView">
   <div class="small muted" style="margin-top:4px">Try every feature here without posting anything real. Replies are saved on this machine.</div>
 
   <div class="eyebrow">Status</div>
@@ -185,6 +208,7 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--rule);border-b
       <li>Any preset → <b>Edit rules</b>: “Readers must [know the passphrase] <b>or</b> [be a verified human] <b>and</b> [wait until …]”.</li>
       <li>The sentence underneath says exactly who will see it.</li></ol></details>
   </div>
+  </div>
 </aside>
 
 <script>
@@ -209,6 +233,61 @@ async function refresh() {
   $('held').innerHTML = g.ok && g.held.length ? g.held.map((h) => '<span class="chip">' + h.check_id + ' · ' + h.n + '</span>').join('') : '<span class="chip">nothing yet</span>'
 }
 refresh(); setInterval(refresh, 5000)
+
+// ---- tabs
+document.querySelectorAll('.tab').forEach((b) => (b.onclick = () => {
+  document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('on', x === b))
+  for (const v of ['guideView', 'activityView']) $(v).hidden = v !== b.dataset.v
+  if (b.dataset.v === 'activityView') (unseen = 0, badge())
+}))
+// ---- gate activity
+let last = 0, unseen = 0
+const flows = new Map() // flow id → { title, events[] }
+const open = new Set()
+const esc2 = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+const badge = () => { const b = $('actBadge'); b.textContent = unseen; b.style.display = unseen ? 'inline' : 'none' }
+const fmtT = (ms) => new Date(ms).toLocaleTimeString()
+const kv = (d) => Object.entries(d || {}).map(([k, v]) => (k === 'why' ? '<span class="why">' : '<span>') + esc2(k) + ': ' + esc2(typeof v === 'object' ? JSON.stringify(v) : v) + '</span>').join('<br>')
+// A flow is green only when it reached an END: a keyring session granted, a post stored, a scan result.
+const FINAL = /session granted|gate accepted|stored its checks|^result/
+function verdict(evs) {
+  const done = [...evs].reverse().find((e) => e.ok === true && FINAL.test(e.step))
+  const bad = [...evs].reverse().find((e) => e.ok === false)
+  if (done && (!bad || bad.id < done.id)) return ['good', '✓ ' + done.step]
+  if (bad) return ['bad', '✗ ' + bad.step + (bad.detail && bad.detail.why ? ' — ' + bad.detail.why : '')]
+  const idle = Date.now() - evs[evs.length - 1].at > 5 * 60_000
+  return ['wait', (idle ? '… never finished — stopped after: ' : '… waiting — last: ') + evs[evs.length - 1].step]
+}
+function render() {
+  const showScans = $('showScans').checked
+  const list = [...flows.entries()].filter(([id]) => showScans || !/^(unlock|scan):/.test(id)).sort((a, b) => b[1].events.at(-1).id - a[1].events.at(-1).id)
+  if (!list.length) return void ($('flows').innerHTML = '<div class="small muted">No activity yet. Connect World ID or a wallet in the extension, or write a post — it appears here.</div>')
+  $('flows').innerHTML = list.slice(0, 40).map(([id, f]) => {
+    const [cls, text] = verdict(f.events)
+    const steps = f.events.filter((e) => e.step !== 'started').map((e) => '<div class="st2"><span class="ic ' + (e.ok === true ? 'ok">✓' : e.ok === false ? 'bad">✗' : 'na">·') + '</span><span>' + esc2(e.step) + '</span><span class="t">+' + ((e.at - f.events[0].at) / 1000).toFixed(1) + 's</span>' + (e.detail && Object.keys(e.detail).length ? '<div class="kv">' + kv(e.detail) + '</div>' : '') + '</div>').join('')
+    return '<div class="flow ' + cls + '"><div class="flow-h" data-id="' + esc2(id) + '"><div><b>' + esc2(f.title || id) + '</b><div class="verdict ' + cls + '">' + esc2(text) + '</div></div><span class="when">' + fmtT(f.events[0].at) + '</span></div>' + (open.has(id) ? '<div class="steps">' + steps + '</div>' : '') + '</div>'
+  }).join('')
+  $('flows').querySelectorAll('.flow-h').forEach((h) => (h.onclick = () => (open.has(h.dataset.id) ? open.delete(h.dataset.id) : open.add(h.dataset.id), render())))
+}
+async function poll() {
+  const j = await fetch('/api/events?since=' + last).then((r) => r.json()).catch(() => null)
+  if (!j || !j.events || !j.events.length) return
+  for (const e of j.events) {
+    last = Math.max(last, e.id)
+    const f = flows.get(e.flow) || { title: '', events: [] }
+    if (e.title) f.title = e.title
+    f.events.push(e)
+    flows.set(e.flow, f)
+    if (!/^(unlock|scan):/.test(e.flow)) {
+      open.add(e.flow) // a new connect / seal flow opens itself
+      if ($('activityView').hidden) unseen++
+    }
+  }
+  badge(); render()
+}
+$('showScans').onchange = render
+$('clearAct').onclick = () => (flows.clear(), render())
+poll(); setInterval(poll, 1500)
 </script>
 </body></html>`
 
@@ -227,6 +306,12 @@ createServer(async (req, res) => {
     return res.writeHead(303, { location: '/' }).end()
   }
   if (req.url === '/api/status') return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(await status()))
+  // the gate's activity trail (gate/debug.mjs) — fetched here, so the page needs no CORS
+  if (req.url?.startsWith('/api/events')) {
+    const since = new URL(req.url, 'http://x').searchParams.get('since') ?? '0'
+    const j = await fetch(`${GATE}/debug/events?since=${encodeURIComponent(since)}`, { signal: AbortSignal.timeout(4000) }).then((r) => r.json()).catch(() => ({ events: [], down: true }))
+    return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(j))
+  }
   const font = /^\/fonts\/(jost-[345]00\.woff2)$/.exec(req.url ?? '')
   if (font) return res.writeHead(200, { 'content-type': 'font/woff2', 'cache-control': 'max-age=86400' }).end(readFileSync(join(HERE, 'public/fonts/jost', font[1])))
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(page())

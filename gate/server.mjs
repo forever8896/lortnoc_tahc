@@ -23,6 +23,7 @@ import { createGate } from './core.mjs'
 import { createWorld } from './world.mjs'
 import { createEnsSpaces } from './ens-spaces.mjs'
 import { createHolders } from './holders.mjs'
+import { createDebug } from './debug.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT ?? 8790)
@@ -41,7 +42,10 @@ const world = createWorld({
   rpcs: process.env.WORLDCHAIN_RPCS?.split(','),
 })
 const ensSpaces = createEnsSpaces()
-const gate = createGate({ dbPath: DB, keyHex: process.env.GATE_KEY, world, ensSpaces, holders: createHolders({ ensSpaces }) })
+// The activity trail (gate/debug.mjs) — GATE_DEBUG=0 turns it off. Read from THIS machine only.
+const debug = process.env.GATE_DEBUG === '0' ? null : createDebug({ file: join(dirname(DB), 'events.jsonl') })
+const gate = createGate({ dbPath: DB, keyHex: process.env.GATE_KEY, world, ensSpaces, holders: createHolders({ ensSpaces }), debug })
+const local = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress)
 const ORIGINS = (process.env.GATE_ORIGINS ?? '*').split(',')
 
 const WINDOW = 60_000, LIMIT = 60
@@ -72,6 +76,10 @@ createServer(async (req, res) => {
     if (req.method === 'GET' && (req.url === '/health' || req.url === '/')) {
       return send(res, 200, { ok: true, pub: gate.pub, signPub: gate.signPub, checks: gate.checks, world: gate.world, deposits: gate.stats() }, origin)
     }
+    if (req.method === 'GET' && req.url?.startsWith('/debug/events')) {
+      if (!debug || !local(req)) return send(res, 404, { error: 'not found' }, origin)
+      return send(res, 200, { events: debug.since(Number(new URL(req.url, 'http://x').searchParams.get('since') ?? 0)) }, origin)
+    }
     if (req.method !== 'POST') return send(res, 404, { error: 'not found' }, origin)
     let raw = ''
     for await (const chunk of req) {
@@ -81,6 +89,15 @@ createServer(async (req, res) => {
     const body = JSON.parse(raw || '{}')
     if (req.url === '/deposit') return send(res, 200, gate.deposit(body), origin)
     if (req.url === '/challenge') return send(res, 200, await gate.challenge(body), origin)
+    // the extension's half of a flow, into the same trail (strings only, size-capped)
+    if (req.url === '/debug/client') {
+      if (!debug || !local(req)) return send(res, 404, { error: 'not found' }, origin)
+      const { flow, step, ok, detail } = body ?? {}
+      if (typeof flow !== 'string' || typeof step !== 'string' || flow.length > 80 || step.length > 120) return send(res, 400, { error: 'bad event' }, origin)
+      const d = JSON.stringify(detail ?? {})
+      debug.log(flow, `extension · ${step}`, ok === true ? true : ok === false ? false : null, d.length > 2000 ? { note: 'detail too large' } : JSON.parse(d))
+      return send(res, 200, { ok: true }, origin)
+    }
     // sealed posts + the reader's keyring (shared/sealed.mjs, gate/keyring.mjs)
     if (req.url === '/seal') return send(res, 200, gate.seal(body), origin)
     if (req.url === '/unlock') return send(res, 200, await gate.unlock(body), origin)

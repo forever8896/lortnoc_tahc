@@ -138,6 +138,9 @@ async function renderKeys() {
   $('worldState').innerHTML = w.length ? `<span class="ok">✓ ${w.join(' · ')}</span>` : '<span class="muted">not connected</span>'
   $('walletState').innerHTML = claims?.wallets?.length ? `<span class="ok">✓ ${claims.wallets.map((a) => a.slice(0, 6) + '…' + a.slice(-4)).join(', ')}</span>` : '<span class="muted">none</span>'
   $('forget').hidden = !w.length && !claims?.wallets?.length
+  // a connection that failed while this popup was closed (World ID opens in a tab, which closes it)
+  const last = (await chrome.storage.local.get('keyringLastError')).keyringLastError as { at: number; error: string } | null
+  if (last && Date.now() - last.at < 15 * 60_000 && !$('status').textContent) $('status').innerHTML = `<span style="color:var(--warn)">Last try: ${esc(last.error)}</span>`
 }
 $<HTMLSelectElement>('natSel').innerHTML = '<option value="">Nationality (passport)…</option>' + COUNTRIES.map(([a, n]) => `<option value="${a}">${n}</option>`).join('')
 $('addPass').onclick = async () => {
