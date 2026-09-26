@@ -36,6 +36,7 @@ jobs:
           npm ci --prefix app
           npm ci --prefix shared
           npm ci --prefix relayer
+          npm ci --prefix gate
           npm install --no-audit --no-fund
 
       - name: Unit + invariants

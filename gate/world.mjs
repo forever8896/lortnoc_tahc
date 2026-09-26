@@ -160,7 +160,7 @@ export function createWorld({
       const [a, c] = await Promise.all([api(proof), chain(proof, action)])
       if (!c.ok) return { deny: `World Chain verifier did not confirm (${(c.verdicts ?? []).join('/') || 'invalid'})` }
       if (a.ok === false) return { deny: `World verify API refused (${a.reason})` }
-      return { ok: true, nullifier: r0.nullifier, api: a.skipped ? 'skipped' : 'ok' }
+      return { ok: true, nullifier: r0.nullifier, api: a.skipped ? 'skipped' : 'ok', verdicts: c.verdicts }
     },
   }
 }
