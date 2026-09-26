@@ -15,6 +15,9 @@ import { DatabaseSync } from 'node:sqlite'
 import { CHECKS } from '../shared/checks/index.mjs'
 import { sealTo, openBox, publicKeyOf, CTX } from '../shared/gatebox.mjs'
 import { genKeyPair, toHex, fromHex } from '../shared/keys.mjs'
+import { signerFrom } from '../shared/member.mjs'
+import { httpError } from './core-errors.mjs'
+import { createSpaces } from './spaces.mjs'
 
 export const REF_LEN = 8
 const MAX_PARAMS_BYTES = 2048
@@ -36,6 +39,9 @@ export function createGate({ dbPath = ':memory:', keyHex, world = null } = {}) {
     if (!row) db.prepare('INSERT INTO gate_state (k, v) VALUES (?, ?)').run('priv', toHex(priv))
   }
   const pub = publicKeyOf(priv)
+  const signer = signerFrom(priv)
+  const spaces = createSpaces(db, { secret: signer.secret, signPriv: signer.priv })
+  services.spaces = spaces
 
   /** Per-check durable state (e.g. spent nullifiers), namespaced so checks cannot collide. */
   const stateFor = (checkId, ref) => ({
@@ -46,6 +52,9 @@ export function createGate({ dbPath = ':memory:', keyHex, world = null } = {}) {
 
   return {
     pub: toHex(pub),
+    /** Ed25519 key readers use to verify "verified member" attestations. */
+    signPub: signer.pub,
+    spaces,
     checks: Object.values(CHECKS).filter((m) => m.kind === 'attested' && (m.id !== 'human' || world)).map((m) => m.id),
     world: world ? { env: world.env } : null,
 
@@ -99,8 +108,9 @@ export function createGate({ dbPath = ':memory:', keyHex, world = null } = {}) {
       const m = CHECKS[row.check_id]
       const stored = { check: row.check_id, params: JSON.parse(row.params), ref: row.ref, policyHash: row.policy_hash }
       const verdict = await m.gate.release(stored, req, stateFor(row.check_id, row.ref), services)
-      if (verdict !== true) return typeof verdict === 'object' ? verdict : { deny: 'refused' }
-      return { box: sealTo(req.readerPub, fromHex(row.share), CTX.release) }
+      const ok = verdict === true || verdict?.ok === true
+      if (!ok) return typeof verdict === 'object' ? verdict : { deny: 'refused' }
+      return { box: sealTo(req.readerPub, fromHex(row.share), CTX.release), ...(verdict.member ? { member: verdict.member } : {}) }
     },
 
     stats() {
@@ -110,6 +120,4 @@ export function createGate({ dbPath = ':memory:', keyHex, world = null } = {}) {
   }
 }
 
-export function httpError(status, message) {
-  return Object.assign(new Error(message), { status })
-}
+export { httpError }

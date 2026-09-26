@@ -40,6 +40,8 @@ export const confirmed = (verdicts) =>
   verdicts.filter((v) => v === 'valid').length >= 2 && !verdicts.includes('invalid')
 
 export const actionFor = (ref) => `lortnoc-read-${ref}`
+/** One action per SPACE: the same human always gets the same nullifier there, so a ban sticks. */
+export const spaceAction = (space) => `lortnoc-space-${space}`
 export const signalFor = (ref, readerPub) => `0x${ref}${readerPub}`
 
 export function createWorld({
@@ -80,9 +82,10 @@ export function createWorld({
 
   return {
     env,
+    /** Per-post action, or per-space when the post belongs to a space (bans need a stable nullifier). */
+    actionFor: (ref, space) => (space ? spaceAction(space) : actionFor(ref)),
     /** Sign a request for one post + one reader. The nonce is remembered as issued. */
-    challenge(ref, readerPub, state, preset = 'poh') {
-      const action = actionFor(ref)
+    challenge(ref, readerPub, state, preset = 'poh', action = actionFor(ref)) {
       const s = signRequest({ signingKeyHex: signingKey.replace(/^0x/, ''), action })
       state.set(`nonce:${s.nonce}`, JSON.stringify({ readerPub, expiresAt: s.expiresAt * 1000 }))
       return {
@@ -96,7 +99,7 @@ export function createWorld({
     },
 
     /** @returns {Promise<{ok: true, nullifier: string} | {deny: string}>} */
-    async verify(proof, { ref, readerPub, preset = 'poh' }, state) {
+    async verify(proof, { ref, readerPub, preset = 'poh', action = actionFor(ref) }, state) {
       const r0 = proof?.responses?.[0]
       if (!r0 || !Array.isArray(r0.proof) || r0.proof.length !== 5) return { deny: 'malformed proof' }
       // single-use nonce, issued by us, for THIS reader, not expired
@@ -107,14 +110,14 @@ export function createWorld({
       if (n.readerPub !== readerPub) return { deny: 'proof was requested by a different reader' }
       if (now() > n.expiresAt + 10 * 60_000) return { deny: 'challenge expired' }
       if (proof.protocol_version !== '4.0') return { deny: 'not a World ID 4.0 proof' }
-      if (proof.action !== undefined && proof.action !== actionFor(ref)) return { deny: 'proof is for another post' }
+      if (proof.action !== undefined && proof.action !== action) return { deny: 'proof is for another post' }
       if (proof.environment !== undefined && proof.environment !== env) return { deny: `proof is from ${proof.environment}, gate expects ${env}` }
       if (r0.identifier !== CREDENTIAL[preset]) return { deny: `needs ${CREDENTIAL[preset]}, got ${r0.identifier}` }
       if (r0.signal_hash !== hashSignal(signalFor(ref, readerPub))) return { deny: 'proof is bound to another post or reader' }
       // burn the nonce BEFORE the slow network checks, so a racing duplicate cannot pass twice
       state.set(`nonce:${proof.nonce}`, JSON.stringify({ ...n, used: true }))
 
-      const [a, c] = await Promise.all([api(proof), chain(proof, actionFor(ref))])
+      const [a, c] = await Promise.all([api(proof), chain(proof, action)])
       if (!c.ok) return { deny: `World Chain verifier did not confirm (${(c.verdicts ?? []).join('/') || 'invalid'})` }
       if (a.ok === false) return { deny: `World verify API refused (${a.reason})` }
       return { ok: true, nullifier: r0.nullifier, api: a.skipped ? 'skipped' : 'ok' }

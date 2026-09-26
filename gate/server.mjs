@@ -4,7 +4,10 @@
 //   GET  /health    → { ok, pub, checks, deposits }
 //   POST /deposit   { check, params, box, policyHash }        → { ref }
 //   POST /challenge { ref, readerPub, policyHash }            → { request } | { deny }   (World ID)
-//   POST /release   { ref, readerPub, policyHash, proof? }    → { box } | { deny, retryAt? }
+//   POST /release   { ref, readerPub, policyHash, proof?, memberPub? } → { box, member? } | { deny, retryAt? }
+//   POST /space     { space, ownerPub, sig }                  → register a space to an owner key
+//   POST /member/sign { space, memberId, contentHash, sig }   → { sig } gate attestation of a member's post
+//   POST /ban       { space, memberId, sig, unban? }          → owner bans/unbans a member (by nullifier)
 //
 // Env: PORT (8790), GATE_DB (gate/.data/gate.sqlite), GATE_KEY (hex X25519 private key; if unset it
 // is generated once and kept in the database), GATE_ORIGINS (comma list for CORS; default *).
@@ -64,7 +67,7 @@ createServer(async (req, res) => {
   if (limited(req.socket.remoteAddress ?? '?')) return send(res, 429, { error: 'slow down' }, origin)
   try {
     if (req.method === 'GET' && req.url === '/health') {
-      return send(res, 200, { ok: true, pub: gate.pub, checks: gate.checks, world: gate.world, deposits: gate.stats() }, origin)
+      return send(res, 200, { ok: true, pub: gate.pub, signPub: gate.signPub, checks: gate.checks, world: gate.world, deposits: gate.stats() }, origin)
     }
     if (req.method !== 'POST') return send(res, 404, { error: 'not found' }, origin)
     let raw = ''
@@ -75,6 +78,9 @@ createServer(async (req, res) => {
     const body = JSON.parse(raw || '{}')
     if (req.url === '/deposit') return send(res, 200, gate.deposit(body), origin)
     if (req.url === '/challenge') return send(res, 200, gate.challenge(body), origin)
+    if (req.url === '/space') return send(res, 200, gate.spaces.register(body), origin)
+    if (req.url === '/member/sign') return send(res, 200, gate.spaces.attest(body), origin)
+    if (req.url === '/ban') return send(res, 200, gate.spaces.ban(body), origin)
     if (req.url === '/release') return send(res, 200, await gate.release(body), origin)
     return send(res, 404, { error: 'not found' }, origin)
   } catch (e) {
