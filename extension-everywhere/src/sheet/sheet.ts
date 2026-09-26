@@ -242,13 +242,17 @@ window.addEventListener('message', (e) => {
   if (e.source !== parent) return
   const m = e.data as ContentToFrame
   if (m?.lortnoc !== 'inserted') return
-  if (m.how === 'field') setStatus('Inserted. Post it the way you normally would.', 'ok')
-  else {
-    $('result').hidden = false // only now does the user need to see the cover text
-    setStatus('Couldn’t write into that box — press Copy, then paste it in.', 'err')
+  if (m.how === 'field') {
+    $('result').hidden = true
+    setStatus('Inserted. Post it the way you normally would.', 'ok')
+  } else {
+    // The hidden text is ready — only the destination is missing. Keep it; don't make them redo it.
+    $('result').hidden = false
+    setStatus('Click the box you want to post in, then press Insert.', 'err')
   }
 })
 
+$('insert').onclick = () => toParent({ lortnoc: 'insert', text: lastCover })
 $('copy').onclick = async () => {
   await navigator.clipboard.writeText(lastCover)
   setStatus('Copied. Paste it into the box and post.', 'ok')
@@ -312,7 +316,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') toParent({ lortnoc: 'close' })
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void go()
 })
-if (location.hash === '#nofield') setStatus('No text box was focused — you will get a Copy button.')
+if (location.hash === '#nofield') setStatus('Tip: click the box you want to post in — any time before you press Hide & insert.')
 Promise.all([ownedSpaces(), memberships(), chrome.storage.local.get('lastWho')]).then(([own, mem, last]) => {
   knownSpaces = [...new Set([...Object.keys(own), ...Object.keys(mem).filter((k) => mem[k].memberId)])].sort()
   memberOf = Object.fromEntries(Object.entries(mem).filter(([, m]) => m.memberId).map(([k, m]) => [k, m.memberId!]))

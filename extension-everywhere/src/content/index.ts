@@ -7,7 +7,7 @@
 // that box, and marks marker-tagged blocks on the page with a Reveal chip.
 import type { FrameToContent, ContentToFrame } from '../shared/messages'
 import { collectBlocks, confirmPosts } from './scan'
-import { insertCover, editableTarget } from './insert'
+import { insertCover, editableTarget, editableFrom } from './insert'
 
 type Action = { action: 'compose' } | { action: 'reveal'; text: string } | { action: 'scan' }
 
@@ -116,6 +116,13 @@ function run(a: Action) {
 if (!W.__lortnocEverywhere) {
   W.__lortnocEverywhere = true
   window.addEventListener('message', onFrameMessage)
+  // The target follows the user: whichever box they click while the sheet is open is where the
+  // cover goes. So "open the sheet first, pick the box after" works — the popup button's natural
+  // order (measured: opening with no box focused made every insert fail).
+  document.addEventListener('focusin', (e) => {
+    const t = editableFrom(e.composedPath()[0] ?? e.target)
+    if (t && frame) target = t
+  }, true)
   document.addEventListener('keydown', (e) => e.key === 'Escape' && closeFrame(), true)
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg?.lortnocAction) run(msg.lortnocAction as Action)

@@ -14,6 +14,11 @@ const norm = (s: string) => s.replace(/\s+/g, ' ').trim()
 export function editableTarget(): HTMLElement | null {
   let el: Element | null = document.activeElement
   while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement
+  return editableFrom(el)
+}
+
+/** `el` if it is a box we can write cover text into, else null. */
+export function editableFrom(el: Element | null | EventTarget): HTMLElement | null {
   if (!(el instanceof HTMLElement)) return null
   if (el instanceof HTMLTextAreaElement) return el
   if (el instanceof HTMLInputElement && /^(text|search|url|)$/.test(el.type)) return el

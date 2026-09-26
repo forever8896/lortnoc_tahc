@@ -257,3 +257,38 @@ describe('timed messages through a real gate', () => {
     })
   }
 })
+
+describe('inserting when no box was focused (measured failure, 2026-09-26)', () => {
+  test('open the panel first, click the box after: it still lands in the box', { timeout: 120_000 }, async (t) => {
+    if (skip) return t.skip(skip)
+    comments.length = 0
+    const { ctx, sw } = await profile()
+    const page = await ctx.newPage()
+    await page.goto(siteUrl)
+    await trigger(sw, { action: 'compose' }) // nothing focused on the page
+    const sheet = await frameOf(page, 'sheet')
+    await sheet.waitForSelector('#msg')
+    await page.click('#c') // the user picks the box AFTER opening the panel
+    await sheet.fill('#msg', 'order should not matter')
+    await sheet.click('#go')
+    await sheet.waitForSelector('.status.ok', { timeout: 60_000 })
+    assert.ok((await page.inputValue('#c')).length > 50)
+  })
+
+  test('no box at all: the hidden text is kept, click a box, press Insert', { timeout: 120_000 }, async (t) => {
+    if (skip) return t.skip(skip)
+    const { ctx, sw } = await profile()
+    const page = await ctx.newPage()
+    await page.goto(siteUrl)
+    await trigger(sw, { action: 'compose' })
+    const sheet = await frameOf(page, 'sheet')
+    await sheet.fill('#msg', 'insert later')
+    await sheet.click('#go')
+    await sheet.waitForSelector('.status.err', { timeout: 60_000 })
+    assert.match(await sheet.textContent('#status'), /Click the box you want to post in/)
+    await page.click('#c')
+    await sheet.click('#insert')
+    await sheet.waitForSelector('.status.ok', { timeout: 30_000 })
+    assert.ok((await page.inputValue('#c')).length > 50, 'the kept cover text was inserted — no re-encoding')
+  })
+})
