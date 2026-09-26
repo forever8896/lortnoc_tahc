@@ -57,6 +57,20 @@ export async function spaceAvailable(label: string): Promise<SwResponse> {
   return taken === undefined ? { ok: false, error: 'could not check' } : { ok: true, data: { valid: true, available: !taken } }
 }
 
+/** A space as ENS says it is — for the writing panel's "holders of <name>" field. */
+export async function spaceInfo(label: string): Promise<SwResponse> {
+  const l = label.trim().toLowerCase().replace(/^@/, '').replace(/\.space\.lortnoctahc\.eth$/, '')
+  if (!/^[a-z0-9-]{3,32}$/.test(l)) return { ok: true, data: { label: l, exists: false, valid: false } }
+  const c = createPublicClient({ chain: sepolia, transport: http('https://ethereum-sepolia-rpc.publicnode.com') })
+  const name = `${l}.space.lortnoctahc.eth`
+  try {
+    const [owner, token] = await Promise.all([c.getEnsAddress({ name }), c.getEnsText({ name, key: 'eth.lortnoc.space.token' })])
+    return { ok: true, data: { label: l, valid: true, exists: !!owner, token: token ?? '' } }
+  } catch {
+    return { ok: false, error: 'could not check' }
+  }
+}
+
 export async function buySpace(req: { label: string; token: string; chainId: 1 | 11155111; tabId: number }): Promise<SwResponse> {
   const { label, token, chainId, tabId } = req
   if (!/^[a-z0-9-]{3,32}$/.test(label) || label.startsWith('-') || label.endsWith('-')) return { ok: false, error: 'bad space name' }

@@ -2,7 +2,7 @@
 // page — write hidden, find hidden posts, always on for this site.
 import { sw, LOCAL, DEFAULT_CODEC_URL, DEFAULT_GATE_URL } from '../shared/messages'
 import type { HealthData, GateHealth } from '../shared/messages'
-import { createSpace, ownedSpaces, memberships, ensSpaces, addEnsSpace, ensKeys } from '../shared/spaces'
+import { memberships, ensSpaces, ensKeys } from '../shared/spaces'
 import { COUNTRIES } from '../shared/countries'
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
@@ -230,40 +230,15 @@ $('buy').onclick = async () => {
   void renderBuy(), void renderSpaces()
 }
 
+/** Your spaces — nothing to manage: ones you bought (owner key here) and ones you joined by reading. */
 async function renderSpaces() {
-  const [own, mem, ens, keys] = await Promise.all([ownedSpaces(), memberships(), ensSpaces(), ensKeys()])
-  const card = (name: string, suffix: string, role: string, owner: boolean, extra = '') =>
-    `<div class="sp"><div class="n"><b>${esc(name)}</b><span>${suffix}</span></div><div class="role ${owner ? '' : 'm'}">${role}</div>${extra}</div>`
-  const cards = [
-    ...ens.map((l) => card(l, '.space', keys[l] ? (keys[l].role === 'owner' ? 'Owner · NFT space' : 'Moderator') : mem[`@${l}`]?.memberId ? 'Member' : 'Added', !!keys[l],
-      mem[`@${l}`]?.memberId ? `<div class="mono">${esc(mem[`@${l}`].memberId!)}</div>` : '')),
-    ...Object.keys(own).map((s) => card(s, '', 'Owner · free space', true)),
-    ...Object.entries(mem).filter(([s, m]) => m.memberId && !own[s] && !(s.startsWith('@') && ens.includes(s.slice(1))))
-      .map(([s, m]) => card(s.replace(/^@/, ''), s.startsWith('@') ? '.space' : '', 'Member', false, `<div class="mono">${esc(m.memberId!)}</div>`)),
-  ]
-  $('spaceList').innerHTML = cards.join('') || '<div class="empty">No spaces yet. Create one above — or add one you were told about.</div>'
-}
-$('createSpace').onclick = async () => {
-  const name = $<HTMLInputElement>('spaceName').value.trim().toLowerCase()
-  if (!/^[a-z0-9-]{3,32}$/.test(name)) return void say('spaceMsg', '3–32 letters, numbers or -', 'err')
-  try {
-    await createSpace(name)
-    $<HTMLInputElement>('spaceName').value = ''
-    say('spaceMsg', `Created ${name}.`, 'ok')
-    void renderSpaces()
-  } catch (e) {
-    say('spaceMsg', e instanceof Error ? e.message : String(e), 'err')
-  }
-}
-$('addEns').onclick = async () => {
-  try {
-    await addEnsSpace($<HTMLInputElement>('ensName').value)
-    $<HTMLInputElement>('ensName').value = ''
-    say('ensMsg', 'Added.', 'ok')
-    void renderSpaces()
-  } catch (e) {
-    say('ensMsg', e instanceof Error ? e.message : String(e), 'err')
-  }
+  const [mem, ens, keys] = await Promise.all([memberships(), ensSpaces(), ensKeys()])
+  const labels = [...new Set([...Object.keys(keys), ...ens, ...Object.keys(mem).filter((k) => k.startsWith('@') && mem[k].memberId).map((k) => k.slice(1))])].sort()
+  $('spaceList').innerHTML = labels.map((l) => {
+    const role = keys[l] ? (keys[l].role === 'owner' ? 'Owner' : 'Moderator') : mem[`@${l}`]?.memberId ? 'Member' : 'Yours'
+    const id = mem[`@${l}`]?.memberId
+    return `<div class="sp"><div class="n"><b>${esc(l)}</b><span>.space</span></div><div class="role ${keys[l] ? '' : 'm'}">${role}</div>${id ? `<div class="mono">${esc(id)}</div>` : ''}</div>`
+  }).join('') || '<div class="empty">No spaces yet — create one above, or open a space’s post to join it.</div>'
 }
 
 // ---------------------------------------------------------------------------

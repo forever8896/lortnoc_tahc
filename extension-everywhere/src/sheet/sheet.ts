@@ -10,7 +10,7 @@ import { toB64, fromHex } from '../../../shared/keys.mjs'
 import { gateSealer } from '../../../shared/gateclient.mjs'
 import { sw, gatePost } from '../shared/messages'
 import { contentHash, withAuthor } from '../../../shared/member.mjs'
-import { ownedSpaces, memberships, attestAsMember, ensSpaces } from '../shared/spaces'
+import { memberships, attestAsMember, ensSpaces, ensKeys } from '../shared/spaces'
 import type { EncodeData, ContentToFrame, FrameToContent, GateHealth } from '../shared/messages'
 
 type CheckDraft =
@@ -50,7 +50,6 @@ function presetGroups(p: Preset): CheckDraft[][] {
   return [[fresh('public')]]
 }
 /** Spaces you own or joined — offered in the World ID check and for "post as member". */
-let knownSpaces: string[] = []
 /** ENS spaces you use (labels) — added in the popup's Settings. */
 let ensList: string[] = []
 let memberOf: Record<string, string> = {}
@@ -109,13 +108,13 @@ type Rule = 'public' | 'passphrase' | 'human' | 'citizen' | 'member' | 'nft' | '
 const ruleOf = (d: CheckDraft): Rule =>
   d.check === 'human' ? (d.preset === 'identity' ? 'citizen' : d.space ? 'member' : 'human') : d.check
 function rules(): [Rule, string, () => CheckDraft][] {
-  const firstSpace = [...knownSpaces, ...ensList.map((x) => `@${x}`)][0] ?? ''
+  const firstSpace = ensList[0] ? `@${ensList[0]}` : ''
   return [
     ['passphrase', 'know the passphrase', () => fresh('passphrase')],
     ['human', 'be a verified human (World ID)', () => fresh('human')],
     ['citizen', 'be a citizen of… (passport, World ID)', () => ({ check: 'human', preset: 'identity', space: '', country: '' })],
-    ...(firstSpace ? [['member', 'be a member of a space', () => ({ check: 'human', preset: 'poh', space: firstSpace })] as [Rule, string, () => CheckDraft]] : []),
-    ...(ensList.length ? [['nft', "hold a space's NFT", () => ({ check: 'nft', space: `@${ensList[0]}` })] as [Rule, string, () => CheckDraft]] : []),
+    ['nft', "hold a space's NFT", () => ({ check: 'nft', space: firstSpace })],
+    ['member', 'be a verified human of a space', () => ({ check: 'human', preset: 'poh', space: firstSpace })],
     ['after', 'wait until a date', () => fresh('after')],
     ['public', 'have lortnoc (anyone with it)', () => fresh('public')],
   ]
@@ -140,6 +139,36 @@ function countrySelect(d: Extract<CheckDraft, { check: 'human' }>, id?: string) 
   c.value = d.country ?? ''
   c.onchange = () => ((d.country = c.value), renderHonesty())
   return c
+}
+
+/** Any space by name — no follow list: yours are suggested, any other is checked on ENS as you type. */
+function spaceField(d: { space: string }): HTMLElement[] {
+  const listId = 'spaceNames'
+  if (!document.getElementById(listId)) {
+    const dl = Object.assign(document.createElement('datalist'), { id: listId })
+    dl.innerHTML = ensList.map((x) => `<option value="${x}">`).join('')
+    document.body.append(dl)
+  }
+  const i = Object.assign(document.createElement('input'), { type: 'text', value: d.space.replace(/^@/, ''), placeholder: 'spacename', size: 12, spellcheck: false })
+  i.setAttribute('list', listId)
+  const st = Object.assign(document.createElement('span'), { className: 'small' })
+  let t: ReturnType<typeof setTimeout> | undefined
+  const check = async () => {
+    const l = i.value.trim().toLowerCase()
+    if (!l) return void (st.textContent = '')
+    const r = await sw<{ exists: boolean }>({ type: 'SPACE_INFO', label: l })
+    if (l !== i.value.trim().toLowerCase()) return
+    st.textContent = !r.ok ? '' : r.data.exists ? '✓' : '✗ no such space'
+    st.style.color = r.ok && r.data.exists ? 'var(--signal)' : 'var(--warn)'
+  }
+  i.oninput = () => {
+    d.space = i.value.trim() ? `@${i.value.trim().toLowerCase()}` : ''
+    renderHonesty()
+    clearTimeout(t)
+    t = setTimeout(() => void check(), 400)
+  }
+  if (d.space) void check()
+  return [i, st]
 }
 
 /** After a change in the builder the preset name no longer describes it — say so in the dropdown. */
@@ -195,20 +224,12 @@ function pillEl(d: CheckDraft, remove: () => void): HTMLElement {
     i.oninput = () => ((d.when = i.value), renderHonesty())
     el.append(label('wait until'), i)
   } else if (d.check === 'nft') {
-    const sel = document.createElement('select')
-    sel.innerHTML = ensList.map((x) => `<option value="@${x}">${x}.space</option>`).join('')
-    sel.value = d.space
-    sel.onchange = () => ((d.space = sel.value), renderHonesty())
-    el.append(label('hold'), sel, label("'s NFT"))
+    el.append(label('hold'), ...spaceField(d), label('.space NFT'))
   } else if (d.check === 'human' && r === 'citizen') {
     const c = countrySelect(d)
     el.append(label('be a citizen of'), c)
   } else if (d.check === 'human' && r === 'member') {
-    const sel = document.createElement('select')
-    sel.innerHTML = [...knownSpaces.map((x) => `<option value="${x}">${x}</option>`), ...ensList.map((x) => `<option value="@${x}">${x}.space</option>`)].join('')
-    sel.value = d.space
-    sel.onchange = () => ((d.space = sel.value), renderHonesty())
-    el.append(label('be a member of'), sel)
+    el.append(label('be a verified human of'), ...spaceField(d), label('.space'))
   } else if (d.check === 'human') {
     const sel = document.createElement('select')
     sel.innerHTML = `<option value="poh">verified human</option><option value="selfie">human (Selfie Check)</option>`
@@ -233,10 +254,10 @@ function summary(): string {
     if (d.check === 'public') return 'have lortnoc'
     if (d.check === 'passphrase') return 'know the passphrase'
     if (d.check === 'after') return `wait until ${fmt(d.when)}`
-    if (d.check === 'nft') return `hold ${d.space.slice(1)}.space's NFT`
+    if (d.check === 'nft') return `hold ${d.space.replace(/^@/, '') || '…'}.space's NFT`
     if (d.check === 'recipients') return 'are one of the people you named'
     if (d.check === 'human' && r === 'citizen') return `are citizens of ${COUNTRIES.find(([a]) => a === d.country)?.[1] ?? '…'}`
-    if (d.check === 'human' && r === 'member') return `are members of ${d.space.replace(/^@(.*)$/, '$1.space')}`
+    if (d.check === 'human' && r === 'member') return `are verified humans of ${d.space.replace(/^@/, '') || '…'}.space`
     return 'are verified humans'
   }
   // A group that is ONLY a date reads as "from <date>", not as a thing people must be.
@@ -282,6 +303,14 @@ async function go() {
   btn.disabled = true
   try {
     setStatus('Locking it…')
+    // every space named in the rules must exist on ENS (and an NFT rule needs its collection set)
+    for (const d of groups.flat()) {
+      if (d.check === 'nft' && !d.space) throw new Error('Name the space whose NFT readers must hold.')
+      if (!('space' in d) || !d.space) continue
+      const r = await sw<{ exists: boolean; token: string }>({ type: 'SPACE_INFO', label: d.space })
+      if (r.ok && !r.data.exists) throw new Error(`There is no space called ${d.space.slice(1)}.`)
+      if (r.ok && d.check === 'nft' && !r.data.token) throw new Error(`${d.space.slice(1)}.space has no NFT collection set.`)
+    }
     const policy = buildPolicy()
     let gateSeal
     // Checks whose key share the gate holds. Each must be one this gate actually runs.
@@ -399,7 +428,6 @@ function fillPresets() {
     ['human', 'Verified humans (World ID)'],
     ['human-or-pass', 'Verified humans, or the passphrase'],
     ['citizens', 'Citizens of a country (passport, World ID)'],
-    ...knownSpaces.map((x) => [`space:${x}`, `Members of ${x}`] as [Preset, string]),
     ...ensList.flatMap((x) => [
       [`space:@${x}`, `Verified humans of ${x}.space`],
       [`nft:@${x}`, `NFT holders of ${x}.space`],
@@ -420,10 +448,10 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void go()
 })
 if (location.hash === '#nofield') setStatus('Tip: click the box you want to post in — any time before you press Hide & insert.')
-Promise.all([ownedSpaces(), memberships(), chrome.storage.local.get('lastWho'), ensSpaces()]).then(([own, mem, last, ens]) => {
-  ensList = ens
-  knownSpaces = [...new Set([...Object.keys(own), ...Object.keys(mem).filter((k) => mem[k].memberId && !k.startsWith('@'))])].sort()
-  memberOf = Object.fromEntries(Object.entries(mem).filter(([, m]) => m.memberId).map(([k, m]) => [k, m.memberId!]))
+Promise.all([memberships(), chrome.storage.local.get('lastWho'), ensSpaces(), ensKeys()]).then(([mem, last, ens, keys]) => {
+  // Your spaces, with nothing to manage: bought here (keys), joined by reading (memberships), or added.
+  ensList = [...new Set([...ens, ...Object.keys(keys), ...Object.keys(mem).filter((k) => k.startsWith('@')).map((k) => k.slice(1))])].sort()
+  memberOf = Object.fromEntries(Object.entries(mem).filter(([k, m]) => m.memberId && k.startsWith('@')).map(([k, m]) => [k, m.memberId!]))
   fillPresets()
   const who = $<HTMLSelectElement>('who')
   const want = last.lastWho as string | undefined

@@ -183,28 +183,29 @@ describe('World ID keyring, live (World widget + simulator + World API + World C
   })
 })
 
-describe('spaces through the keyring: join, sign as a member, get banned — live', () => {
-  // World's simulator is ONE fake human, so the owner never connects World ID here (they would become
-  // the member they are about to ban). The member signs a post anyone can read; the owner bans it.
-  const SPACE = 'wl-' + Date.now().toString(36)
-  let owner, member
+describe('ENS spaces through the keyring: verified humans of a space — join, sign, ENS ban — live', () => {
+  // A real space on Sepolia (bought here). World's simulator is ONE fake human, so the owner never
+  // connects World ID (they would become the member they are about to ban). The member signs a post
+  // anyone can read; the owner opens it, sees the verified member, and bans them — on ENS.
+  let space, owner, member
 
-  test('owner creates a space and posts to its members', { timeout: 180_000 }, async (t) => {
+  test('owner buys a space and posts to its verified humans', { timeout: 300_000 }, async (t) => {
     if (skip) return t.skip(skip)
+    if (!existsSync(join(ROOT, '.env.local'))) return t.skip('no deployer key (.env.local)')
     comments.length = 0
+    const { buyLiveSpace } = await import('../lib/live-space.mjs')
+    space = await buyLiveSpace({ prefix: 'wl' })
     owner = await profile()
-    const pop = await owner.ctx.newPage()
-    await pop.goto(`chrome-extension://${new URL(owner.sw.url()).host}/src/home/index.html#spaces`) // the full page (popup ⚙)
-    await pop.fill('#spaceName', SPACE)
-    await pop.click('#createSpace')
-    await pop.waitForFunction(() => /Created/.test(document.getElementById('spaceMsg').textContent), null, { timeout: 30_000 })
+    await owner.sw.evaluate(([l, k]) => chrome.storage.local.set({ ensSpaceKeys: { [l]: k } }),
+      [space.label, { priv: space.ownerPriv, address: space.owner.address, role: 'owner' }])
     const page = await owner.ctx.newPage()
     await page.goto(siteUrl)
     await page.click('#c')
     await trigger(owner.sw, { action: 'compose' })
     const sheet = await frameOf(page, 'sheet')
-    await sheet.waitForSelector(`#who option[value="space:${SPACE}"]`, { state: 'attached' })
-    await sheet.selectOption('#who', `space:${SPACE}`)
+    // no follow list: a space you own is simply there
+    await sheet.waitForSelector(`#who option[value="space:@${space.label}"]`, { state: 'attached' })
+    await sheet.selectOption('#who', `space:@${space.label}`)
     await sheet.fill('#msg', 'members meet at the library')
     await sheet.click('#go')
     await sheet.waitForSelector('.status.ok', { timeout: 90_000 })
@@ -212,7 +213,7 @@ describe('spaces through the keyring: join, sign as a member, get banned — liv
     await page.waitForSelector('.c')
   })
 
-  test('a member connects World ID, the members-only post opens, and they sign a post as their pseudonym', { timeout: 300_000 }, async (t) => {
+  test('a member connects World ID, the post opens, and they sign a post as their pseudonym', { timeout: 300_000 }, async (t) => {
     if (skip || !owner) return t.skip(skip ?? 'no space')
     member = await profile()
     assert.equal((await connectWorldSim(member)).ok, true)
@@ -233,14 +234,16 @@ describe('spaces through the keyring: join, sign as a member, get banned — liv
     await page.waitForFunction(() => document.querySelectorAll('.c').length === 2)
   })
 
-  test('the owner sees the verified member and bans them; the members-only post vanishes for them', { timeout: 300_000 }, async (t) => {
+  test('the owner sees the verified member and bans them on ENS; the space post vanishes for them', { timeout: 300_000 }, async (t) => {
     if (skip || !member) return t.skip(skip ?? 'no member')
     const { page, n } = await scanOpens(owner)
-    assert.equal(n, 1, 'the owner sees the public post (the members-only one needs World ID they did not connect)')
+    assert.equal(n, 1, 'the owner sees the public post (the space one needs World ID they did not connect)')
     const card = await readFirst(page)
     assert.match(await card.textContent('#author'), /✓ verified member member-[0-9a-f]{12}/)
     await card.click('#ban')
-    await card.waitForFunction(() => /is banned/.test(document.getElementById('ban').textContent), null, { timeout: 30_000 })
+    await card.waitForFunction(() => /is banned/.test(document.getElementById('ban').textContent) || document.querySelector('.status.err'), null, { timeout: 180_000 })
+    assert.match(await card.textContent('#ban'), /is banned/)
+    await new Promise((r) => setTimeout(r, 21_000)) // the gate caches ENS reads for 20 s
     const again = await scanOpens(member)
     assert.equal(again.n, 1, 'only the public post is left for them')
     assert.equal(await (await readFirst(again.page)).textContent('#plain').then((x) => x.includes('library')), false)
