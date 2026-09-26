@@ -46,7 +46,7 @@ async function status() {
   const get = (u) => fetch(u, { signal: AbortSignal.timeout(4000) }).then((r) => r.json()).catch(() => null)
   const [g, c] = await Promise.all([get(`${GATE}/health`), get(`${CODEC}/health`)])
   return {
-    gate: g?.ok ? { ok: true, url: GATE, checks: g.checks, world: g.world?.env ?? null, held: g.deposits ?? [] } : { ok: false, url: GATE },
+    gate: g?.ok ? { ok: true, url: GATE, checks: g.checks, world: g.world?.env ?? null, worldEnvs: g.world?.envs ?? [], held: g.deposits ?? [] } : { ok: false, url: GATE },
     codec: c?.ready ? { ok: true, url: CODEC, model: c.model } : { ok: false, url: CODEC },
     stagingUntil: stagingUntil(),
   }
@@ -173,12 +173,13 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--rule);border-b
     <details class="t"><summary><b>4 · Only verified humans</b><span class="tag">gate · World ID</span></summary><ol>
       <li>Pick <b>Verified humans (World ID)</b> and post.</li>
       <li>Reveal → <b>Verify with World ID</b>. World's own widget opens in a tab.</li>
-      <li>Scan with World's Sandbox app — or, on staging, press <b>Use World ID simulator</b> on the card.</li>
+      <li>Scan it with the <b>World ID (Sandbox)</b> app on your phone.</li>
+      <li>No phone? Press <b>Try with the World ID simulator (demo)</b> instead — same widget, answered by World's simulator.</li>
       <li>The widget shows success, closes itself, and the post opens.</li></ol></details>
     <details class="t"><summary><b>5 · Citizens of a country</b><span class="tag">gate · passport</span></summary><ol>
       <li>Pick <b>Citizens of a country</b> and choose one, e.g. Denmark.</li>
       <li>Reveal → Verify: World ID checks the passport's nationality and shares nothing else.</li>
-      <li>Needs the Sandbox app with a passport credential — the simulator can't do passports.</li></ol></details>
+      <li>Needs the World ID (Sandbox) app with a passport credential — the simulator can't do passports, so there is no simulator button here.</li></ol></details>
     <details class="t"><summary><b>6 · NFT holders of a space</b><span class="tag">gate · ENS · wallet</span></summary><ol>
       <li>Extension → Settings → <b>Buy a space</b> → <i>Use the demo pass</i>, pay 0.005 Sepolia ETH.</li>
       <li>You now own <b>name.space.lortnoctahc.eth</b>. Pick <b>NFT holders of name.space</b>.</li>
@@ -207,7 +208,7 @@ async function refresh() {
       c.ok ? '' : 'The extension turns messages into words through it. Check your connection.') +
     (g.ok && g.checks.includes('human')
       ? row(g.world === 'production' || worldOpen ? 'ok' : until ? 'bad' : 'warn', 'World ID',
-          g.world + (g.world === 'production' ? ' · real World App' : worldOpen ? ' · verifications open until ' + until.toLocaleString() : until ? ' · staging window CLOSED' : ' · staging (Sandbox app or simulator)'),
+          (g.world === 'production' ? 'production · real World App' : 'phones: ' + g.world + (g.worldEnvs.includes('staging') && g.world !== 'staging' ? ' · simulator: staging' : '')) + (g.world === 'production' ? '' : worldOpen ? ' · open until ' + until.toLocaleString() : until ? ' · test window CLOSED' : ''),
           g.world !== 'production' && until && !worldOpen ? 'Reopen it: <code>node gate/world-staging-window.mjs</code>' : '')
       : row('warn', 'World ID', 'not configured on this gate', 'Needs gate/.env (WORLD_APP_ID, WORLD_RP_ID, RP_SIGNING_KEY).'))
   $('held').innerHTML = g.ok && g.held.length ? g.held.map((h) => '<span class="chip">' + h.check_id + ' · ' + h.n + '</span>').join('') : '<span class="chip">nothing yet</span>'

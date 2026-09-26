@@ -14,7 +14,8 @@ import { IDKitRequestWidget, proofOfHuman, selfieCheck, identityCheck } from '@w
 import type { IDKitResult } from '@worldcoin/idkit'
 import type { WorldRequest } from '../shared/messages'
 
-const id = location.hash.slice(1)
+// #<id>[&sim] — `sim`: a staging demo; the simulator answers this widget's request as soon as it has one
+const [id, simFlag] = location.hash.slice(1).split('&')
 const $ = (x: string) => document.getElementById(x)!
 const say = (t: string) => ($('status').textContent = t)
 const broadcast = (m: object) => chrome.runtime.sendMessage(m).catch(() => {})
@@ -44,16 +45,16 @@ const widgetLink = () =>
   [...document.querySelectorAll('[data-idkit-shadow-host]')]
     .map((h) => h.shadowRoot?.querySelector<HTMLAnchorElement>('a.idkit-deeplink-btn')?.href)
     .find((href) => href?.includes('/verify?'))
+async function simulate() {
+  let link = widgetLink()
+  for (let i = 0; !link && i < 60; i++) (await new Promise((r) => setTimeout(r, 250)), (link = widgetLink()))
+  if (!link) return say('The World ID widget has no request yet — try again in a moment.')
+  say('World ID simulator is answering…')
+  const r = await chrome.runtime.sendMessage({ type: 'WORLD_SIM', connectUrl: link })
+  if (!r?.ok) say(`Simulator: ${r?.error ?? 'failed'}`)
+}
 chrome.runtime.onMessage.addListener((m) => {
-  if (m?.type !== 'WORLD_WIDGET_SIMULATE' || m.id !== id) return
-  void (async () => {
-    let link = widgetLink()
-    for (let i = 0; !link && i < 40; i++) (await new Promise((r) => setTimeout(r, 250)), (link = widgetLink()))
-    if (!link) return say('The World ID widget has no request yet — try again in a moment.')
-    say('World ID simulator is answering…')
-    const r = await chrome.runtime.sendMessage({ type: 'WORLD_SIM', connectUrl: link })
-    if (!r?.ok) say(`Simulator: ${r?.error ?? 'failed'}`)
-  })()
+  if (m?.type === 'WORLD_WIDGET_SIMULATE' && m.id === id) void simulate()
 })
 
 async function main() {
@@ -103,5 +104,6 @@ async function main() {
     }))
   const root = createRoot($('root'))
   render(true)
+  if (simFlag === 'sim' && q.environment === 'staging') void simulate()
 }
 void main()

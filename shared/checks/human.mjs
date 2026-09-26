@@ -80,7 +80,7 @@ export default {
         : space.startsWith('@') ? await services.ensSpaces?.exists(space) : services.spaces?.exists(space)
       if (!known) return { deny: `the space "${space}" does not exist` }
       const action = services.world.actionFor(stored.ref, space)
-      return { request: services.world.challenge(stored.ref, req.readerPub, state, preset, action, country) }
+      return { request: services.world.challenge(stored.ref, req.readerPub, state, preset, action, country, req.env) }
     },
     async release(stored, req, state, services) {
       if (!services.world) return { deny: 'World ID is not configured on this gate' }

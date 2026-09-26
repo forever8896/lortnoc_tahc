@@ -56,7 +56,7 @@ export function createGate({ dbPath = ':memory:', keyHex, world = null, ensSpace
     signPub: signer.pub,
     spaces,
     checks: Object.values(CHECKS).filter((m) => m.kind === 'attested' && (m.id !== 'human' || world) && (m.id !== 'nft' || holders)).map((m) => m.id),
-    world: world ? { env: world.env } : null,
+    world: world ? { env: world.env, envs: world.envs } : null,
 
     /**
      * @param {{check: string, params: object, box: {eph,ct}, policyHash: string}} req

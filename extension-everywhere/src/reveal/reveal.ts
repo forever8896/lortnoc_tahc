@@ -31,6 +31,10 @@ const denied: { last: { deny?: string; retryAt?: number } | null } = { last: nul
 let postSpace = ''
 /** The reader chose to verify with World ID in this card (a click — never automatic). */
 let wantsHuman = false
+/** The reader chose the simulator (staging demo) instead of a phone. */
+let wantsSim = false
+/** This gate can issue staging requests, and the post's World ID check is one the simulator can do. */
+let canSim = false
 /** …or to prove NFT ownership with their wallet (a click — never automatic). */
 let wantsNft = false
 
@@ -63,18 +67,22 @@ const tellWidget = (ok: boolean, deny?: string) => {
 async function worldProof({ check, ref, readerPub, policyHash }: { check: string; ref: string; readerPub: string; policyHash: string }) {
   if (check !== 'human') return undefined
   if (!wantsHuman) return null // not asked yet: don't pop a verification the reader didn't request
-  const c = await gatePost('/challenge', { ref, readerPub, policyHash })
+  // The simulator answers only STAGING requests; a phone answers the gate's default (sandbox/production).
+  const c = await gatePost('/challenge', { ref, readerPub, policyHash, ...(wantsSim ? { env: 'staging' } : {}) })
   if (!c?.request) throw new Error(c?.deny ?? c?.error ?? 'the gate could not start World ID')
   const q = c.request
   const id = crypto.randomUUID()
 
   $('world').hidden = false
   $('verifyHuman').hidden = true
-  // The simulator only does Proof of Human, and only on staging; nationality needs World App or Sandbox.
-  $('sim').hidden = q.environment !== 'staging' || q.preset === 'identity'
-  $('worldHow').textContent = q.preset === 'identity'
-    ? `World ID opened in a new tab. It checks your passport's nationality is ${q.attributes?.[0]?.value} — nothing else is shared.`
-    : "World ID opened in a new tab — scan its code with World App. Only that you're a unique human is shared."
+  $('simHuman').hidden = true
+  $('sim').hidden = true
+  const app = q.environment === 'production' ? 'World App' : q.environment === 'sandbox' ? 'the World ID (Sandbox) app' : 'World ID'
+  $('worldHow').textContent = wantsSim
+    ? "World ID opened in a new tab — the simulator is answering it (staging demo, no phone)."
+    : q.preset === 'identity'
+      ? `World ID opened in a new tab — scan its code with ${app}. It checks your passport's nationality is ${q.attributes?.[0]?.value}; nothing else is shared.`
+      : `World ID opened in a new tab — scan its code with ${app}. Only that you're a unique human is shared.`
   fit()
 
   const result = await new Promise<unknown>((resolve, reject) => {
@@ -87,12 +95,12 @@ async function worldProof({ check, ref, readerPub, policyHash }: { check: string
     }
     chrome.runtime.onMessage.addListener(on)
     cancelWorld = () => (done(), closeTab(), reject(new Error('You cancelled World ID.')))
-    void sw({ type: 'WORLD_WIDGET_OPEN', id, request: q }).then((r) => {
+    // Staging demo: the widget tab runs World's simulator on its OWN request (it reads the widget's
+    // connect link and asks the gate to relay it) — so the demo takes the same path as a phone.
+    if (wantsSim) setStatus('Simulator is verifying…')
+    void sw({ type: 'WORLD_WIDGET_OPEN', id, request: q, simulate: wantsSim }).then((r) => {
       if (!r.ok) (done(), reject(new Error(`Could not open World ID: ${r.error}`)))
     })
-    // Staging demo: World's simulator completes the WIDGET's own request (the widget tab reads its
-    // connect link and asks the gate to run the simulator) — so the demo takes the same path as a phone.
-    $('sim').onclick = () => (setStatus('Simulator is verifying…'), void chrome.runtime.sendMessage({ type: 'WORLD_WIDGET_SIMULATE', id }).catch(() => {}))
   })
   worldTab = id
   $('world').hidden = true
@@ -168,6 +176,7 @@ async function attempt() {
   else if ((deny?.check === 'human' || deny?.check === 'nft') && deny.deny) setStatus(deny.deny, 'err')
   else if (tried.length) setStatus('That didn’t open it.', 'err')
   $('verifyHuman').hidden = !info.needs?.includes('human') || !$('world').hidden
+  $('simHuman').hidden = $('verifyHuman').hidden || !canSim
   fit()
 }
 
@@ -197,6 +206,12 @@ async function main() {
   $('pass').hidden = !info.needs?.includes('passphrase')
   $('identity').hidden = !info.needs?.includes('recipients')
   $('verifyHuman').hidden = !info.needs?.includes('human')
+  if (info.needs?.includes('human')) {
+    const g = await sw<GateHealth>({ type: 'GATE_HEALTH' })
+    // the simulator does Proof of Human only — never passports (Identity Check)
+    canSim = g.ok && !!g.data.world?.envs?.includes('staging') && !(info.checks ?? []).some((c: string) => /passport/i.test(c))
+  }
+  $('simHuman').hidden = $('verifyHuman').hidden || !canSim
   $('proveNft').hidden = !info.needs?.includes('nft')
   postSpace = (info.checks ?? []).find((c: string) => c.includes(' · members of '))?.split(' · members of ')[1]
     ?? (info.checks ?? []).find((c: string) => c.startsWith('Holders of '))?.replace(/^Holders of |'s NFT$/g, '') ?? ''
@@ -219,6 +234,10 @@ $('verifyHuman').onclick = () => {
   wantsHuman = true
   void attempt().finally(() => (wantsHuman = false))
 }
+$('simHuman').onclick = () => {
+  wantsHuman = wantsSim = true
+  void attempt().finally(() => (wantsHuman = wantsSim = false))
+}
 $('proveNft').onclick = () => {
   wantsNft = true
   void attempt().finally(() => (wantsNft = false))
@@ -227,6 +246,7 @@ $('cancelWorld').onclick = () => {
   cancelWorld?.()
   $('world').hidden = true
   $('verifyHuman').hidden = false
+  $('simHuman').hidden = !canSim
   fit()
 }
 $<HTMLInputElement>('pw').addEventListener('keydown', (e) => e.key === 'Enter' && void tryPassphrase())

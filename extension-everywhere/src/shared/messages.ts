@@ -34,7 +34,7 @@ export type SwRequest =
   | { type: 'BUY_STATE' }
   | { type: 'SITE_STATE'; origin: string }
   | { type: 'SITE_SET'; origin: string; on: boolean }
-  | { type: 'WORLD_WIDGET_OPEN'; id: string; request: WorldRequest }
+  | { type: 'WORLD_WIDGET_OPEN'; id: string; request: WorldRequest; simulate?: boolean }
   | { type: 'WORLD_WIDGET_DONE'; id: string }
   // broadcasts between the reveal card and the World ID tab — the service worker ignores these
   | { type: 'WORLD_WIDGET_RESULT' | 'WORLD_WIDGET_CLOSED' | 'WORLD_WIDGET_VERDICT' | 'WORLD_WIDGET_SIMULATE'; id: string; [k: string]: unknown }
@@ -55,7 +55,7 @@ export type SwResponse<T = unknown> = { ok: true; data: T } | { ok: false; error
 export type HealthData = { model: string; digest: string; ready: boolean; paused?: boolean; message?: string }
 export type EncodeData = { coverText: string }
 export type DecodeData = { ciphertext: string }
-export type GateHealth = { ok: boolean; pub: string; signPub: string; checks: string[]; world?: { env: string } | null }
+export type GateHealth = { ok: boolean; pub: string; signPub: string; checks: string[]; world?: { env: string; envs?: string[] } | null }
 
 /** `post` for shared/gateclient.mjs, routed through the service worker (it has the host permission). */
 export async function gatePost(path: string, body: unknown): Promise<any> {

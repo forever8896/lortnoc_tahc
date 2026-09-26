@@ -122,7 +122,7 @@ chrome.runtime.onMessage.addListener((msg: SwRequest, sender, sendResponse) => {
   // Card ↔ World ID tab traffic is not for the service worker: stay silent so it reaches them.
   if (msg.type === 'WORLD_WIDGET_RESULT' || msg.type === 'WORLD_WIDGET_CLOSED' || msg.type === 'WORLD_WIDGET_VERDICT' || msg.type === 'WORLD_WIDGET_SIMULATE') return false
   if (msg.type === 'WORLD_WIDGET_OPEN') {
-    openWorldTab(msg.id, msg.request, sender.tab?.id).then(sendResponse)
+    openWorldTab(msg.id, msg.request, sender.tab?.id, msg.simulate).then(sendResponse)
     return true
   }
   if (msg.type === 'WORLD_WIDGET_DONE') {
@@ -142,10 +142,10 @@ chrome.runtime.onMessage.addListener((msg: SwRequest, sender, sendResponse) => {
  * extension tab. The gate's signed request is handed over in storage.session (extension-only, gone
  * when the browser closes); the tab that asked is refocused when the widget is done.
  */
-async function openWorldTab(id: string, request: unknown, openerTabId?: number): Promise<SwResponse> {
+async function openWorldTab(id: string, request: unknown, openerTabId?: number, simulate?: boolean): Promise<SwResponse> {
   if (!/^[0-9a-f-]{36}$/.test(id)) return { ok: false, error: 'bad id' }
   await chrome.storage.session.set({ [`world:${id}`]: request, [`worldOpener:${id}`]: openerTabId ?? null })
-  const tab = await chrome.tabs.create({ url: chrome.runtime.getURL(`src/world/index.html#${id}`), active: true, openerTabId })
+  const tab = await chrome.tabs.create({ url: chrome.runtime.getURL(`src/world/index.html#${id}${simulate ? '&sim' : ''}`), active: true, openerTabId })
   await chrome.storage.session.set({ [`worldTab:${id}`]: tab.id })
   return { ok: true, data: { tabId: tab.id } }
 }

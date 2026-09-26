@@ -77,7 +77,7 @@ describe('human (World ID) — every refusal the gate itself must make', () => {
   const cases = [
     ['proof for another post (signal)', { response: { signal_hash: '0x00' + 'ab'.repeat(31) } }, /another post or reader/],
     ['another action', { top: { action: 'lortnoc-read-0000000000000000' } }, /another post/],
-    ['wrong environment', { top: { environment: 'production' } }, /gate expects staging/],
+    ['wrong environment', { top: { environment: 'production' } }, /request was for staging/],
     ['not protocol 4.0', { top: { protocol_version: '3.0' } }, /4\.0/],
     ['a nonce the gate never issued', { top: { nonce: '0x00' + '12'.repeat(31) } }, /not issued/],
     ['wrong credential type', { response: { identifier: 'passport' } }, /needs proof_of_human/],
@@ -184,5 +184,30 @@ describe('nationality (World ID Identity Check, preview)', () => {
   test('a country must be a 3-letter ISO code', async () => {
     const h = harness()
     await assert.rejects(sealMessage('x', { check: 'human', preset: 'identity', country: 'UA' }, { deposit: h.deposit }), /3-letter/)
+  })
+})
+
+describe('human (World ID) — several environments on one gate (sandbox for phones, staging for the simulator)', () => {
+  const ref = 'ab'.repeat(8)
+  const reader = 'cd'.repeat(32)
+  test('the first is the default; staging only when asked; anything else falls back to the default', () => {
+    const w = fakeWorld({ env: 'sandbox,staging' })
+    const st = new Map()
+    assert.deepEqual(w.envs, ['sandbox', 'staging'])
+    assert.equal(w.challenge(ref, reader, st).environment, 'sandbox')
+    assert.equal(w.challenge(ref, reader, st, 'poh', undefined, undefined, 'staging').environment, 'staging')
+    assert.equal(w.challenge(ref, reader, st, 'poh', undefined, undefined, 'production').environment, 'sandbox')
+  })
+  test('a proof must come from the environment its request was issued for', async () => {
+    const w = fakeWorld({ env: 'sandbox,staging' })
+    const st = new Map()
+    const q = w.challenge(ref, reader, st, 'poh', undefined, undefined, 'staging')
+    assert.equal((await w.verify(proofFrom(q), { ref, readerPub: reader, action: q.action }, st)).ok, true)
+    const q2 = w.challenge(ref, reader, st)
+    const forged = proofFrom(q2, { top: { environment: 'staging' } })
+    assert.match((await w.verify(forged, { ref, readerPub: reader, action: q2.action }, st)).deny, /request was for sandbox/)
+  })
+  test('an unknown environment name is a configuration error, not a silent default', () => {
+    assert.throws(() => fakeWorld({ env: 'prod' }), /WORLD_ENV/)
   })
 })
