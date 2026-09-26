@@ -1,23 +1,38 @@
-// Finding marked posts on a page. The marker (#lortnoctahc) is the cheap pre-filter — without it,
-// every paragraph on the web would cost a model decode (the X rationale, shared/xframe.mjs). Posts
-// written in high-risk mode carry no marker and are reached by selecting them + right-click Reveal.
+// Deep scan: find hidden posts on a page WITHOUT any marker.
+//
+// Posts carry no tag (a hashtag is exactly the "this person is hiding something" flag the high-risk
+// story warns about), so finding them is two steps, both in the service worker:
+//   1. shape — blocks that look like cover text (shared/webframe.mjs looksLikeCover)
+//   2. proof — the codec decodes each candidate and inspect() checks it is really a lortnoc frame.
+// This file only COLLECTS text blocks. It must import nothing shared with other entries: Chrome runs
+// an injected script as a classic script, so any cross-chunk `import` kills it (measured: "Cannot
+// use import statement outside a module" once this file imported shared/webframe.mjs).
 
-const MARKER = '#lortnoctahc'
 const BLOCK = /^(block|flex|grid|list-item|table-cell)$/
+const MAX_BLOCKS = 200
 
-/** The smallest block-level element around each marker occurrence, outermost duplicates removed. */
-export function findMarkedBlocks(root: HTMLElement): HTMLElement[] {
-  const found = new Set<HTMLElement>()
+/** Innermost block-level elements with at least `minWords` words of their own text. */
+export function collectBlocks(root: HTMLElement, minWords = 25): HTMLElement[] {
+  const seen = new Set<HTMLElement>()
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode: (n) =>
-      n.nodeValue?.toLowerCase().includes(MARKER) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP,
+    acceptNode: (n) => ((n.nodeValue?.trim().length ?? 0) > 20 ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP),
   })
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
     let el = n.parentElement
     while (el && el !== root && !BLOCK.test(getComputedStyle(el).display)) el = el.parentElement
-    // Never our own UI, and never an editable box (the user's own unsent draft).
-    if (el && el !== root && !el.closest('[contenteditable="true"],textarea') && !el.dataset.lortnocChip) found.add(el)
+    if (!el || el === root || seen.has(el)) continue
+    // Never the user's own unsent draft, never our UI.
+    if (el.closest('[contenteditable="true"],textarea,[data-lortnoc-chip]')) continue
+    seen.add(el)
   }
-  // A marker inside a nested block also sits inside its ancestors — keep only the innermost.
-  return [...found].filter((el) => ![...found].some((o) => o !== el && el.contains(o)))
+  const blocks = [...seen].filter((el) => el.innerText.trim().split(/\s+/).length >= minWords)
+  return blocks.filter((el) => !blocks.some((o) => o !== el && el.contains(o))).slice(0, MAX_BLOCKS)
+}
+
+/** Ask the service worker which of these blocks are really lortnoc posts. */
+export async function confirmPosts(blocks: HTMLElement[]): Promise<HTMLElement[]> {
+  const r = (await chrome.runtime.sendMessage({ type: 'FIND_POSTS', texts: blocks.map((b) => b.innerText) })) as
+    | { ok: true; data: { found: number[] } }
+    | { ok: false }
+  return r?.ok ? r.data.found.map((i) => blocks[i]) : []
 }

@@ -203,3 +203,22 @@ describe('web frame', () => {
     assert.ok(!hasMarker('some text'))
   })
 })
+
+describe('deep scan pre-filter', async () => {
+  const { looksLikeCover } = await import('../../shared/webframe.mjs')
+  // Real cover text from the booth recording (codec output posted through Telegram).
+  const COVER = 'im the happiest person that loves nothing when looking good that will come back you should remember those past pictures of other dogs getting hit are that of an eagle to me like no pain what does they think im out you'
+  test('real cover text is a candidate, including what sites do to it', () => {
+    assert.ok(looksLikeCover(COVER))
+    assert.ok(looksLikeCover(COVER + '.'), 'a trailing full stop')
+    assert.ok(looksLikeCover('Im' + COVER.slice(2)), 'a capitalised first word')
+    assert.ok(looksLikeCover(COVER + ' #lortnoctahc'), 'old tagged posts still found')
+  })
+  test('ordinary human comments are not', () => {
+    for (const c of [
+      'I made this last night and it was delicious! Added a bit more cumin than the recipe says, and served it with crusty bread. My kids loved it, will definitely make again.',
+      'Can I use red lentils instead of green ones? Also, how long does it keep in the fridge? Thanks so much for sharing this recipe with us, it looks amazing.',
+      'great recipe',
+    ]) assert.equal(looksLikeCover(c), false, c.slice(0, 40))
+  })
+})

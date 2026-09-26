@@ -6,7 +6,7 @@
 // This script only: remembers which box you were in, opens the frames, puts the COVER text into
 // that box, and marks marker-tagged blocks on the page with a Reveal chip.
 import type { FrameToContent, ContentToFrame } from '../shared/messages'
-import { findMarkedBlocks } from './scan'
+import { collectBlocks, confirmPosts } from './scan'
 import { insertCover, editableTarget } from './insert'
 
 type Action = { action: 'compose' } | { action: 'reveal'; text: string } | { action: 'scan' }
@@ -53,28 +53,51 @@ function onFrameMessage(e: MessageEvent) {
   }
 }
 
-function scan(): number {
-  let n = 0
-  for (const block of findMarkedBlocks(document.body)) {
-    if (block.dataset.lortnocChip) continue
-    block.dataset.lortnocChip = '1'
-    const chip = document.createElement('button')
-    chip.type = 'button'
-    chip.textContent = '🔒 Reveal'
-    chip.title = 'lortnoc tahc — try to open this'
-    Object.assign(chip.style, {
-      font: '600 12px/1 system-ui, sans-serif', padding: '4px 8px', margin: '4px 0',
-      borderRadius: '999px', border: '1px solid #12C4BE', background: '#12C4BE', color: '#000', cursor: 'pointer',
+function addChip(block: HTMLElement) {
+  block.dataset.lortnocChip = '1'
+  const chip = document.createElement('button')
+  chip.type = 'button'
+  chip.dataset.lortnocChip = '1'
+  chip.textContent = '🔒 Reveal'
+  chip.title = 'lortnoc tahc — try to open this'
+  Object.assign(chip.style, {
+    font: '600 12px/1 system-ui, sans-serif', padding: '4px 8px', margin: '4px 0',
+    borderRadius: '999px', border: '1px solid #12C4BE', background: '#12C4BE', color: '#000', cursor: 'pointer',
+  } as CSSStyleDeclaration)
+  chip.addEventListener('click', (ev) => {
+    ev.preventDefault()
+    ev.stopPropagation()
+    openFrame('reveal', `#t=${encodeURIComponent(block.innerText)}`, chip.getBoundingClientRect())
+  })
+  block.insertAdjacentElement('afterend', chip)
+}
+
+/** A small progress note in the corner — page-visible, but it says nothing about any message. */
+function toast(text: string | null) {
+  let t = document.getElementById('lortnoc-scan-toast')
+  if (!text) return void t?.remove()
+  if (!t) {
+    t = document.createElement('div')
+    t.id = 'lortnoc-scan-toast'
+    Object.assign(t.style, {
+      position: 'fixed', right: '16px', bottom: '16px', zIndex: Z, padding: '10px 14px', borderRadius: '10px',
+      background: '#08080a', color: '#edeae4', font: '400 13px system-ui, sans-serif', boxShadow: '0 8px 30px rgba(0,0,0,.4)',
     } as CSSStyleDeclaration)
-    chip.addEventListener('click', (ev) => {
-      ev.preventDefault()
-      ev.stopPropagation()
-      openFrame('reveal', `#t=${encodeURIComponent(block.innerText)}`, chip.getBoundingClientRect())
-    })
-    block.insertAdjacentElement('afterend', chip)
-    n++
+    document.documentElement.appendChild(t)
   }
-  return n
+  t.textContent = text
+}
+
+/** Deep scan: collect text blocks here; the service worker filters by shape and asks the codec. */
+async function scan(): Promise<number> {
+  const blocks = collectBlocks(document.body).filter((b) => !b.dataset.lortnocChip)
+  if (!blocks.length) return 0
+  toast('lortnoc tahc · looking for hidden posts…')
+  const found = await confirmPosts(blocks).catch(() => [])
+  found.forEach(addChip)
+  toast(found.length ? `lortnoc tahc · found ${found.length}` : null)
+  setTimeout(() => toast(null), 2500)
+  return found.length
 }
 
 function run(a: Action) {
@@ -85,8 +108,7 @@ function run(a: Action) {
     const r = getSelection()?.rangeCount ? getSelection()!.getRangeAt(0).getBoundingClientRect() : undefined
     openFrame('reveal', `#t=${encodeURIComponent(a.text)}`, r)
   } else if (a.action === 'scan') {
-    const n = scan()
-    if (!n) openFrame('reveal', '#none')
+    void scan().then((n) => n || openFrame('reveal', '#none'))
   }
 }
 

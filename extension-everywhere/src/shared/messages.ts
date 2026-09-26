@@ -17,7 +17,6 @@ export const CODER = 'arith'
 export const LOCAL = {
   codecUrl: 'codecUrl',
   gateUrl: 'gateUrl',
-  marker: 'marker', // append #lortnoctahc — off in high-risk mode (PRD §18.3)
 } as const
 
 export type SwRequest =
@@ -27,6 +26,7 @@ export type SwRequest =
   | { type: 'GATE_HEALTH' }
   | { type: 'GATE'; path: GatePath; body: unknown }
   | { type: 'WORLD_SIM'; connectUrl: string }
+  | { type: 'FIND_POSTS'; texts: string[] }
 
 /** Gate routes the extension may call (the service worker refuses anything else). */
 export const GATE_PATHS = ['/deposit', '/challenge', '/release', '/space', '/member/sign', '/ban', '/dev/simulate'] as const

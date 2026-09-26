@@ -19,7 +19,7 @@ import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-const DIST = join(ROOT, 'extension-everywhere/dist')
+const DIST = process.env.EXT_DIST ?? join(ROOT, 'extension-everywhere/dist')
 const CODEC_PORT = 8898
 const GATE_PORT = 8897
 const SECRET = 'meet at the market at seven, bring the list'
@@ -29,7 +29,8 @@ const comments = []
 const dirs = []
 
 const PAGE = () => `<!doctype html><html><head><meta charset="utf-8"><title>Grandma's lentil soup</title></head>
-<body><article><h1>Grandma's lentil soup</h1><p>Rinse the lentils, then simmer with onion and cumin.</p></article>
+<body><article><h1>Grandma's lentil soup</h1><p>Rinse the lentils, then simmer with onion and cumin.</p>
+<p class="decoy">honestly this is the kind of soup my grandmother used to make every winter when the house was cold and we would all sit around the big table waiting for her to call us in from the garden</p></article>
 <section id="comments">${comments.map((c) => `<div class="comment"><p class="author">guest</p><p class="body">${c
   .replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p></div>`).join('')}</section>
 <form id="f" method="post" action="/comment"><textarea id="c" name="c" rows="4" cols="60"></textarea><button>Post comment</button></form>
@@ -89,13 +90,15 @@ before(async () => {
   siteUrl = `http://127.0.0.1:${site.address().port}/`
 })
 
-after(() => {
+after(async () => {
+  for (const c of contexts) await c.close().catch(() => {})
   codec?.kill()
   gate?.kill()
   site?.close()
   for (const d of dirs) rmSync(d, { recursive: true, force: true })
 })
 
+const contexts = [] // closed in after(), even when a test fails midway — else Node never exits
 /** A fresh browser profile with the built extension, pointed at the local codec. */
 async function profile() {
   const dir = mkdtempSync(join(tmpdir(), 'lortnoc-everywhere-'))
@@ -104,6 +107,7 @@ async function profile() {
     channel: 'chromium',
     args: [`--disable-extensions-except=${DIST}`, `--load-extension=${DIST}`],
   })
+  contexts.push(ctx)
   let [swk] = ctx.serviceWorkers()
   if (!swk) swk = await ctx.waitForEvent('serviceworker')
   await swk.evaluate(([codecUrl, gateUrl]) => chrome.storage.local.set({ codecUrl, gateUrl }),
@@ -159,7 +163,7 @@ describe('extension-everywhere, three profiles on a comment section', () => {
     await sheet.waitForSelector('.status.ok', { timeout: 60_000 })
 
     const value = await page.inputValue('#c')
-    assert.match(value, /#lortnoctahc$/, 'cover inserted, tagged')
+    assert.ok(value.length > 100 && !/#lortnoctahc/.test(value), 'cover inserted, and NOT tagged')
     assert.ok(!value.includes('market'), 'no plaintext in the field')
     const seen = (await page.evaluate(() => window.__seen)).join('\n')
     assert.ok(!seen.includes('market') && !/keydown:!/.test(seen), `the page observed plaintext:\n${seen}`)
@@ -176,6 +180,10 @@ describe('extension-everywhere, three profiles on a comment section', () => {
     const page = await ctx.newPage()
     await page.goto(siteUrl)
     await trigger(sw, { action: 'scan' })
+    await page.waitForSelector('button:has-text("Reveal")', { timeout: 60_000 })
+    await page.waitForTimeout(3000) // let the deep scan finish every candidate
+    // The decoy passes the SHAPE filter but is not ours: the codec must reject it → exactly one chip.
+    assert.equal(await page.locator('button:has-text("Reveal")').count(), 1, 'only the real post gets a chip')
     await page.click('button:has-text("Reveal")')
     const card = await frameOf(page, 'reveal')
     await card.waitForSelector('#pw:not([hidden])', { state: 'visible', timeout: 60_000 })

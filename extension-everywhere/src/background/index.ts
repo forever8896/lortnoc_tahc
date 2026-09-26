@@ -4,6 +4,8 @@
 import contentScript from '../content/index.ts?script'
 import { CODER, DEFAULT_CODEC_URL, DEFAULT_GATE_URL, LOCAL, GATE_PATHS } from '../shared/messages'
 import type { SwRequest, SwResponse } from '../shared/messages'
+import { looksLikeCover, canonicalCover, inspect } from '../../../shared/webframe.mjs'
+import { fromB64 } from '../../../shared/keys.mjs'
 
 const TIMEOUT = 30_000 // gpt2 takes seconds; fail closed rather than hang
 
@@ -27,6 +29,20 @@ async function post(url: string, body: unknown): Promise<Response> {
 }
 
 async function handle(msg: SwRequest): Promise<SwResponse> {
+  if (msg.type === 'FIND_POSTS') {
+    // Deep scan, step 1 (shape, free) then step 2 (codec + frame check), a few at a time.
+    const candidates = msg.texts.map((t, i) => ({ t, i })).filter(({ t }) => looksLikeCover(t)).slice(0, 40)
+    const found: number[] = []
+    const queue = [...candidates]
+    const worker = async () => {
+      for (let c = queue.shift(); c; c = queue.shift()) {
+        const r = await handle({ type: 'DECODE', coverText: canonicalCover(c.t) }).catch(() => null)
+        if (r?.ok && inspect(fromB64((r.data as { ciphertext: string }).ciphertext))) found.push(c.i)
+      }
+    }
+    await Promise.all([worker(), worker(), worker()])
+    return { ok: true, data: { found: found.sort((a, b) => a - b) } }
+  }
   if (msg.type === 'WORLD_SIM') {
     // STAGING DEMO ONLY. World's simulator rejects calls with an extension Origin, so the gate —
     // which already talks to World — relays the request (gate/world.mjs simulate()).

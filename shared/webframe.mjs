@@ -88,7 +88,28 @@ export function canonicalCover(text) {
     .join(' ')
 }
 
-/** Does this text carry the marker? The cheap pre-filter before any codec call. */
+/**
+ * Deep-scan pre-filter: could this block of page text be codec cover text?
+ *
+ * Every backend emits only [a-z]+ words and single spaces, so cover text is a long run of lowercase
+ * words with no capitals and no punctuation — a shape ordinary human writing rarely has for 25+
+ * words. This decides which blocks are worth a codec call; the codec + AES-SIV tag then decide what
+ * is really ours. Tolerant of what sites do (a trailing full stop, the old #lortnoctahc tag, a
+ * capitalised first word) because canonicalCover() undoes those before decoding.
+ *
+ * Honest limit: this shape is itself a weak fingerprint — someone hunting for hidden text could
+ * look for it too. It is far less conspicuous than a hashtag, and it is all the extension needs.
+ */
+export function looksLikeCover(text, { minWords = 25 } = {}) {
+  const words = String(text).replace(new RegExp(HASHTAG, 'ig'), ' ').trim().split(/\s+/).filter(Boolean)
+  if (words.length < minWords) return false
+  const plain = words.filter((w) => /^[a-z]+$/.test(w)).length
+  const capitalised = words.filter((w) => /[A-Z]/.test(w)).length
+  const punctuated = words.filter((w) => /[.,!?;:"()]/.test(w)).length
+  return plain / words.length >= 0.95 && capitalised <= 1 && punctuated <= 1
+}
+
+/** Does this text carry the (legacy) marker? */
 export function hasMarker(text) {
   return String(text).toLowerCase().includes(HASHTAG)
 }

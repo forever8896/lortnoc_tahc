@@ -6,7 +6,7 @@ import { honesty } from '../../../shared/policy.mjs'
 import { generatePassphrase } from '../../../shared/checks/passphrase.mjs'
 import { toB64, fromHex } from '../../../shared/keys.mjs'
 import { gateDepositor } from '../../../shared/gateclient.mjs'
-import { sw, LOCAL, gatePost } from '../shared/messages'
+import { sw, gatePost } from '../shared/messages'
 import { contentHash, withAuthor } from '../../../shared/member.mjs'
 import { ownedSpaces, memberships, attestAsMember } from '../shared/spaces'
 import type { EncodeData, ContentToFrame, FrameToContent, GateHealth } from '../shared/messages'
@@ -212,9 +212,9 @@ async function go() {
     setStatus('Turning it into ordinary text…')
     const r = await sw<EncodeData>({ type: 'ENCODE', ciphertextB64: toB64(frame) })
     if (!r.ok) throw new Error(r.error)
-    const marker = $<HTMLInputElement>('marker').checked
-    await chrome.storage.local.set({ [LOCAL.marker]: marker })
-    lastCover = presentCover(r.data.coverText, { marker })
+    // Never tagged: a marker is a "this person is hiding something" flag; readers find posts by
+    // deep scan (shape + codec) or right-click Reveal instead.
+    lastCover = presentCover(r.data.coverText, { marker: false })
     $('cover').textContent = lastCover
     $('result').hidden = false
     fit()
@@ -248,9 +248,6 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void go()
 })
 if (location.hash === '#nofield') $('nofield').hidden = false
-chrome.storage.local.get(LOCAL.marker).then((g) => {
-  if (g[LOCAL.marker] === false) $<HTMLInputElement>('marker').checked = false
-})
 Promise.all([ownedSpaces(), memberships()]).then(([own, mem]) => {
   knownSpaces = [...new Set([...Object.keys(own), ...Object.keys(mem).filter((k) => mem[k].memberId)])].sort()
   memberOf = Object.fromEntries(Object.entries(mem).filter(([, m]) => m.memberId).map(([k, m]) => [k, m.memberId!]))

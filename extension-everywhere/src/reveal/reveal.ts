@@ -156,7 +156,7 @@ async function attempt() {
 
 async function main() {
   const hash = location.hash
-  if (hash === '#none') return setStatus('No tagged posts found on this page. Select a post and right-click → Reveal.'), fit()
+  if (hash === '#none') return setStatus('No hidden posts found on this page. If you know one is there, select its text and right-click → Reveal.'), fit()
   const raw = hash.startsWith('#t=') ? decodeURIComponent(hash.slice(3)) : ''
   const cover = canonicalCover(raw)
   if (!cover) return setStatus('Nothing to reveal here.', 'err'), fit()
