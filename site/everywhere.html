@@ -3,138 +3,519 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Everywhere | Lortnoc Tahc</title>
-<meta name="description" content="Hide what you write inside what you write — on any page, readable only by who you choose. Browser extension, World ID and ENS v2.">
+<title>Lortnoc Tahc · Private conversations in public places</title>
+<meta name="description" content="Lortnoc Tahc lets you create a private commons within the public commons with natural language encryption.">
+<meta name="theme-color" content="#08080A">
+
+<link rel="preload" href="/fonts/jost/jost-300.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/questrial/questrial-400.woff2" as="font" type="font/woff2" crossorigin>
+<script>document.documentElement.className += ' js';</script>
 <style>
-  :root{ --bg:#08080A; --ink:#EDEAE4; --signal:#12C4BE; --signal-rgb:18,196,190;
-    --muted:rgba(237,234,228,0.6); --faint:rgba(237,234,228,0.36); --rule:rgba(237,234,228,0.13);
-    --panel:#0e0e12; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
-  *{ box-sizing:border-box; }
-  body{ margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.6; }
-  a{ color:var(--signal); }
-  .wrap{ max-width:1040px; margin:0 auto; padding:0 clamp(18px,5vw,56px); }
-  nav{ display:flex; justify-content:space-between; align-items:center; padding:22px 0; }
-  nav .logo{ font-weight:600; letter-spacing:-.01em; color:var(--ink); text-decoration:none; } nav .logo b{ color:var(--signal); font-weight:600; }
-  nav .links a{ margin-left:22px; font-size:14px; color:var(--muted); text-decoration:none; } nav .links a:hover{ color:var(--ink); }
-  .eyebrow{ font-family:var(--mono); font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--signal); }
-  header.hero{ padding:clamp(40px,8vw,96px) 0 40px; display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr); gap:44px; align-items:center; }
-  @media(max-width:860px){ header.hero{ grid-template-columns:1fr; } }
-  h1{ font-size:clamp(34px,5.4vw,60px); line-height:1.04; letter-spacing:-.035em; margin:14px 0 18px; font-weight:600; }
-  .lede{ color:var(--muted); font-size:18px; max-width:560px; margin:0 0 28px; }
-  .cta{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
-  .btn{ display:inline-flex; align-items:center; gap:10px; background:var(--signal); color:#04110f; font-weight:600; text-decoration:none; padding:14px 22px; border-radius:999px; }
-  .btn:hover{ background:var(--ink); }
-  .btn.ghost{ background:transparent; color:var(--ink); border:1px solid var(--rule); } .btn.ghost:hover{ border-color:var(--signal); }
-  .small{ font-size:13px; color:var(--faint); } .mono{ font-family:var(--mono); }
-  .demo{ border:1px solid var(--rule); border-radius:20px; background:linear-gradient(160deg,#101416,#0a0b0d); padding:22px; box-shadow:0 40px 80px -30px rgba(0,0,0,.7); }
-  .post{ background:#f6f4ef; color:#1d1d1f; border-radius:14px; padding:14px 16px; font-size:14px; line-height:1.5; }
-  .post .who{ font-weight:600; font-size:13px; margin-bottom:4px; } .post .who span{ color:#888; font-weight:400; }
-  .chip{ display:inline-block; margin-top:10px; font:600 12px system-ui; background:var(--signal); color:#001514; border-radius:999px; padding:5px 11px; }
-  .opened{ margin-top:14px; border:1px solid rgba(var(--signal-rgb),.35); border-radius:14px; padding:12px 14px; font-size:14px; }
-  .opened .k{ font-family:var(--mono); font-size:10.5px; color:var(--signal); letter-spacing:.14em; text-transform:uppercase; }
-  section{ padding:56px 0; border-top:1px solid var(--rule); }
-  h2{ font-size:clamp(24px,3.4vw,34px); letter-spacing:-.02em; margin:10px 0 14px; font-weight:600; }
-  .grid3{ display:grid; grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr)); gap:14px; margin-top:22px; }
-  .card{ border:1px solid var(--rule); background:var(--panel); border-radius:18px; padding:22px; }
-  .card h3{ margin:0 0 6px; font-size:17px; } .card p{ margin:0; color:var(--muted); font-size:14.5px; }
-  .num{ font-family:var(--mono); color:var(--signal); font-size:12px; letter-spacing:.14em; }
-  ol.steps{ counter-reset:s; list-style:none; padding:0; margin:22px 0 0; display:grid; gap:12px; }
-  ol.steps li{ counter-increment:s; display:grid; grid-template-columns:36px minmax(0,1fr); gap:14px; align-items:start; }
-  ol.steps li::before{ content:counter(s); width:32px; height:32px; border-radius:50%; border:1px solid var(--signal); color:var(--signal); display:grid; place-items:center; font-size:14px; }
-  code{ font-family:var(--mono); color:var(--signal); background:rgba(var(--signal-rgb),.08); padding:1px 6px; border-radius:4px; font-size:.92em; }
-  pre{ background:#050506; border:1px solid var(--rule); border-radius:12px; padding:13px 15px; overflow-x:auto; font-family:var(--mono); font-size:12.5px; color:var(--muted); margin:12px 0 0; }
-  .deep{ display:grid; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); gap:14px; margin-top:22px; }
-  .deep a.card{ text-decoration:none; color:var(--ink); transition:border-color .15s; } .deep a.card:hover{ border-color:var(--signal); }
-  .deep .go{ color:var(--signal); font-size:14px; margin-top:12px; display:block; }
-  .limits li{ color:var(--muted); margin:6px 0; } .limits b{ color:var(--ink); font-weight:600; }
-  footer{ padding:40px 0 60px; color:var(--faint); font-size:13px; border-top:1px solid var(--rule); }
-  .tag{ font-family:var(--mono); font-size:11px; color:#001514; background:var(--signal); border-radius:999px; padding:3px 9px; margin-left:6px; vertical-align:middle; }
-  code, a{ overflow-wrap:anywhere; }
-  .flow > div{ grid-template-columns:40px minmax(0,1fr); }
-  .checks{ grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr)); }
+@font-face { font-family:"Questrial"; font-weight:400; font-display:swap; src:url("/fonts/questrial/questrial-400.woff2") format("woff2"); }
+@font-face { font-family:"Jost"; font-weight:300; font-display:swap; src:url("/fonts/jost/jost-300.woff2") format("woff2"); }
+@font-face { font-family:"Jost"; font-weight:400; font-display:swap; src:url("/fonts/jost/jost-400.woff2") format("woff2"); }
+@font-face { font-family:"Jost"; font-weight:500; font-display:swap; src:url("/fonts/jost/jost-500.woff2") format("woff2"); }
+
+:root{
+  --bg:#08080A;
+  --ink:#EDEAE4;
+  --muted:rgba(237,234,228,.56);
+  --rule:rgba(237,234,228,.12);
+  --signal:#12C4BE;
+  --panel:#111114;
+  --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  --shell:clamp(16px,6vw,88px);
+}
+*,*::before,*::after{ box-sizing:border-box; }
+html,body{ margin:0; background:var(--bg); }
+body{ color:var(--ink); font-family:"Jost",system-ui,sans-serif; font-weight:300; overflow-x:hidden;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+::selection{ background:var(--signal); color:var(--bg); }
+a{ color:inherit; }
+.sr-only{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+
+/* ── chrome ─────────────────────────────────────────────── */
+.sitemark{ position:fixed; z-index:20; top:clamp(14px,2.4vw,28px); left:var(--shell); display:block; }
+.sitemark img{ height:clamp(40px,5vw,72px); width:auto; display:block; }
+.topcta{ position:fixed; z-index:20; top:clamp(20px,3vw,36px); right:var(--shell);
+  font:400 13px/1 "Questrial",sans-serif; letter-spacing:.14em; text-transform:uppercase; text-decoration:none;
+  padding:12px 18px; border:1px solid rgba(237,234,228,.35); border-radius:999px; background:rgba(8,8,10,.35);
+  backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); transition:border-color .2s, color .2s; }
+.topcta:hover{ border-color:var(--signal); color:var(--signal); }
+
+/* ── films ──────────────────────────────────────────────── */
+.film{ position:relative; }
+.film__stage{ position:sticky; top:0; height:100vh; height:100svh; overflow:hidden; }
+.film__video,.film__poster{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.film__video{ opacity:0; transition:opacity 1.2s ease; }
+.film__video.is-ready{ opacity:1; }
+.film__stage::after{ content:""; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(to top, rgba(8,8,10,.78) 0%, rgba(8,8,10,.18) 42%, rgba(8,8,10,0) 60%); }
+.film__line{ position:absolute; z-index:2; left:var(--shell); right:var(--shell); bottom:clamp(64px,13vh,140px);
+  opacity:0; will-change:opacity,transform; text-shadow:0 2px 24px rgba(0,0,0,.6); }
+.film__line p{ margin:0; max-width:20ch; font-size:clamp(34px,5.6vw,88px); line-height:1.02; font-weight:400; letter-spacing:-.028em; text-wrap:balance; }
+.film__line small{ display:block; margin-top:16px; font-size:clamp(17px,1.5vw,23px); line-height:1.45; color:var(--muted); max-width:46ch; }
+.film__big{ margin:0; font-weight:400; font-size:clamp(44px,7.4vw,128px); line-height:.95; letter-spacing:-.035em;
+  max-width:14ch; text-wrap:balance; }
+.film__line .film__sub{ margin-top:22px; font-size:clamp(20px,2.2vw,34px); color:rgba(237,234,228,.8); }
+.film__follow{ margin-top:clamp(22px,3.5vh,40px); }
+.film__follow p{ font-size:clamp(24px,2.6vw,42px); line-height:1.12; max-width:40ch; }
+.film__line b{ font-weight:400; color:var(--signal); }
+.eyebrow{ display:block; margin-bottom:16px; font:400 13px/1 "Questrial",sans-serif; letter-spacing:.22em;
+  text-transform:uppercase; color:var(--muted); }
+
+.hero.film__line{ position:absolute; z-index:2; inset:0; max-width:none; display:flex; flex-direction:column; justify-content:center;
+  padding:clamp(90px,14vh,150px) var(--shell) 0; text-shadow:0 2px 30px rgba(0,0,0,.7); }
+.hero h1{ margin:0; font-weight:400; font-size:clamp(48px,9vw,160px); line-height:.95; letter-spacing:-.035em; max-width:13ch; text-wrap:balance; }
+.hero h1 em{ font-style:normal; color:var(--signal); }
+.hero p{ margin:30px 0 0; font-size:clamp(19px,2vw,29px); line-height:1.38; max-width:38ch; color:rgba(237,234,228,.86); }
+.hero p strong{ font-weight:400; color:var(--ink); }
+.cue{ position:absolute; z-index:2; left:50%; bottom:clamp(24px,5vh,48px); transform:translateX(-50%);
+  font:400 11px/1 "Questrial",sans-serif; letter-spacing:.3em; text-transform:uppercase; color:var(--muted); }
+.cue::after{ content:""; display:block; width:1px; height:34px; margin:12px auto 0; background:currentColor;
+  animation:cue 1.8s ease-in-out infinite; transform-origin:top; }
+@keyframes cue{ 0%{transform:scaleY(0)} 50%{transform:scaleY(1)} 100%{transform:scaleY(0); transform-origin:bottom} }
+
+/* ── plain sections ─────────────────────────────────────── */
+.section{ position:relative; padding:clamp(96px,16vh,180px) var(--shell); }
+.section h2{ margin:0; font-weight:400; font-size:clamp(40px,6.8vw,118px); line-height:.98; letter-spacing:-.034em; max-width:17ch; text-wrap:balance; }
+.section h2 em{ font-style:normal; color:var(--signal); }
+.lede{ margin:26px 0 0; font-size:clamp(18px,1.55vw,24px); line-height:1.55; color:var(--muted); max-width:52ch; }
+.lede strong{ color:var(--ink); font-weight:400; }
+[data-reveal]{ opacity:0; transform:translateY(22px); transition:opacity .9s ease, transform .9s ease; }
+[data-reveal].is-in{ opacity:1; transform:none; }
+html:not(.js) [data-reveal]{ opacity:1; transform:none; }
+
+/* thread mock — a generic public thread, deliberately unbranded */
+.thread{ margin-top:48px; max-width:720px; background:var(--panel); border:1px solid var(--rule); border-radius:14px; overflow:hidden; }
+.thread__bar{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  padding:14px 18px; border-bottom:1px solid var(--rule); font:400 13px/1.2 "Questrial",sans-serif; color:var(--muted); }
+.thread__bar b{ color:var(--ink); font-weight:400; }
+.post{ padding:18px; border-bottom:1px solid var(--rule); }
+.post:last-child{ border-bottom:0; }
+.post__who{ display:flex; align-items:center; gap:10px; font:400 14px/1 "Questrial",sans-serif; color:var(--muted); }
+.post__who i{ width:26px; height:26px; border-radius:50%; background:#2a2a30; flex:none; }
+.post__gate{ margin-left:auto; font:400 11px/1 var(--mono); padding:5px 8px; border-radius:999px;
+  border:1px solid var(--rule); color:var(--muted); white-space:nowrap; transition:all .35s ease; }
+.post__text{ margin:12px 0 0; font-size:19px; line-height:1.5; transition:color .35s ease; min-height:3em; }
+.post.is-open .post__gate{ border-color:rgba(18,196,190,.55); color:var(--signal); }
+.post.is-open .post__text{ color:var(--signal); }
+.post.is-open{ background:linear-gradient(90deg, rgba(18,196,190,.07), rgba(18,196,190,0) 70%); }
+
+.lens{ display:inline-flex; flex-wrap:wrap; gap:6px; padding:4px; border:1px solid var(--rule); border-radius:999px; background:var(--bg); }
+.lens button{ font:400 15px/1 "Questrial",sans-serif; color:var(--muted); background:none; border:0; cursor:pointer;
+  padding:9px 14px; border-radius:999px; transition:all .2s; }
+.lens button[aria-pressed="true"]{ background:var(--ink); color:var(--bg); }
+.lens button:focus-visible{ outline:2px solid var(--signal); outline-offset:2px; }
+.lens-label{ display:block; margin:44px 0 12px; font:400 13px/1 "Questrial",sans-serif; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); }
+
+/* the pause — pure black, one idea, typed as small talk then decoded */
+.pause{ position:relative; height:420vh; }
+.pause__pin{ position:sticky; top:0; height:100vh; height:100svh; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; padding:0 var(--shell); text-align:center; }
+.pause__label{ font:400 12px/1 "Questrial",sans-serif; letter-spacing:.24em; text-transform:uppercase; color:var(--muted);
+  font-size:13px; height:1em; transition:color .4s ease; }
+.pause__label.is-signal{ color:var(--signal); }
+.pause__text{ margin:28px 0 0; min-height:1.2em; font-weight:400; font-size:clamp(42px,8.4vw,150px); line-height:1;
+  letter-spacing:-.02em; max-width:16ch; transition:color .5s ease; }
+.pause__text.is-signal{ color:var(--signal); }
+.caret{ display:inline-block; width:.06em; height:.9em; margin-left:.06em; vertical-align:-.08em; background:currentColor;
+  animation:blink 1s steps(1) infinite; }
+@keyframes blink{ 50%{ opacity:0; } }
+.gate-logos{ display:flex; flex-wrap:wrap; align-items:center; gap:clamp(28px,4vw,56px); margin-top:clamp(36px,5vh,56px); }
+.gate-logo{ display:flex; align-items:center; text-decoration:none; transition:opacity .2s; }
+.gate-logo:hover{ opacity:.75; }
+.gate-logo:focus-visible{ outline:2px solid var(--signal); outline-offset:8px; border-radius:4px; }
+.gate-logo--ens{ gap:12px; }
+.gate-logo--ens img{ height:clamp(34px,3.2vw,44px); width:auto; display:block; }
+.gate-logo--ens b{ font:600 clamp(30px,2.8vw,40px)/1 "Jost",sans-serif; letter-spacing:-.01em; color:var(--ink); }
+.gate-logo--world img{ height:clamp(34px,3.2vw,44px); width:auto; display:block; }
+
+.platforms{ margin-top:clamp(40px,6vh,64px); max-width:720px; overflow:hidden;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent); mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent); }
+.platforms__track{ display:flex; width:max-content; animation:platforms 38s linear infinite; }
+.platforms:hover .platforms__track{ animation-play-state:paused; }
+.platforms ul{ display:flex; gap:clamp(28px,3vw,44px); margin:0; padding:0 clamp(14px,1.5vw,22px); list-style:none; }
+.platforms li{ display:flex; align-items:center; gap:12px; flex:none; opacity:.62; transition:opacity .2s; }
+.platforms li:hover{ opacity:1; }
+.platforms img{ width:30px; height:30px; display:block; }
+.platforms span{ font:400 16px/1 "Questrial",sans-serif; color:var(--ink); white-space:nowrap; }
+@keyframes platforms{ to{ transform:translateX(-50%); } }
+/* intro */
+.intro{ min-height:100vh; min-height:100svh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:clamp(96px,14vh,160px) var(--shell); text-align:center; }
+.intro__kicker{ font:400 13px/1 "Questrial",sans-serif; letter-spacing:.3em; text-transform:uppercase; color:var(--muted); }
+.intro__name{ margin:clamp(22px,3vh,36px) 0 0; display:flex; flex-direction:column; align-items:center;
+  gap:clamp(4px,1vh,14px); font-weight:400; font-size:clamp(52px,10vw,176px); line-height:.95; letter-spacing:-.04em; }
+.intro__name img{ width:min(72vw,660px,62vh); height:auto; display:block; }
+.intro__name span{ color:var(--signal); }
+.intro__line{ margin:clamp(24px,3.5vh,44px) 0 0; font-size:clamp(20px,2.4vw,38px); line-height:1.2; letter-spacing:-.015em; color:var(--ink); }
+
+/* close */
+.close{ position:relative; min-height:100vh; display:flex; flex-direction:column; justify-content:center;
+  background:var(--bg) url("/videos/v2/city.jpg") center/cover no-repeat; }
+.close::before{ content:""; position:absolute; inset:0; background:linear-gradient(to right, rgba(8,8,10,.9) 0%, rgba(8,8,10,.62) 55%, rgba(8,8,10,.35) 100%); }
+.close > *{ position:relative; }
+.actions{ display:flex; flex-wrap:wrap; gap:12px; margin-top:36px; }
+.btn{ display:inline-block; text-decoration:none; font:400 15px/1 "Questrial",sans-serif; letter-spacing:.12em; text-transform:uppercase;
+  cursor:pointer; color:var(--bg); background:var(--signal); border:1px solid var(--signal); border-radius:999px; padding:18px 30px; }
+.btn:hover{ filter:brightness(1.08); }
+.btn--ghost{ color:var(--ink); background:rgba(8,8,10,.4); border-color:rgba(237,234,228,.4); }
+.btn--ghost:hover{ filter:none; border-color:var(--ink); }
+.foot{ padding:28px var(--shell) 40px; font:400 12px/1.6 "Questrial",sans-serif; color:var(--muted); letter-spacing:.06em;
+  display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; border-top:1px solid var(--rule); }
+
+@media (max-width:860px){
+  .topcta{ padding:10px 14px; font-size:11px; }
+  .film__line{ bottom:clamp(56px,10vh,96px); }
+}
+@media (prefers-reduced-motion:reduce){
+  [data-reveal]{ transition:none; }
+  .cue::after,.caret,.platforms__track{ animation:none; }
+}
+/* ── get it (download + install) ───────────────────────── */
+#get{ scroll-margin-top:clamp(70px,10vh,120px); }
+.get__steps{ list-style:none; counter-reset:s; margin:clamp(40px,6vh,64px) 0 0; padding:0; display:grid; gap:clamp(22px,3vh,32px); max-width:880px; }
+.get__steps li{ counter-increment:s; display:grid; grid-template-columns:52px minmax(0,1fr); gap:18px; font-size:clamp(17px,1.4vw,21px); line-height:1.55; color:var(--muted); }
+.get__steps li::before{ content:counter(s); font:400 13px/1 "Questrial",sans-serif; letter-spacing:.2em; color:var(--signal); padding-top:.5em; }
+.get__steps b{ color:var(--ink); font-weight:400; }
+.get__steps code{ font-family:var(--mono); font-size:.8em; color:var(--signal); }
+.get__steps .code{ margin-top:14px; }
+.code{ position:relative; }
+.code pre{ margin:0; background:var(--panel); border:1px solid var(--rule); border-radius:14px; padding:16px 60px 16px 18px; font:400 12.5px/1.75 var(--mono);
+  color:rgba(237,234,228,.72); white-space:pre-wrap; word-break:break-all; }
+.code pre .c{ color:rgba(237,234,228,.36); }
+.copy{ position:absolute; top:10px; right:10px; display:grid; place-items:center; width:36px; height:36px; border-radius:999px; border:1px solid var(--rule); background:var(--bg);
+  color:var(--muted); cursor:pointer; font-size:16px; transition:color .2s, border-color .2s; }
+.copy:hover{ color:var(--ink); } .copy.done{ color:var(--signal); border-color:rgba(18,196,190,.55); }
+.copy svg, .get svg.i{ width:1em; height:1em; }
+.get__meta{ margin-top:18px; font:400 12px/1.6 "Questrial",sans-serif; letter-spacing:.06em; color:var(--muted); }
+.get__meta a{ color:var(--signal); }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <nav><a class="logo" href="/">lortnoc <b>tahc</b></a>
-    <div class="links"><a href="#how">How it works</a><a href="#install">Install</a><a href="/everywhere/world">World ID</a><a href="/everywhere/ens">ENS v2</a></div></nav>
+<span id="i-copy" hidden><svg class="i" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z"/></svg></span><span id="i-check" hidden><svg class="i" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></svg></span>
 
-  <header class="hero">
-    <div>
-      <span class="eyebrow">Lortnoc Tahc Everywhere · browser extension</span>
-      <h1>Say it anywhere.<br>Only the right people can read it.</h1>
-      <p class="lede">Write a hidden message into any comment box, forum or feed. To everyone else it's an ordinary post — not even visibly a message. Readers who hold the right key see what you actually said.</p>
-      <div class="cta">
-        <a class="btn" href="https://github.com/forever8896/lortnoc_tahc/releases/download/ew-v0.2.2/lortnoc-tahc-everywhere-ew-v0.2.2.zip">↓ Download v0.2.2</a>
-        <a class="btn ghost" href="#install">How to install</a>
+<a class="sitemark" href="/" aria-label="Lortnoc Tahc, home"><img src="/logos/lortnoctahc.png" alt="Lortnoc Tahc" width="560" height="286"></a>
+<a class="topcta" href="#get">Try It Now</a>
+
+<main id="top">
+
+  <!-- FILM 1 — the square. One continuous take (cache/landing/build2.py): agents walk in 0–6.5s, pan to the
+       whisper 6.5–13s, pull back to the friends watching 13–20s, past them to the mirror cube 20–24.8s. Lines are in film-seconds. -->
+  <section class="film" id="film-1" aria-label="The square is watched"
+           data-scrub="/videos/v2/f1-scrub.mp4" data-mobile="/videos/v2/f1-mobile.mp4"
+           data-len="24.83" data-track="560">
+    <div class="film__stage">
+      <img class="film__poster" src="/videos/v2/f1-poster.jpg" alt="">
+      <video class="film__video" muted playsinline preload="none" aria-hidden="true"></video>
+
+      <div class="hero film__line" data-in="-1" data-hold="0" data-out="2.4" data-gone="3.4">
+        <h1>Private conversations in <em>public places.</em></h1>
+        <p>Lortnoc Tahc lets you create a private commons within the public commons with <strong>natural language encryption.</strong></p>
       </div>
-      <p class="small" style="margin-top:14px">Chrome, Brave, Edge, Arc · built in public CI · SHA-256 <span class="mono">f55f0094…cf1b82</span> · <a href="https://github.com/forever8896/lortnoc_tahc/releases/tag/ew-v0.2.2">release &amp; checksum</a></p>
-    </div>
-    <div class="demo" aria-label="What a hidden post looks like">
-      <div class="post"><div class="who">guest <span>· 3 min ago</span></div>that night could have started differently on stage again just going online since last month maybe going around at most once rather than maybe over three because after making me sign of myself they realised as quick away…</div>
-      <span class="chip">🔓 Hidden message for you</span>
-      <div class="opened"><div class="k">Opened with your keys · Citizens of DNK</div>hello denmark — meet at the usual place at nine.</div>
-    </div>
-  </header>
+      <span class="cue">Scroll</span>
 
-  <section id="how">
-    <span class="eyebrow">How it works</span>
-    <h2>A message that says nothing about itself.</h2>
-    <div class="grid3">
-      <div class="card"><div class="num">01 · WRITE</div><h3>Pick who can read it</h3><p>Press <b>Ctrl+Shift+L</b> in any text box. Write your message, choose readers: a passphrase, verified humans, citizens of a country, holders of an NFT space, a date — or combine them.</p></div>
-      <div class="card"><div class="num">02 · POST</div><h3>It becomes ordinary words</h3><p>Your message is encrypted, then turned into plain chatter. No tag, no marker, no rule in the clear — nobody can tell it's a message, or who it's for.</p></div>
-      <div class="card"><div class="num">03 · READ</div><h3>Keys open what's yours</h3><p>Readers connect their keys once — passphrases, World ID, a wallet. Posts meant for them open by themselves; everything else stays an ordinary post.</p></div>
+      <div class="film__line film__line--stack" data-in="5.2" data-hold="6.2" data-out="12.6" data-gone="13.4">
+        <h2 class="film__big">Public conversations are <b>mass-surveilled.</b></h2>
+        <div class="film__follow">
+          <p><b>Manipulation campaigns</b> sway public chatter. When they don’t like what you say, <b>you become a target.</b></p>
+          <small>71% of countries have arrested people for what they’ve said on social media.</small>
+        </div>
+      </div>
+      <div class="film__line" data-in="16.4" data-hold="17.0" data-out="19.6" data-gone="20.3">
+        <h2 class="film__big">Leaving the commons means <b>losing your people.</b></h2>
+        <small class="film__sub">Their abuse is a bet that you’ll stay.</small>
+      </div>
     </div>
   </section>
 
-  <section>
-    <span class="eyebrow">NFT Spaces</span>
-    <h2>A private channel for your holders. <span class="tag">first 10 · 90% off</span></h2>
-    <p class="lede" style="font-size:16px">Buy a real ENS name — <code>yourspace.space.lortnoctahc.eth</code> — gated by your NFT collection. Only wallets holding it can read posts for the space; members sign as verified pseudonyms; you ban on-chain. 0.005 ETH once on Ethereum mainnet — the first 10 spaces cost 0.0005 ETH, enforced by the contract. Readers can try it free: the extension hands out demo-collection NFTs on Sepolia.</p>
-    <div class="grid3">
-      <div class="card"><h3>🔒 Holders only</h3><p>The collection lives in the space's ENS record, not in the post. Change it once; every post follows.</p></div>
-      <div class="card"><h3>✓ Verified members</h3><p>Members post as a stable pseudonym. Readers see a real, unbanned member wrote it — never who.</p></div>
-      <div class="card"><h3>⛔ On-chain bans</h3><p>A ban is written to the space's ENS record. Every reader's gate enforces it — public and verifiable.</p></div>
+  <!-- THE PAUSE — no film. The real line types itself in, then flips letter by letter into
+       small talk, driven by scroll so it runs backwards too. -->
+  <section class="pause" id="pause" aria-label="What if we could hide in plain sight, together?">
+    <div class="pause__pin">
+      <span class="pause__label" aria-hidden="true"></span>
+      <p class="pause__text" aria-hidden="true"></p>
+      <p class="sr-only">What if we could hide in plain sight, together? Encoded as: Lovely weather in the square today.</p>
     </div>
   </section>
 
-  <section id="install">
-    <span class="eyebrow">Install · 2 minutes</span>
-    <h2>Get it running</h2>
-    <ol class="steps">
-      <li><div><b>Download</b> <a href="https://github.com/forever8896/lortnoc_tahc/releases/download/ew-v0.2.2/lortnoc-tahc-everywhere-ew-v0.2.2.zip">lortnoc-tahc-everywhere-ew-v0.2.2.zip</a> and check it:
-        <pre>shasum -a 256 lortnoc-tahc-everywhere-ew-v0.2.2.zip
-# f55f00945a7a6430b32ac89aa90358bf49ed1ea568b1dab82fc4d05109cf1b82
-gh attestation verify lortnoc-tahc-everywhere-ew-v0.2.2.zip -R forever8896/lortnoc_tahc</pre></div></li>
-      <li><div><b>Unzip it</b> somewhere it can stay, open <code>chrome://extensions</code> and switch on <b>Developer mode</b>.</div></li>
-      <li><div><b>Load unpacked</b> → pick the unzipped folder. Pin the extension.</div></li>
-      <li><div><b>Add your keys</b>: the extension button → ⚙ → <b>Keys</b> — a passphrase you were given, World ID (verified human, or your passport's nationality), a wallet.</div></li>
-      <li><div><b>Write</b>: click any text box, press <b>Ctrl+Shift+L</b>. <b>Read</b>: extension button → <b>Find hidden posts</b> — or switch on <b>Always on</b> for a site and it checks every page for you.</div></li>
+  <!-- INTRO — the name lands on black, straight after the pause. -->
+  <section class="intro" id="intro" aria-labelledby="intro-h">
+    <span class="intro__kicker" data-reveal>Introducing</span>
+    <h2 class="intro__name" id="intro-h" data-reveal>
+      <img src="/logos/lortnoctahc.png" alt="Lortnoc Tahc" width="560" height="286">
+      <span>Everywhere</span>
+    </h2>
+    <p class="intro__line" data-reveal>Private conversations in public spaces.</p>
+  </section>
+
+  <!-- FILM 2 — inside. One continuous take: rise over the cube 0–5s, descent into colour 5–10s,
+       the door and the hug 10–15s, back out through the doorway 15–20s, up to the city of boxes 20–25s. -->
+  <section class="film" id="film-2" aria-label="Inside"
+           data-scrub="/videos/v2/f2-scrub.mp4" data-mobile="/videos/v2/f2-mobile.mp4"
+           data-len="25.04" data-track="440">
+    <div class="film__stage">
+      <img class="film__poster" src="/videos/v2/f2-poster.jpg" alt="">
+      <video class="film__video" muted playsinline preload="none" aria-hidden="true"></video>
+
+      <div class="film__line" data-in="7.0" data-hold="8.0" data-out="16.0" data-gone="17.0">
+        <h2 class="film__big">Write anywhere on the internet. <b>You decide who reads it.</b></h2>
+        <small class="film__sub">Configure access controls for what type of people can read your messages.</small>
+      </div>
+      <div class="film__line" data-in="21.0" data-hold="22.0" data-out="26" data-gone="27">
+        <p>A private commons within the <b>public commons.</b></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- DEMO — one thread. "Outsider" is the steganography; each other lens is a gate. -->
+  <section class="section" id="how" aria-labelledby="how-h">
+    <span class="eyebrow" data-reveal>See it for yourself</span>
+    <h2 id="how-h" data-reveal>Same thread. <em>Different conversations.</em></h2>
+    <p class="lede" data-reveal>To anyone scrolling past, it’s people talking about the weather. Read it as a verified Dane and the hidden posts open. One of these posts really is just about the weather.</p>
+
+    <span class="lens-label" data-reveal>View this thread as</span>
+    <div class="lens" role="group" aria-label="View the thread as" data-lens="how" data-reveal>
+      <button type="button" data-view="out" aria-pressed="true">Outsider</button>
+      <button type="button" data-view="dk" aria-pressed="false">Verified Dane</button>
+    </div>
+
+    <div class="thread" data-thread="how" data-reveal>
+      <div class="thread__bar"><span><b>Public thread</b> · Copenhagen</span><span>3 replies</span></div>
+      <div class="post" data-gate="dk">
+        <div class="post__who"><i></i>maja_k · 2h<span class="post__gate">Danish citizens</span></div>
+        <p class="post__text" data-out="Anyone else think the harbour looks unreal in this fog? Might grab a coffee by the water after work."
+                              data-in="The surveillance amendment goes to a vote on Thursday. We’re drafting a letter to our MPs tonight at 18:00. Bring people you trust."></p>
+      </div>
+      <div class="post">
+        <div class="post__who"><i></i>fjord.runner · 1h<span class="post__gate">just a post</span></div>
+        <p class="post__text" data-out="Fog’s been sitting on Nørrebro all day. Every bike in the city is soaked."></p>
+      </div>
+      <div class="post" data-gate="dk">
+        <div class="post__who"><i></i>sanne.v · 40m<span class="post__gate">Danish citizens</span></div>
+        <p class="post__text" data-out="Ha, same. Coffee sounds perfect, save me a seat by the window."
+                              data-in="I’ll bring the draft. Two friends from the union want in too, and they’re both verified."></p>
+      </div>
+    </div>
+
+    <!-- Platform marquee. Two identical halves slide by exactly one half, so the loop has no seam. Icons: Simple Icons (CC0). -->
+    <div class="platforms" data-reveal>
+      <p class="sr-only">Works on Reddit, X, 4chan, Facebook, Instagram, Google Maps, Telegram, Discord, WhatsApp, YouTube, TikTok, LinkedIn, Threads, Bluesky, Mastodon, and more.</p>
+      <div class="platforms__track" aria-hidden="true">
+        <ul><li><img src="/logos/platforms/reddit.svg" alt="" width="26" height="26"><span>Reddit</span></li><li><img src="/logos/platforms/x.svg" alt="" width="26" height="26"><span>X</span></li><li><img src="/logos/platforms/4chan.svg" alt="" width="26" height="26"><span>4chan</span></li><li><img src="/logos/platforms/facebook.svg" alt="" width="26" height="26"><span>Facebook</span></li><li><img src="/logos/platforms/instagram.svg" alt="" width="26" height="26"><span>Instagram</span></li><li><img src="/logos/platforms/googlemaps.svg" alt="" width="26" height="26"><span>Google Maps</span></li><li><img src="/logos/platforms/telegram.svg" alt="" width="26" height="26"><span>Telegram</span></li><li><img src="/logos/platforms/discord.svg" alt="" width="26" height="26"><span>Discord</span></li><li><img src="/logos/platforms/whatsapp.svg" alt="" width="26" height="26"><span>WhatsApp</span></li><li><img src="/logos/platforms/youtube.svg" alt="" width="26" height="26"><span>YouTube</span></li><li><img src="/logos/platforms/tiktok.svg" alt="" width="26" height="26"><span>TikTok</span></li><li><img src="/logos/platforms/linkedin.svg" alt="" width="26" height="26"><span>LinkedIn</span></li><li><img src="/logos/platforms/threads.svg" alt="" width="26" height="26"><span>Threads</span></li><li><img src="/logos/platforms/bluesky.svg" alt="" width="26" height="26"><span>Bluesky</span></li><li><img src="/logos/platforms/mastodon.svg" alt="" width="26" height="26"><span>Mastodon</span></li></ul><ul><li><img src="/logos/platforms/reddit.svg" alt="" width="26" height="26"><span>Reddit</span></li><li><img src="/logos/platforms/x.svg" alt="" width="26" height="26"><span>X</span></li><li><img src="/logos/platforms/4chan.svg" alt="" width="26" height="26"><span>4chan</span></li><li><img src="/logos/platforms/facebook.svg" alt="" width="26" height="26"><span>Facebook</span></li><li><img src="/logos/platforms/instagram.svg" alt="" width="26" height="26"><span>Instagram</span></li><li><img src="/logos/platforms/googlemaps.svg" alt="" width="26" height="26"><span>Google Maps</span></li><li><img src="/logos/platforms/telegram.svg" alt="" width="26" height="26"><span>Telegram</span></li><li><img src="/logos/platforms/discord.svg" alt="" width="26" height="26"><span>Discord</span></li><li><img src="/logos/platforms/whatsapp.svg" alt="" width="26" height="26"><span>WhatsApp</span></li><li><img src="/logos/platforms/youtube.svg" alt="" width="26" height="26"><span>YouTube</span></li><li><img src="/logos/platforms/tiktok.svg" alt="" width="26" height="26"><span>TikTok</span></li><li><img src="/logos/platforms/linkedin.svg" alt="" width="26" height="26"><span>LinkedIn</span></li><li><img src="/logos/platforms/threads.svg" alt="" width="26" height="26"><span>Threads</span></li><li><img src="/logos/platforms/bluesky.svg" alt="" width="26" height="26"><span>Bluesky</span></li><li><img src="/logos/platforms/mastodon.svg" alt="" width="26" height="26"><span>Mastodon</span></li></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- STATEMENT — customisable gates first, the two that ship ready second. -->
+  <section class="section" id="gates" aria-labelledby="gates-h">
+    <h2 id="gates-h" data-reveal>Build a gate from <em>any rule that can be proven.</em></h2>
+    <p class="lede" data-reveal>Start with two that work out of the box: <strong>ENS v2 subnames</strong> for communities, and <strong>World ID</strong> for verified nationality. Readers prove they qualify without revealing who they are.</p>
+    <div class="gate-logos" data-reveal>
+      <a class="gate-logo gate-logo--ens" href="/everywhere/ens"><img src="/logos/ens-ink.svg" alt="" width="40" height="40"><b>ENS</b></a>
+      <a class="gate-logo gate-logo--world" href="/everywhere/world"><img src="/logos/world.svg" alt="World" width="192" height="48"></a>
+    </div>
+  </section>
+
+  <section class="close section" id="join" aria-labelledby="join-h">
+    <h2 id="join-h" data-reveal>Private conversations, <em>in public places.</em></h2>
+    <p class="lede" data-reveal>Today, Lortnoc Tahc works on most websites visited on Chromium-based web browsers. Lortnoc Tahc is fully open-source.</p>
+    <div class="actions" data-reveal>
+      <!-- onboarding.html forwards to the Telegram onboarding bot (Vercel also serves it at /onboarding). -->
+      <a class="btn" href="#get">Try It Now</a>
+      <a class="btn btn--ghost" href="https://github.com/forever8896/lortnoc_tahc" target="_blank" rel="noopener">View Sourcecode</a>
+    </div>
+  </section>
+  <section class="section get" id="get" aria-labelledby="get-h">
+    <span class="eyebrow" data-reveal>Lortnoc Tahc Everywhere · v0.2.4</span>
+    <h2 id="get-h" data-reveal>Two minutes. <em>No store.</em></h2>
+    <p class="lede" data-reveal>Download it straight from GitHub, built in public CI, and check it before it touches your browser.</p>
+    <div class="actions" data-reveal>
+      <a class="btn" href="https://github.com/forever8896/lortnoc_tahc/releases/download/ew-v0.2.4/lortnoc-tahc-everywhere-ew-v0.2.4.zip">Download v0.2.4</a>
+      <a class="btn btn--ghost" href="https://github.com/forever8896/lortnoc_tahc/releases/tag/ew-v0.2.4" target="_blank" rel="noopener">Release &amp; checksum</a>
+    </div>
+    <p class="get__meta" data-reveal>Chrome, Brave, Edge and Arc · SHA-256 2709390f…5e5f79</p>
+    <ol class="get__steps">
+      <li data-reveal><div><b>Check the download.</b> The hash must match, and GitHub confirms our CI built it.<pre>shasum -a 256 lortnoc-tahc-everywhere-ew-v0.2.4.zip
+<span class="c"># 2709390f283a771ad80b895c36eda99282891607e92b902c3557f8744f5e5f79</span>
+gh attestation verify lortnoc-tahc-everywhere-ew-v0.2.4.zip -R forever8896/lortnoc_tahc</pre></div></li>
+      <li data-reveal><div><b>Load it.</b> Unzip it somewhere it can stay, open <code>chrome://extensions</code>, switch on Developer mode, choose Load unpacked and pick the folder.</div></li>
+      <li data-reveal><div><b>Add your keys.</b> Open the extension and press the gear: World ID, a wallet, or a passphrase you were given.</div></li>
+      <li data-reveal><div><b>Write and read.</b> Press <code>Ctrl+Shift+L</code> in any text box to write. Press Find hidden posts to read, or turn on Always on for a site.</div></li>
     </ol>
   </section>
+</main>
 
-  <section>
-    <span class="eyebrow">Under the hood · verify, don't trust</span>
-    <h2>How the integrations work</h2>
-    <div class="deep">
-      <a class="card" href="/everywhere/world"><h3>World ID · IDKit</h3><p>World's own widget, connect once, a gate that checks every proof twice — World's API and the verifier contract on World Chain — and passport nationality through Identity Check.</p><span class="go">Walkthrough, code &amp; tests →</span></a>
-      <a class="card" href="/everywhere/ens"><h3>ENS v2</h3><p>Every space is a real ENS v2 name with its own resolver. Owner, NFT collection and bans live in its records; the gate reads them the way ENS does. Check it with curl.</p><span class="go">Walkthrough, curl &amp; scripts →</span></a>
-    </div>
-  </section>
+<footer class="foot">
+  <span>Lortnoc Tahc · open source</span>
+  <span>Built at ETHGlobal · now productionizing</span>
+</footer>
 
-  <section>
-    <span class="eyebrow">Honest limits</span>
-    <h2>What it doesn't do</h2>
-    <ul class="limits">
-      <li><b>The gate operator</b> holds the key pieces for time, World ID and NFT rules. Add a passphrase to a rule and the gate alone can't read the post.</li>
-      <li><b>The gate learns which of its posts your page showed</b> when your extension asks what you may open.</li>
-      <li><b>Cover text can look machine-written</b> to a trained detector. This hides who a post is for and that it's ours from casual and keyword censorship — not from a determined analyst.</li>
-      <li><b>A guessable passphrase can be guessed.</b> The generated five words cannot.</li>
-      <li><b>ENS v2 lives on Sepolia</b> until it reaches mainnet; space payments are on Ethereum mainnet.</li>
-    </ul>
-  </section>
+<script>
+(function () {
+  function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 
-  <footer>lortnoc tahc · ETHGlobal Tokyo 2026 · <a href="https://github.com/forever8896/lortnoc_tahc">source</a> · <a href="/">lortnoctahc.com</a></footer>
-</div>
+  /* ── reveals ─────────────────────────────────────────────── */
+  var io = new IntersectionObserver(function (es) {
+    es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); } });
+  }, { rootMargin: '0px 0px -12% 0px' });
+  [].forEach.call(document.querySelectorAll('[data-reveal]'), function (el) { io.observe(el); });
+
+  /* ── threads: decode per viewer ─────────────────────────── */
+  // A post opens when the viewer passes its gate. "all" opens for any insider.
+  function morph(el, to) {
+    if (el.textContent === to) return;
+    var from = el.textContent, n = Math.max(from.length, to.length), t0 = performance.now(), dur = 700;
+    var glyphs = 'abcdefghijklmnopqrstuvwxyz';
+    (function step(now) {
+      var k = clamp01((now - t0) / dur), cut = Math.floor(k * n), s = '';
+      for (var i = 0; i < n; i++) {
+        if (i < cut) s += to.charAt(i) || '';
+        else if (i < cut + 6 && (to.charAt(i) || from.charAt(i)) !== ' ') s += glyphs[(Math.random() * 26) | 0];
+        else s += from.charAt(i) || '';
+      }
+      el.textContent = s;
+      if (k < 1) requestAnimationFrame(step); else el.textContent = to;
+    })(t0);
+  }
+  function setView(name, view, animate) {
+    var thread = document.querySelector('[data-thread="' + name + '"]');
+    [].forEach.call(thread.querySelectorAll('.post'), function (post) {
+      var g = post.dataset.gate, txt = post.querySelector('.post__text');
+      var open = !!g && view !== 'out' && (g === 'all' || g === view);
+      post.classList.toggle('is-open', open);
+      var to = open ? txt.dataset.in : txt.dataset.out;
+      if (animate) morph(txt, to); else txt.textContent = to;
+    });
+    [].forEach.call(document.querySelectorAll('[data-lens="' + name + '"] button'), function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.view === view));
+    });
+  }
+  [].forEach.call(document.querySelectorAll('[data-lens]'), function (lens) {
+    var name = lens.dataset.lens;
+    setView(name, 'out', false);
+    lens.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (b) setView(name, b.dataset.view, true);
+    });
+  });
+  // The first thread decodes itself once, a beat after it scrolls in, so the trick is seen
+  // even by people who never touch the toggle.
+  var howThread = document.querySelector('[data-thread="how"]'), autoplayed = false;
+  new IntersectionObserver(function (es, obs) {
+    if (!es[0].isIntersecting || autoplayed) return;
+    autoplayed = true; obs.disconnect();
+    setTimeout(function () { setView('how', 'dk', true); }, 1400);
+  }, { threshold: 0.6 }).observe(howThread);
+
+  /* ── films: scroll-scrubbed pinned sections ─────────────── */
+  // Scrub masters are all-intra (keyint=1): every frame seeks instantly, scrolling up plays backwards.
+  var conn = navigator.connection;
+  var lite = !!(conn && (conn.saveData || /(^|-)2g$/.test(conn.effectiveType || '')))
+             || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // currentTime-while-native-scrolling is the jank path on touch, so phones loop the light cut instead.
+  var canScrub = window.matchMedia('(hover: hover) and (pointer: fine)').matches && window.innerWidth >= 900;
+
+  function setupFilm(section) {
+    var video = section.querySelector('.film__video');
+    var poster = section.querySelector('.film__poster');
+    var cue = section.querySelector('.cue');
+    var len = parseFloat(section.dataset.len);
+    section.style.height = (canScrub ? parseFloat(section.dataset.track) : parseFloat(section.dataset.track) * 0.6) + 'vh';
+
+    var lines = [].slice.call(section.querySelectorAll('.film__line')).map(function (el) {
+      return { el: el, a: +el.dataset.in / len, b: +el.dataset.hold / len, c: +el.dataset.out / len, d: +el.dataset.gone / len };
+    });
+
+    // Attach the film only when it's within ~1.5 viewports, so the page doesn't pull 17 MB on load.
+    var attached = false;
+    function attach() {
+      if (attached || lite) return;
+      attached = true;
+      video.preload = 'auto';
+      video.src = canScrub ? section.dataset.scrub : section.dataset.mobile;
+      video.load();
+      var shown = false, reveal = function () {
+        if (shown) return; shown = true;
+        video.classList.add('is-ready');
+        poster.style.transition = 'opacity 1.2s ease'; poster.style.opacity = '0';
+      };
+      video.addEventListener('loadeddata', reveal);
+      video.addEventListener('canplay', reveal);
+      if (!canScrub) { video.loop = true; var pl = video.play(); if (pl && pl.catch) pl.catch(function () {}); }
+    }
+    new IntersectionObserver(function (es) { if (es[0].isIntersecting) attach(); }, { rootMargin: '150% 0px' }).observe(section);
+
+    var sp = 0, seeded = false;
+    return function (dt) {
+      var r = section.getBoundingClientRect(), span = r.height - window.innerHeight;
+      var p = span > 0 ? clamp01(-r.top / span) : 0;
+      if (!seeded) { sp = p; seeded = true; }
+      sp += (p - sp) * (1 - Math.pow(0.0055, dt / 1000));   // wheel steps → cinematic inertia
+
+      if (canScrub && attached && video.readyState >= 2 && video.duration) {
+        var target = sp * (video.duration - 0.05);
+        if (Math.abs(video.currentTime - target) > 0.02) { try { video.currentTime = target; } catch (e) {} }
+      }
+      for (var i = 0; i < lines.length; i++) {
+        var w = lines[i], o;
+        if (sp < w.a || sp > w.d) o = 0;
+        else if (sp < w.b) o = w.b > w.a ? (sp - w.a) / (w.b - w.a) : 1;
+        else if (sp <= w.c) o = 1;
+        else o = w.d > w.c ? 1 - (sp - w.c) / (w.d - w.c) : 0;
+        var s = o * o * (3 - 2 * o);
+        w.el.style.opacity = s.toFixed(3);
+        w.el.style.transform = 'translate3d(0,' + (26 * (1 - s)).toFixed(1) + 'px,0)';
+        w.el.style.visibility = s > 0.001 ? 'visible' : 'hidden';
+      }
+      if (cue) cue.style.opacity = Math.max(0, 1 - sp / 0.04).toFixed(3);
+    };
+  }
+  var films = [].slice.call(document.querySelectorAll('.film')).map(setupFilm);
+
+  /* ── the pause: type the real line, then flip it into small talk ── */
+  // 0.08–0.32 types the real message, 0.32–0.44 holds it, 0.44–0.68 every letter flips (split-flap style,
+  // staggered left to right) into the cover, then the cover holds. Scroll-driven, so it runs backwards too.
+  var pause = document.getElementById('pause');
+  var pLabel = pause.querySelector('.pause__label'), pText = pause.querySelector('.pause__text');
+  var REAL = 'What if we could hide in plain sight, together?', COVER = 'Lovely weather in the square today.';
+  var GLYPHS = 'abcdefghijklmnopqrstuvwxyz', pSp = 0, pSeeded = false, pLast = '';
+  function glyph(i, k) { return GLYPHS[(i * 7 + Math.floor(k * 60) * 13) % 26]; }   // stable per position, so scrubbing doesn't flicker
+  films.push(function (dt) {
+    var r = pause.getBoundingClientRect(), span = r.height - window.innerHeight;
+    var p = span > 0 ? clamp01(-r.top / span) : 0;
+    if (!pSeeded) { pSp = p; pSeeded = true; }
+    pSp += (p - pSp) * (1 - Math.pow(0.0055, dt / 1000));
+    var html, label, secret;
+    if (pSp < 0.44) {
+      var n = Math.round(clamp01((pSp - 0.08) / 0.24) * REAL.length);
+      html = REAL.slice(0, n) + '<span class="caret"></span>';
+      label = n > 0 ? 'What you write' : ''; secret = true;
+    } else {
+      var k = clamp01((pSp - 0.44) / 0.24), len = Math.max(REAL.length, COVER.length), out = '';
+      for (var i = 0; i < len; i++) {
+        var from = REAL.charAt(i), to = COVER.charAt(i);
+        var t0 = (i / len) * 0.6, t = (k - t0) / 0.4;           // this letter's own flip, 0..1
+        if (t <= 0) out += from;
+        else if (t >= 1) out += to;
+        else out += (to === ' ' || !to) ? to : glyph(i, k);    // mid-flip letters take the cover's word breaks, so lines wrap cleanly
+      }
+      html = out; secret = k === 0;
+      label = k >= 1 ? 'What everyone else sees' : 'Encoding';
+    }
+    if (html !== pLast) { pText.innerHTML = html; pLast = html; }
+    if (pLabel.textContent !== label) pLabel.textContent = label;
+    pText.classList.toggle('is-signal', secret); pLabel.classList.toggle('is-signal', secret);
+  });
+  var last = performance.now();
+  (function loop(now) {
+    var dt = Math.min(64, now - last); last = now;
+    for (var i = 0; i < films.length; i++) films[i](dt);
+    requestAnimationFrame(loop);
+  })(last);
+
+})();
+</script>
+<script src="/everywhere.js" defer></script>
 </body>
 </html>

@@ -1,0 +1,94 @@
+/* /everywhere/world and /everywhere/ens: the v2 landing's design language (site/v2.html), carrying
+   the code showcases. Questrial for labels and buttons, Jost 300 for reading, one teal accent. */
+@font-face { font-family:"Questrial"; font-weight:400; font-display:swap; src:url("/fonts/questrial/questrial-400.woff2") format("woff2"); }
+@font-face { font-family:"Jost"; font-weight:300; font-display:swap; src:url("/fonts/jost/jost-300.woff2") format("woff2"); }
+@font-face { font-family:"Jost"; font-weight:400; font-display:swap; src:url("/fonts/jost/jost-400.woff2") format("woff2"); }
+@font-face { font-family:"Jost"; font-weight:500; font-display:swap; src:url("/fonts/jost/jost-500.woff2") format("woff2"); }
+
+:root {
+  --bg:#08080A; --ink:#EDEAE4; --muted:rgba(237,234,228,.56); --faint:rgba(237,234,228,.36); --rule:rgba(237,234,228,.12);
+  --signal:#12C4BE; --panel:#111114; --mono:ui-monospace,SFMono-Regular,Menlo,monospace; --shell:clamp(16px,6vw,88px);
+  --ease:cubic-bezier(.16,1,.3,1); color-scheme:dark;
+}
+*, *::before, *::after { box-sizing:border-box; }
+html, body { margin:0; background:var(--bg); }
+html { scroll-behavior:smooth; }
+body { color:var(--ink); font-family:"Jost",system-ui,sans-serif; font-weight:300; overflow-x:hidden; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+::selection { background:var(--signal); color:var(--bg); }
+a { color:inherit; }
+svg.i { width:1em; height:1em; flex:none; vertical-align:-.14em; }
+
+/* chrome, as on the landing */
+.sitemark { position:fixed; z-index:20; top:clamp(14px,2.4vw,28px); left:var(--shell); display:block; }
+.sitemark img { height:clamp(40px,5vw,72px); width:auto; display:block; }
+.topcta { position:fixed; z-index:20; top:clamp(20px,3vw,36px); right:var(--shell); font:400 13px/1 "Questrial",sans-serif; letter-spacing:.14em; text-transform:uppercase;
+  text-decoration:none; padding:12px 18px; border:1px solid rgba(237,234,228,.35); border-radius:999px; background:rgba(8,8,10,.35); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+  transition:border-color .2s, color .2s; }
+.topcta:hover { border-color:var(--signal); color:var(--signal); }
+@media (max-width:860px) { .topcta { padding:10px 14px; font-size:11px; } }
+
+/* type */
+.eyebrow { display:block; margin-bottom:16px; font:400 13px/1 "Questrial",sans-serif; letter-spacing:.22em; text-transform:uppercase; color:var(--muted); }
+.section { position:relative; padding:clamp(96px,16vh,180px) var(--shell); }
+.section + .section { padding-top:0; }
+.section h1, .section h2 { margin:0; font-weight:400; line-height:.98; letter-spacing:-.034em; max-width:17ch; text-wrap:balance; }
+.section h1 { font-size:clamp(44px,7.4vw,128px); }
+.section h2 { font-size:clamp(34px,5vw,80px); }
+.section h1 em, .section h2 em { font-style:normal; color:var(--signal); }
+.lede { margin:26px 0 0; font-size:clamp(18px,1.55vw,24px); line-height:1.55; color:var(--muted); max-width:52ch; }
+.lede strong { color:var(--ink); font-weight:400; }
+.hero { min-height:88vh; min-height:88svh; display:flex; flex-direction:column; justify-content:flex-end; padding-top:clamp(140px,24vh,240px);
+  background:radial-gradient(60% 50% at 85% 10%, rgba(18,196,190,.12), transparent 70%); }
+.hero .mark { display:flex; align-items:center; gap:14px; margin-bottom:clamp(28px,4vh,44px); }
+.hero .mark img { height:clamp(34px,3.2vw,44px); width:auto; display:block; }
+.hero .mark b { font:600 clamp(30px,2.8vw,40px)/1 "Jost",sans-serif; letter-spacing:-.01em; }
+code { font-family:var(--mono); font-size:.86em; color:var(--signal); overflow-wrap:anywhere; }
+
+/* code showcases */
+.shots { display:grid; gap:clamp(36px,5vh,56px); margin-top:clamp(40px,6vh,64px); max-width:980px; }
+.shot h3 { display:flex; align-items:baseline; gap:14px; margin:0 0 14px; font-weight:400; font-size:clamp(19px,1.7vw,24px); letter-spacing:-.01em; }
+.shot h3 .n { font:400 13px/1 "Questrial",sans-serif; letter-spacing:.2em; color:var(--signal); }
+.code { position:relative; }
+pre { margin:0; background:var(--panel); border:1px solid var(--rule); border-radius:14px; padding:18px 20px; padding-right:60px; overflow-x:auto;
+  font:400 12.5px/1.75 var(--mono); color:rgba(237,234,228,.72); white-space:pre-wrap; word-break:break-all; }
+pre .c { color:var(--faint); }
+.copy { position:absolute; top:12px; right:12px; display:grid; place-items:center; width:36px; height:36px; border-radius:999px; border:1px solid var(--rule); background:var(--bg);
+  color:var(--muted); cursor:pointer; font-size:16px; transition:color .2s, border-color .2s, transform .3s var(--ease); }
+.copy:hover { color:var(--ink); border-color:rgba(237,234,228,.35); } .copy.done { color:var(--signal); border-color:rgba(18,196,190,.55); transform:scale(1.08); }
+
+.files { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr)); gap:1px; margin-top:clamp(40px,6vh,64px); max-width:1100px;
+  background:var(--rule); border:1px solid var(--rule); border-radius:14px; overflow:hidden; }
+.files a { display:flex; flex-direction:column; gap:4px; padding:18px 20px; background:var(--bg); text-decoration:none; transition:background .25s; }
+.files a:hover { background:var(--panel); }
+.files .p { font:400 13px var(--mono); color:var(--signal); overflow-wrap:anywhere; display:flex; align-items:center; gap:8px; }
+.files .p svg.i { transition:transform .3s var(--ease); } .files a:hover .p svg.i { transform:translateX(3px); }
+.files .d { font-size:15px; color:var(--muted); }
+
+.table { width:100%; max-width:1100px; border-collapse:collapse; margin-top:clamp(40px,6vh,64px); font-size:15px; }
+.table th { text-align:left; font:400 12px/1 "Questrial",sans-serif; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); padding:0 14px 14px 0; }
+.table td { padding:15px 14px 15px 0; border-top:1px solid var(--rule); vertical-align:top; color:var(--muted); }
+.table td b { color:var(--ink); font-weight:400; }
+.table td.mono { font:400 13px var(--mono); overflow-wrap:anywhere; } .table td.mono a { color:var(--signal); text-decoration:none; } .table td.mono a:hover { text-decoration:underline; }
+@media (max-width:700px) { .table, .table tbody, .table tr, .table td { display:block; } .table thead { display:none; } .table tr { border-top:1px solid var(--rule); padding:12px 0; } .table td { border:0; padding:2px 0; } }
+
+/* the gates, as on the landing */
+.gate-logos { display:flex; flex-wrap:wrap; align-items:center; gap:clamp(28px,4vw,56px); margin-top:clamp(36px,5vh,56px); }
+.gate-logo { display:flex; align-items:center; gap:12px; text-decoration:none; transition:opacity .2s; }
+.gate-logo:hover { opacity:.75; }
+.gate-logo img { height:clamp(34px,3.2vw,44px); width:auto; display:block; }
+.gate-logo b { font:600 clamp(30px,2.8vw,40px)/1 "Jost",sans-serif; letter-spacing:-.01em; color:var(--ink); }
+.gate-logo.on { opacity:.35; pointer-events:none; }
+.actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:36px; }
+.btn { display:inline-flex; align-items:center; gap:10px; text-decoration:none; font:400 15px/1 "Questrial",sans-serif; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--bg); background:var(--signal); border:1px solid var(--signal); border-radius:999px; padding:18px 30px; transition:filter .2s, transform .25s var(--ease); }
+.btn:hover { filter:brightness(1.08); transform:translateY(-1px); }
+.btn--ghost { color:var(--ink); background:rgba(8,8,10,.4); border-color:rgba(237,234,228,.4); } .btn--ghost:hover { filter:none; border-color:var(--ink); }
+:focus-visible { outline:2px solid var(--signal); outline-offset:4px; border-radius:6px; }
+
+.foot { padding:28px var(--shell) 40px; font:400 12px/1.6 "Questrial",sans-serif; color:var(--muted); letter-spacing:.06em; display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; border-top:1px solid var(--rule); }
+.foot a { color:var(--muted); }
+
+[data-reveal] { opacity:0; transform:translateY(22px); transition:opacity .9s ease, transform .9s ease; }
+[data-reveal].is-in { opacity:1; transform:none; }
+html:not(.js) [data-reveal] { opacity:1; transform:none; }
+@media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } [data-reveal] { transition:none; opacity:1; transform:none; } }
