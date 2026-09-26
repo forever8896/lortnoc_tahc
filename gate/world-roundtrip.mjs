@@ -34,7 +34,7 @@ const say = (ok, m) => console.log(`${ok ? '✓' : '✗'} ${m}`)
 
 // A per-post action (PRD §13.2: v4 proofs are one-time per action per human), and a signal that
 // binds the proof to one post reference + one reader key, exactly as the real check will.
-const action = `lortnoc-roundtrip-${Date.now().toString(36)}`
+const action = process.env.ACTION ?? `lortnoc-roundtrip-${Date.now().toString(36)}`
 const signal = '0x' + '0011223344556677' + 'aa'.repeat(32)
 const s = signRequest({ signingKeyHex: KEY.replace(/^0x/, ''), action })
 const req = await IDKit.request({
