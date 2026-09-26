@@ -57,6 +57,7 @@ function onFrameMessage(e: MessageEvent) {
 }
 
 function addChip(block: HTMLElement) {
+  if (block.dataset.lortnocChip) return // one Reveal per post
   block.dataset.lortnocChip = '1'
   const chip = document.createElement('button')
   chip.type = 'button'
@@ -96,11 +97,17 @@ async function scan(quiet = false): Promise<number> {
   const blocks = collectBlocks(document.body).filter((b) => !b.dataset.lortnocChip && !b.dataset.lortnocSeen)
   if (!blocks.length) return 0
   if (!quiet) toast('lortnoc tahc · looking for hidden posts…')
-  const found = await confirmPosts(blocks).catch(() => [])
-  // remember what was checked, so the automatic re-scan only looks at NEW text
+  // quiet (automatic) scans stay silent unless they take a while — the codec needs seconds per post
+  const slow = quiet ? setTimeout(() => toast('lortnoc tahc · checking this page for hidden posts…'), 1200) : undefined
+  // mark BEFORE asking: a scan takes seconds, and our own chips/toast trigger the observer meanwhile
   for (const b of blocks) b.dataset.lortnocSeen = '1'
+  const found = await confirmPosts(blocks).catch(() => {
+    for (const b of blocks) delete b.dataset.lortnocSeen // codec hiccup: let the next scan retry them
+    return [] as HTMLElement[]
+  })
   found.forEach(addChip)
-  if (found.length || !quiet) {
+  clearTimeout(slow)
+  if (found.length || !quiet || slow) {
     toast(found.length ? `lortnoc tahc · found ${found.length} hidden` : null)
     setTimeout(() => toast(null), 2500)
   }
