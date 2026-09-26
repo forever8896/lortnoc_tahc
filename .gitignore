@@ -77,3 +77,6 @@ lortnoc-tahc-extension-*.zip.sha256
 /lortnoc-tahc-extension-x-*-TESTING.md
 # DM tier's local cache of live conversation heads (test/dm/chat.mjs) — machine state
 /test/dm/heads.json
+
+# gate/ local database (holds key shares)
+/gate/.data/
