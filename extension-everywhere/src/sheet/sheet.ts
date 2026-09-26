@@ -274,12 +274,13 @@ async function go() {
     setStatus('Locking it…')
     const policy = buildPolicy()
     let deposit
-    const usesGate = /"check":"(after|human)"/.test(JSON.stringify(policy))
-    if (usesGate) {
+    // Checks whose key share the gate holds. Each must be one this gate actually runs.
+    const gated = [...new Set([...JSON.stringify(policy).matchAll(/"check":"(after|human|nft)"/g)].map((m) => m[1]))]
+    if (gated.length) {
       const g = await sw<GateHealth>({ type: 'GATE_HEALTH' })
-      if (!g.ok) throw new Error(`The gate is unreachable (${g.error}) — needed for timed and World ID messages.`)
-      if (JSON.stringify(policy).includes('"check":"human"') && !g.data.checks.includes('human'))
-        throw new Error('This gate has no World ID configured.')
+      if (!g.ok) throw new Error(`The gate is unreachable (${g.error}) — needed for timed, World ID and NFT messages.`)
+      const missing = gated.filter((c) => !g.data.checks.includes(c))
+      if (missing.length) throw new Error(`This gate does not run the ${missing.join(', ')} check.`)
       deposit = gateDepositor({ gatePub: g.data.pub, post: gatePost })
     }
     let body = text
