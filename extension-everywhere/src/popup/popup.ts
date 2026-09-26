@@ -101,12 +101,19 @@ $('buy').onclick = async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   if (!tab?.id || !/^https?:/.test(tab.url ?? '')) return void ($('buyState').textContent = 'Open any web page (where your wallet works) first.')
   const label = $<HTMLInputElement>('buyName').value.trim().toLowerCase()
-  const token = $<HTMLInputElement>('buyToken').value.trim()
+  const address = $<HTMLInputElement>('nftAddress').value.trim()
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return void ($('buyState').textContent = 'Enter the NFT contract address (0x + 40 hex characters).')
+  const token = `eip155:${$<HTMLSelectElement>('nftChain').value}/erc721:${address.toLowerCase()}`
   const chainId = Number($<HTMLSelectElement>('buyChain').value) as 1 | 11155111
   $('buyState').textContent = 'Check your wallet…'
   // runs in the service worker — it keeps going when this popup closes for the wallet
   const r = await chrome.runtime.sendMessage({ type: 'BUY_SPACE', label, token, chainId, tabId: tab.id }).catch(() => null)
-  if (r && !r.ok && /taken|bad space name/.test(r.error ?? '')) $('buyState').textContent = r.error
+  if (r && !r.ok && /taken|bad space name|collection|contract/i.test(r.error ?? '')) $('buyState').textContent = r.error
+}
+$('useDemoPass').onclick = (e) => {
+  e.preventDefault()
+  $<HTMLSelectElement>('nftChain').value = '11155111'
+  $<HTMLInputElement>('nftAddress').value = '0xc85460a6690f8b06fdafd1b7730bdfa6261243f0'
 }
 void renderBuy()
 setInterval(() => void renderBuy(), 3000)

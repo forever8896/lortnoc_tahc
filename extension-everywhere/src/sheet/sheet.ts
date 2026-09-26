@@ -1,6 +1,7 @@
 // The compose sheet — an extension-origin iframe, so what you type here is invisible to the page.
 // It builds a policy from groups (AND of ORs, PRD §16.6), seals the message with shared/webframe,
 // has the codec turn the bytes into cover text, and hands ONLY the cover to the content script.
+import { COUNTRIES } from '../shared/countries'
 import { sealMessage, presentCover } from '../../../shared/webframe.mjs'
 import { honesty } from '../../../shared/policy.mjs'
 import { generatePassphrase } from '../../../shared/checks/passphrase.mjs'
@@ -73,7 +74,7 @@ function leaf(d: CheckDraft) {
   if (d.check === 'public') return { check: 'public' }
   if (d.check === 'passphrase') return { check: 'passphrase', passphrase: d.passphrase, ...(d.hint.trim() ? { hint: d.hint.trim() } : {}) }
   if (d.check === 'human') {
-    if (d.preset === 'identity' && !/^[A-Z]{3}$/.test(d.country ?? '')) throw new Error('Type the country as a 3-letter code, e.g. UKR, POL, DEU.')
+    if (d.preset === 'identity' && !/^[A-Z]{3}$/.test(d.country ?? '')) throw new Error('Choose the country readers must be citizens of.')
     return { check: 'human', preset: d.preset, ...(d.space ? { space: d.space } : {}), ...(d.preset === 'identity' ? { country: d.country } : {}) }
   }
   if (d.check === 'nft') {
@@ -129,6 +130,16 @@ function rulePicker(prompt: string, on: (d: CheckDraft) => void) {
     if (r) on(r[2]())
   }
   return sel
+}
+
+/** Nationality picker — World ID Identity Check matches the passport's ISO alpha-3 code. */
+function countrySelect(d: Extract<CheckDraft, { check: 'human' }>, id?: string) {
+  const c = document.createElement('select')
+  if (id) c.id = id
+  c.innerHTML = `<option value="">Choose a country…</option>` + COUNTRIES.map(([a, n]) => `<option value="${a}">${n}</option>`).join('')
+  c.value = d.country ?? ''
+  c.onchange = () => ((d.country = c.value), renderHonesty())
+  return c
 }
 
 /** After a change in the builder the preset name no longer describes it — say so in the dropdown. */
@@ -190,8 +201,7 @@ function pillEl(d: CheckDraft, remove: () => void): HTMLElement {
     sel.onchange = () => ((d.space = sel.value), renderHonesty())
     el.append(label('hold'), sel, label("'s NFT"))
   } else if (d.check === 'human' && r === 'citizen') {
-    const c = Object.assign(document.createElement('input'), { type: 'text', value: d.country ?? '', placeholder: 'UKR', maxLength: 3, size: 4 })
-    c.oninput = () => ((c.value = c.value.toUpperCase().replace(/[^A-Z]/g, '')), (d.country = c.value), renderHonesty())
+    const c = countrySelect(d)
     el.append(label('be a citizen of'), c)
   } else if (d.check === 'human' && r === 'member') {
     const sel = document.createElement('select')
@@ -225,7 +235,7 @@ function summary(): string {
     if (d.check === 'after') return `wait until ${fmt(d.when)}`
     if (d.check === 'nft') return `hold ${d.space.slice(1)}.space's NFT`
     if (d.check === 'recipients') return 'are one of the people you named'
-    if (d.check === 'human' && r === 'citizen') return `are citizens of ${d.country || '…'}`
+    if (d.check === 'human' && r === 'citizen') return `are citizens of ${COUNTRIES.find(([a]) => a === d.country)?.[1] ?? '…'}`
     if (d.check === 'human' && r === 'member') return `are members of ${d.space.replace(/^@(.*)$/, '$1.space')}`
     return 'are verified humans'
   }
@@ -349,6 +359,12 @@ function renderDetail(p: Preset) {
     copy.onclick = () => void navigator.clipboard.writeText(pass.passphrase).then(() => (copy.textContent = 'Copied'))
     const row = Object.assign(document.createElement('div'), { className: 'row' })
     row.append(i, again, copy)
+    box.append(row)
+  }
+  const citizen = editing ? undefined : groups.flat().find((d) => d.check === 'human' && d.preset === 'identity') as Extract<CheckDraft, { check: 'human' }> | undefined
+  if (citizen) {
+    const row = Object.assign(document.createElement('div'), { className: 'row' })
+    row.append(Object.assign(document.createElement('span'), { className: 'small muted', textContent: 'Citizens of' }), countrySelect(citizen, 'country'))
     box.append(row)
   }
   const after = editing ? undefined : groups.flat().find((d) => d.check === 'after') as Extract<CheckDraft, { check: 'after' }> | undefined

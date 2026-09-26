@@ -6,7 +6,7 @@
 //   3. the relayer turns the SpaceBought event into <label>.space.lortnoctahc.eth with the collection
 // Progress is kept in storage so the popup shows it when reopened.
 import { encodeFunctionData, keccak256, toHex, numberToHex, createPublicClient, http } from 'viem'
-import { sepolia } from 'viem/chains'
+import { sepolia, mainnet, base, baseSepolia } from 'viem/chains'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import deployments from '../../../app/src/lib/live/spaces-deployment.json'
 import { RELAYER_URL } from '../shared/messages'
@@ -22,6 +22,32 @@ export const rulesHash = (token: string) => keccak256(toHex(`lortnoc/space/rules
 const setState = (v: object) => chrome.storage.local.set({ [STATE]: { ...v, at: Date.now() } })
 export const buyState = async (): Promise<SwResponse> => ({ ok: true, data: (await chrome.storage.local.get(STATE))[STATE] ?? null })
 
+const COLLECTION_CHAINS = {
+  1: [mainnet, 'https://ethereum-rpc.publicnode.com'],
+  8453: [base, 'https://base-rpc.publicnode.com'],
+  11155111: [sepolia, 'https://ethereum-sepolia-rpc.publicnode.com'],
+  84532: [baseSepolia, 'https://base-sepolia-rpc.publicnode.com'],
+} as const
+const ERC165 = [{ type: 'function', name: 'supportsInterface', stateMutability: 'view', inputs: [{ type: 'bytes4' }], outputs: [{ type: 'bool' }] }] as const
+
+/** null if `token` names an ERC-721 contract that exists; otherwise what is wrong, in plain words. */
+export async function checkCollection(token: string): Promise<string | null> {
+  const m = /^eip155:(\d+)\/erc721:(0x[0-9a-fA-F]{40})$/.exec(token)
+  if (!m) return 'Enter the NFT collection as a chain and a contract address.'
+  const entry = COLLECTION_CHAINS[Number(m[1]) as keyof typeof COLLECTION_CHAINS]
+  if (!entry) return `Collections on chain ${m[1]} are not supported yet.`
+  const [chain, rpc] = entry
+  const c = createPublicClient({ chain, transport: http(rpc) })
+  const address = m[2] as `0x${string}`
+  // viem returns undefined for "no code here" — so a network failure gets its own sentinel
+  const code = await c.getCode({ address }).catch(() => 'unreachable' as const)
+  if (code === 'unreachable') return `Could not reach ${chain.name} to check the collection — try again.`
+  if (!code || code === '0x') return `There is no contract at ${address} on ${chain.name}. Check the chain and the address.`
+  const is721 = await c.readContract({ address, abi: ERC165, functionName: 'supportsInterface', args: ['0x80ac58cd'] }).catch(() => false)
+  if (!is721) return `The contract at ${address} on ${chain.name} is not an ERC-721 NFT collection.`
+  return null
+}
+
 export async function buySpace(req: { label: string; token: string; chainId: 1 | 11155111; tabId: number }): Promise<SwResponse> {
   const { label, token, chainId, tabId } = req
   if (!/^[a-z0-9-]{3,32}$/.test(label) || label.startsWith('-') || label.endsWith('-')) return { ok: false, error: 'bad space name' }
@@ -34,6 +60,11 @@ export async function buySpace(req: { label: string; token: string; chainId: 1 |
   const taken = await createPublicClient({ chain: sepolia, transport: http('https://ethereum-sepolia-rpc.publicnode.com') })
     .getEnsAddress({ name: `${label}.space.lortnoctahc.eth` }).catch(() => null)
   if (taken) return { ok: false, error: `${label}.space.lortnoctahc.eth is already taken` }
+
+  // 0b. the collection is a real ERC-721 contract on the chain named — a typo here would sell a space
+  //     nobody can ever read, and the rules are committed on-chain at purchase, so check BEFORE paying.
+  const bad = await checkCollection(token)
+  if (bad) return { ok: false, error: bad }
 
   // 1. the owner key, saved before a single wei moves
   const priv = generatePrivateKey()

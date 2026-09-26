@@ -28,9 +28,14 @@
       <div class="small" id="ensList" style="margin-top:6px"></div>
       <div class="eyebrow">Buy a space · 0.005 ETH</div>
       <div class="small muted" style="margin-bottom:6px">A real ENS name for your community, gated by your NFT collection. Your wallet on this page pays.</div>
-      <input type="text" id="buyName" placeholder="name" spellcheck="false" style="margin-bottom:6px">
-      <input type="text" id="buyToken" placeholder="NFT: eip155:11155111/erc721:0x…" spellcheck="false" style="margin-bottom:6px">
-      <div class="row"><select id="buyChain"><option value="11155111">Sepolia (demo)</option><option value="1">Ethereum mainnet</option></select><button class="btn btn-small" id="buy">Buy</button></div>
+      <input type="text" id="buyName" placeholder="name  (→ name.space.lortnoctahc.eth)" spellcheck="false" style="margin-bottom:6px">
+      <div class="small muted" style="margin:2px 0 4px">NFT collection readers must hold (ERC-721)</div>
+      <div class="row" style="margin-bottom:4px">
+        <select id="nftChain"><option value="1">Ethereum</option><option value="8453">Base</option><option value="11155111">Sepolia</option><option value="84532">Base Sepolia</option></select>
+        <input type="text" id="nftAddress" placeholder="contract address 0x…" spellcheck="false">
+      </div>
+      <div class="small" style="margin-bottom:8px"><a href="#" id="useDemoPass">Use the demo pass (Sepolia, anyone can mint)</a></div>
+      <div class="row"><span class="small muted">Pay 0.005 ETH on</span><select id="buyChain"><option value="11155111">Sepolia (demo)</option><option value="1">Ethereum mainnet</option></select><button class="btn btn-small" id="buy">Buy</button></div>
       <div class="small" id="buyState" style="margin-top:6px"></div>
       <div class="eyebrow">Codec</div>
       <div class="row"><input type="text" id="codec" spellcheck="false"><button class="btn btn-ghost btn-small" id="save">Save</button></div>
