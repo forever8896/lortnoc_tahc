@@ -66,7 +66,7 @@ async function main() {
   const q = (await chrome.storage.session.get(key))[key] as WorldRequest | undefined
   if (!q) return say('This verification has expired — go back to the post and press Verify again.')
   if (q.preset === 'identity') $('what').textContent = `World ID checks your passport's nationality is ${q.attributes?.[0]?.value} — nothing else is shared.`
-  const preset = q.preset === 'identity' ? identityCheck({ attributes: q.attributes as never })
+  const preset = q.preset === 'identity' ? identityCheck({ attributes: q.attributes as never, legacy_signal: q.signal })
     : q.preset === 'selfie' ? selfieCheck({ signal: q.signal }) : proofOfHuman({ signal: q.signal })
 
   const render = (open: boolean) =>

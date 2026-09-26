@@ -8,6 +8,7 @@ import { gateDepositor, gateReleaser } from '../../shared/gateclient.mjs'
 import { sealMessage, openMessage, inspect } from '../../shared/webframe.mjs'
 import { fakeWorld, proofFor, proofFrom } from '../lib/world-fake.mjs'
 import { confirmed, verifierArgs } from '../../gate/world.mjs'
+import { hashSignal as hashSignalOf } from '../../gate/node_modules/@worldcoin/idkit-core/dist/hashing.js'
 
 const FAST = [{ t: 1, m: 64, p: 1 }]
 
@@ -231,5 +232,50 @@ describe('human (World ID) — what the gate asks World Chain (regression: passp
     const p = proofFrom(q)
     p.responses.unshift({ ...p.responses[0], identifier: 'proof_of_human', issuer_schema_id: 1 })
     assert.equal((await w.verify(p, { ref, readerPub: reader, preset: 'identity', action: q.action }, st)).ok, true)
+  })
+})
+
+describe('human (World ID) — a World ID 3.0 answer to a nationality check (older phone credential)', () => {
+  const ref = 'ab'.repeat(8), reader = 'cd'.repeat(32)
+  /** What IDKit returns when the app answers an Identity Check from a v3 document credential. */
+  const v3From = (q, over = {}) => ({
+    protocol_version: '3.0', nonce: q.rp_context.nonce, action: q.action, environment: q.environment, identity_attested: true,
+    responses: [{ identifier: 'secure_document', signal_hash: hashSignalOf(q.signal), proof: '0x' + 'ab'.repeat(256), merkle_root: '0x' + '12'.repeat(32), nullifier: '0x' + '34'.repeat(32), ...over.response }],
+    ...over.top,
+  })
+  const setup = (opts) => {
+    const w = fakeWorld(opts)
+    const st = new Map()
+    const q = w.challenge(ref, reader, st, 'identity', 'lortnoc-connect', 'DNK')
+    return { w, st, q, verify: (p) => w.verify(p, { ref, readerPub: reader, preset: 'identity', action: q.action }, st) }
+  }
+  test('accepted when bound to this request and World’s API confirms it', async () => {
+    const s = setup()
+    const v = await s.verify(v3From(s.q))
+    assert.equal(v.ok, true)
+    assert.equal(v.protocol, '3.0')
+  })
+  test('refused without the request signal (legacy_signal) — a replayed v3 proof', async () => {
+    const s = setup()
+    assert.match((await s.verify(v3From(s.q, { response: { signal_hash: hashSignalOf('') } }))).deny, /not bound to this request/)
+  })
+  test('refused when World’s API is unavailable (no on-chain check exists for v3)', async () => {
+    const s = setup({ api: { skipped: 'no staging window' } })
+    assert.match((await s.verify(v3From(s.q))).deny, /needs World’s verify API/)
+  })
+  test('refused when World’s API says no', async () => {
+    const s = setup({ api: { ok: false, reason: 'invalid_proof' } })
+    assert.match((await s.verify(v3From(s.q))).deny, /refused \(invalid_proof\)/)
+  })
+  test('refused when the nationality was not attested', async () => {
+    const s = setup()
+    assert.match((await s.verify(v3From(s.q, { top: { identity_attested: false } }))).deny, /did not attest/)
+  })
+  test('World ID 3.0 is refused for everything except nationality', async () => {
+    const w = fakeWorld()
+    const st = new Map()
+    const q = w.challenge(ref, reader, st, 'poh', 'lortnoc-connect')
+    const p = { ...v3From(q), identity_attested: undefined }
+    assert.match((await w.verify(p, { ref, readerPub: reader, preset: 'poh', action: q.action }, st)).deny, /only for nationality/)
   })
 })

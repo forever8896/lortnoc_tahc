@@ -33,6 +33,10 @@ export const DEFAULT_RPCS = [
 const CREDENTIAL = { poh: 'proof_of_human', selfie: 'selfie' }
 /** Identity Check (nationality) answers with a DOCUMENT credential: passport / eID (9303) or MNC (9310). */
 const DOCUMENT_CREDENTIALS = new Set(['passport', 'eid', 'mnc'])
+/** World ID 3.0 document credentials — what an older phone credential answers an Identity Check with.
+ *  IDKit's IdentityCheck preset itself turns the v3 fallback on (idkit rust/core/src/preset.rs:
+ *  legacy_verification_level Document, allow_legacy_proofs_override Some(true)). */
+const V3_DOCUMENT_CREDENTIALS = new Set(['secure_document', 'document'])
 const DOCUMENT_SCHEMAS = new Set([9303, 9310])
 /** ISO 3166-1 alpha-3 — the format World's docs require for `nationality`. */
 export const COUNTRY_RE = /^[A-Z]{3}$/
@@ -162,10 +166,16 @@ export function createWorld({
         identity_attested: proof?.identity_attested, nonce: short(proof?.nonce),
         responses: all.map((r) => ({ identifier: r?.identifier, issuer_schema_id: r?.issuer_schema_id, signal_hash: r?.signal_hash ? short(r.signal_hash) : 'absent', nullifier: short(r?.nullifier) })),
       })
-      const r0 = all.find((r) => (preset === 'identity'
-        ? DOCUMENT_CREDENTIALS.has(r?.identifier) || DOCUMENT_SCHEMAS.has(Number(r?.issuer_schema_id))
+      // World ID 3.0 — accepted ONLY for Identity Check (nationality), the one request where IDKit itself
+      // allows the v3 fallback, and verified by World's API (v3 has no on-chain verifier; the portal checks
+      // it through its sequencer: developer-portal web/api/v4/verify/uniqueness-proof/verify-v3.ts).
+      const v3 = proof?.protocol_version === '3.0'
+      if (v3 && preset !== 'identity') return deny('protocol', 'World ID 3.0 is accepted only for nationality checks — this one needs 4.0', { got: '3.0' })
+      const r0 = all.find((r) => (v3 ? V3_DOCUMENT_CREDENTIALS.has(r?.identifier)
+        : preset === 'identity' ? DOCUMENT_CREDENTIALS.has(r?.identifier) || DOCUMENT_SCHEMAS.has(Number(r?.issuer_schema_id))
         : r?.identifier === CREDENTIAL[preset])) ?? all[0]
-      if (!r0 || !Array.isArray(r0.proof) || r0.proof.length !== 5) return deny('proof shape', 'malformed proof')
+      if (!r0 || (v3 ? typeof r0.proof !== 'string' || !r0.merkle_root || !r0.nullifier : !Array.isArray(r0.proof) || r0.proof.length !== 5))
+        return deny('proof shape', 'malformed proof', { protocol: proof?.protocol_version })
       // single-use nonce, issued by us, for THIS reader, not expired
       const issued = state.get(`nonce:${proof.nonce}`)
       if (!issued) return deny('nonce', 'nonce was not issued by this gate')
@@ -175,7 +185,7 @@ export function createWorld({
       if (n.ref !== undefined && n.ref !== ref) return deny('post', 'proof is for another post')
       if (now() > n.expiresAt + 10 * 60_000) return deny('expiry', 'challenge expired', { expiredAt: new Date(n.expiresAt).toISOString() })
       pass('nonce · reader · expiry')
-      if (proof.protocol_version !== '4.0') return deny('protocol', 'not a World ID 4.0 proof', { got: proof.protocol_version })
+      if (proof.protocol_version !== '4.0' && !v3) return deny('protocol', 'not a World ID 4.0 (or, for nationality, 3.0) proof', { got: proof.protocol_version })
       if (proof.action !== undefined && proof.action !== action) return deny('action', 'proof is for another post', { got: proof.action, want: action })
       const e = n.env ?? env // the environment THIS request was issued for
       if (proof.environment !== undefined && proof.environment !== e) return deny('environment', `proof is from ${proof.environment}, the request was for ${e}`)
@@ -184,9 +194,17 @@ export function createWorld({
         // Nationality: World App only answers with a proof when the passport matches; the backend
         // must still check it said so (docs: "identity_attested so your backend can tell").
         if (proof.identity_attested !== true) return deny('nationality attested', 'World ID did not attest the required nationality', { identity_attested: proof.identity_attested })
-        if (!DOCUMENT_CREDENTIALS.has(r0.identifier) && !DOCUMENT_SCHEMAS.has(Number(r0.issuer_schema_id)))
-          return deny('credential', `needs a passport / eID credential, got ${r0.identifier}`, { issuer_schema_id: r0.issuer_schema_id })
-        pass('nationality attested · passport credential', { identifier: r0.identifier, issuer_schema_id: r0.issuer_schema_id })
+        if (v3) {
+          if (!V3_DOCUMENT_CREDENTIALS.has(r0.identifier)) return deny('credential', `needs a document credential, got ${r0.identifier}`)
+          // v3 carries no nonce in-circuit: the SIGNAL (request id ‖ keyring key, sent as legacy_signal)
+          // is what ties it to this one request — without it, anyone's v3 proof could be replayed here.
+          if (r0.signal_hash !== hashSignal(signalFor(ref, readerPub))) return deny('signal', 'v3 proof is not bound to this request (legacy_signal)', { got: short(r0.signal_hash) })
+          pass('nationality attested · v3 document credential · signal', { identifier: r0.identifier, protocol: '3.0' })
+        } else {
+          if (!DOCUMENT_CREDENTIALS.has(r0.identifier) && !DOCUMENT_SCHEMAS.has(Number(r0.issuer_schema_id)))
+            return deny('credential', `needs a passport / eID credential, got ${r0.identifier}`, { issuer_schema_id: r0.issuer_schema_id })
+          pass('nationality attested · passport credential', { identifier: r0.identifier, issuer_schema_id: r0.issuer_schema_id })
+        }
       } else {
         if (r0.identifier !== CREDENTIAL[preset]) return deny('credential', `needs ${CREDENTIAL[preset]}, got ${r0.identifier}`)
         if (r0.signal_hash !== hashSignal(signalFor(ref, readerPub))) return deny('signal', 'proof is bound to another post or reader')
@@ -195,6 +213,13 @@ export function createWorld({
       // burn the nonce BEFORE the slow network checks, so a racing duplicate cannot pass twice
       state.set(`nonce:${proof.nonce}`, JSON.stringify({ ...n, used: true }))
 
+      if (v3) {
+        const a = await api(proof, e)
+        trace('World Chain verifier', null, { note: 'none for World ID 3.0 — World verify API is the authority' })
+        trace('World verify API (v3 via sequencer)', a.ok === true, a.ok === true ? {} : a.skipped ? { why: a.skipped } : { code: a.reason, detail: a.detail, status: a.status })
+        if (a.ok !== true) return { deny: a.skipped ? 'World ID 3.0 needs World’s verify API, which is unavailable (staging window closed?)' : `World verify API refused (${a.reason})` }
+        return { ok: true, nullifier: r0.nullifier, api: 'ok', verdicts: [], protocol: '3.0' }
+      }
       const [a, c] = await Promise.all([api(proof, e), chain(proof, action, e, r0)])
       trace('World Chain verifier', c.ok, { verdicts: c.verdicts, contract: VERIFIER[e] })
       trace('World verify API', a.ok === false ? false : a.skipped ? null : true, a.ok === false ? { code: a.reason, detail: a.detail, status: a.status } : a.skipped ? { skipped: a.skipped } : {})

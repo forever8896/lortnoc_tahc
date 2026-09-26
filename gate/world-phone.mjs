@@ -52,7 +52,7 @@ const state = new Map()
 const q = world.challenge(ref, readerPub, state, preset, undefined, country)
 const req = await IDKit.request({
   app_id: q.app_id, action: q.action, rp_context: q.rp_context, allow_legacy_proofs: false, environment: q.environment,
-}).preset(preset === 'identity' ? identityCheck({ attributes: q.attributes }) : preset === 'selfie' ? selfieCheck({ signal: q.signal }) : proofOfHuman({ signal: q.signal }))
+}).preset(preset === 'identity' ? identityCheck({ attributes: q.attributes, legacy_signal: q.signal }) : preset === 'selfie' ? selfieCheck({ signal: q.signal }) : proofOfHuman({ signal: q.signal }))
 
 console.log(`World ID ${preset}${country ? ` (nationality ${country})` : ''} · env ${env} · app ${q.app_id} · action ${q.action}\n`)
 console.log(await QR.toString(req.connectorURI, { type: 'terminal', small: true }))
