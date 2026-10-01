@@ -33,10 +33,37 @@ function closeFrame() {
   frame = null
 }
 
+/**
+ * The comment this box replies to, best effort: the text just above the box inside its nearest
+ * ancestor that has some. It only shapes codec2's opener (shared/coverctx.mjs) — the reader never
+ * needs it — so a wrong guess costs fit, never a post.
+ */
+function parentText(box: HTMLElement | null): string {
+  if (!box) return ''
+  let el = box.parentElement
+  for (let depth = 0; el && el !== document.body && depth < 8; depth++, el = el.parentElement) {
+    const parts: string[] = []
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (!(n.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING)) break // reached the box
+      const p = n.parentElement
+      if (!p || p.closest('[contenteditable="true"],textarea,script,style,[data-lortnoc-chip]')) continue
+      if (n.nodeValue?.trim()) parts.push(n.nodeValue.trim())
+    }
+    const text = parts.join(' ').replace(/\s+/g, ' ')
+    if (text.split(' ').length >= 5) return text.slice(-400)
+  }
+  return ''
+}
+
 function openFrame(page: 'sheet' | 'reveal', hash = '', anchor?: DOMRect) {
   closeFrame()
   const f = document.createElement('iframe')
-  f.src = chrome.runtime.getURL(`src/${page}/index.html`) + hash
+  // Page title, site and (for the sheet) the comment being replied to: what codec2's opener answers.
+  // All public already — it is the page's own text.
+  let ctx = `c=${encodeURIComponent(document.title.slice(0, 300))}&h=${encodeURIComponent(location.hostname)}`
+  if (page === 'sheet') ctx += `&p=${encodeURIComponent(parentText(target))}`
+  f.src = chrome.runtime.getURL(`src/${page}/index.html`) + (hash ? `${hash}&` : '#') + ctx
   f.setAttribute('allow', 'clipboard-write')
   const w = page === 'sheet' ? 420 : 380
   const top = anchor ? Math.min(Math.max(8, anchor.bottom + 8), innerHeight - 360) : 16

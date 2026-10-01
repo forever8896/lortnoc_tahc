@@ -5,6 +5,12 @@
 //   * the sheet / reveal iframes — extension-origin pages where plaintext lives and dies
 
 export const DEFAULT_CODEC_URL = 'https://lortnoc-codec.fly.dev'
+/**
+ * codec2 (reply covers): a short natural reply carrying a locator, the sealed frame stored under it
+ * in codec2's drop store. Off ('') until a public instance exists — set it under Settings →
+ * Connection (e.g. http://localhost:8091). When off or failing, the old codec writes the cover.
+ */
+export const DEFAULT_CODEC2_URL = ''
 /** The gate holds shares for attested checks (time lock, World ID, tokens). Local until hosted. */
 // the public gate (gate/fly.toml); a local one (node gate/server.mjs) can be set under Settings → Connection
 export const DEFAULT_GATE_URL = 'https://lortnoc-gate.fly.dev'
@@ -19,6 +25,7 @@ export const CODER = 'arith'
 
 export const LOCAL = {
   codecUrl: 'codecUrl',
+  codec2Url: 'codec2Url',
   gateUrl: 'gateUrl',
 } as const
 
@@ -29,7 +36,11 @@ export type SwRequest =
   | { type: 'GATE_HEALTH' }
   | { type: 'GATE'; path: GatePath; body: unknown }
   | { type: 'WORLD_SIM'; connectUrl: string }
-  | { type: 'FIND_POSTS'; texts: string[] }
+  | { type: 'FIND_POSTS'; texts: string[]; host?: string }
+  | { type: 'HIDE'; thread: string; platform: string }
+  | { type: 'DROP'; locator: string; token: string; frameB64: string }
+  | { type: 'REVEAL2'; text: string; platform: string }
+  | { type: 'OPEN_FRAME'; framesB64: string[] }
   | { type: 'WALLET_SIGN'; message: string }
   | { type: 'BUY_SPACE'; label: string; token: string; chainId: 1 | 11155111; tabId: number }
   | { type: 'BUY_STATE' }
@@ -69,6 +80,7 @@ export type SwResponse<T = unknown> = { ok: true; data: T } | { ok: false; error
 export type HealthData = { model: string; digest: string; ready: boolean; paused?: boolean; message?: string }
 export type EncodeData = { coverText: string }
 export type DecodeData = { ciphertext: string }
+export type HideData = { text: string; locator: string; token: string }
 export type GateHealth = { ok: boolean; pub: string; signPub: string; checks: string[]; world?: { env: string; envs?: string[] } | null }
 
 /** `post` for shared/gateclient.mjs, routed through the service worker (it has the host permission). */

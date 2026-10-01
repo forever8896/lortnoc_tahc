@@ -1,7 +1,8 @@
 // The reveal card — an extension-origin iframe. The page hands it COVER text (public); the message
 // it recovers is rendered only here, never written into the page's DOM where the site's scripts
 // could read it.
-import { canonicalCover, inspect, openMessage } from '../../../shared/webframe.mjs'
+import { canonicalCover, inspect, openMessage, looksLikeCover } from '../../../shared/webframe.mjs'
+import { platformOf, looksLikeReply, replyText } from '../../../shared/coverctx.mjs'
 import { fromB64 } from '../../../shared/keys.mjs'
 import { gateReleaser } from '../../../shared/gateclient.mjs'
 import { sw, gatePost } from '../shared/messages'
@@ -210,25 +211,44 @@ async function attempt() {
   fit()
 }
 
+/** A sealed post the keyring already opened (background/sealed.ts) — the text never touched the page. */
+async function showSealed(id: string) {
+  const r = await sw<{ text: string; checks: string[]; obfuscationOnly: boolean; members: { space: string }[] }>({ type: 'SEALED_GET', id })
+  if (!r.ok) return setStatus(r.error, 'err'), fit()
+  postSpace = (r.data.checks ?? []).find((c: string) => c.includes(' · members of '))?.split(' · members of ')[1]
+    ?? (r.data.checks ?? []).find((c: string) => c.startsWith('Holders of '))?.replace(/^Holders of |'s NFT$/g, '') ?? ''
+  $('checks').textContent = `Opened with your keyring · ${(r.data.checks ?? []).join(' · ')}`
+  $('needs').hidden = false
+  for (const id of ['pass', 'identity', 'verifyHuman', 'simHuman', 'proveNft']) $(id).hidden = true
+  await show(r.data.text, r.data.obfuscationOnly)
+  $('note').textContent = r.data.obfuscationOnly
+    ? 'Anyone with the extension can read this one. It was hidden, not locked.'
+    : `Opened with your keys · ${(r.data.checks ?? []).join(' · ')}. Nobody without them can even tell it is a message.`
+  fit()
+}
+
+const NOTHING = 'Nothing on this page opens with your keys. Add passphrases, World ID or a wallet in the extension, and posts meant for you appear by themselves.'
+
 async function main() {
-  const hash = location.hash
-  if (hash === '#none') return setStatus('Nothing on this page opens with your keys. Add passphrases, World ID or a wallet in the extension, and posts meant for you appear by themselves.'), fit()
-  if (hash.startsWith('#s=')) {
-    // A sealed post the keyring already opened (background/sealed.ts) — the text never touched the page.
-    const r = await sw<{ text: string; checks: string[]; obfuscationOnly: boolean; members: { space: string }[] }>({ type: 'SEALED_GET', id: hash.slice(3) })
-    if (!r.ok) return setStatus(r.error, 'err'), fit()
-    postSpace = (r.data.checks ?? []).find((c: string) => c.includes(' · members of '))?.split(' · members of ')[1]
-      ?? (r.data.checks ?? []).find((c: string) => c.startsWith('Holders of '))?.replace(/^Holders of |'s NFT$/g, '') ?? ''
-    $('checks').textContent = `Opened with your keyring · ${(r.data.checks ?? []).join(' · ')}`
-    $('needs').hidden = false
-    for (const id of ['pass', 'identity', 'verifyHuman', 'simHuman', 'proveNft']) $(id).hidden = true
-    await show(r.data.text, r.data.obfuscationOnly)
-    $('note').textContent = r.data.obfuscationOnly
-      ? 'Anyone with the extension can read this one. It was hidden, not locked.'
-      : `Opened with your keys · ${(r.data.checks ?? []).join(' · ')}. Nobody without them can even tell it is a message.`
-    return fit()
+  // From the content script: none | s=<opened id> | t=<page text>, plus the page's host (h).
+  const p = new URLSearchParams(location.hash.slice(1))
+  if (p.has('none')) return setStatus(NOTHING), fit()
+  if (p.get('s')) return showSealed(p.get('s')!)
+  const raw = p.get('t') ?? ''
+
+  // codec2 reply: the locator in the words, the frame in the drop store. Reading needs the reply and
+  // the platform only. A stranger's sentence may decode to some locator too and get a decoy frame;
+  // only the keyring can tell, so both say the same.
+  if (!looksLikeCover(raw) && looksLikeReply(raw)) {
+    setStatus('Reading…')
+    const r = await sw<{ frames: string[] }>({ type: 'REVEAL2', text: replyText(raw), platform: platformOf(p.get('h') ?? '') })
+    if (r.ok) {
+      const o = await sw<{ id: string }>({ type: 'OPEN_FRAME', framesB64: r.data.frames })
+      return o.ok ? showSealed(o.data.id) : (setStatus(NOTHING), fit())
+    }
+    // not a reply cover (or codec2 is off): the old codec below has its say
   }
-  const raw = hash.startsWith('#t=') ? decodeURIComponent(hash.slice(3)) : ''
+
   const cover = canonicalCover(raw)
   if (!cover) return setStatus('Nothing to reveal here.', 'err'), fit()
 

@@ -2,10 +2,11 @@
 // the right-click menu (reveal). Both inject the content script into ONE tab on demand; activeTab
 // is granted by the user gesture itself, so the extension holds no standing access to any site.
 import contentScript from '../content/index.ts?script'
-import { CODER, DEFAULT_CODEC_URL, DEFAULT_GATE_URL, LOCAL, GATE_PATHS, RELAYER_URL } from '../shared/messages'
+import { CODER, DEFAULT_CODEC_URL, DEFAULT_CODEC2_URL, DEFAULT_GATE_URL, LOCAL, GATE_PATHS, RELAYER_URL } from '../shared/messages'
 import type { SwRequest, SwResponse } from '../shared/messages'
 import { looksLikeCover, canonicalCover } from '../../../shared/webframe.mjs'
 import { fromB64 } from '../../../shared/keys.mjs'
+import { platformOf, looksLikeReply, replyText } from '../../../shared/coverctx.mjs'
 import { buySpace, buyState, spaceAvailable, checkCollection, spaceInfo, spacePrice } from './buy'
 import { openCandidates, sealedGet, keyringView, addPassphrase, removePassphrase, forgetConnected, worldConnect, walletConnect, onWidgetMessage } from './sealed'
 
@@ -32,13 +33,55 @@ async function gateBase(): Promise<string> {
   return ((got[LOCAL.gateUrl] as string) || DEFAULT_GATE_URL).replace(/\/+$/, '')
 }
 
-async function post(url: string, body: unknown): Promise<Response> {
+/** '' = codec2 is off: writers use the old codec, scans skip reply-shaped blocks. */
+async function codec2Base(): Promise<string> {
+  const got = await chrome.storage.local.get(LOCAL.codec2Url)
+  return ((got[LOCAL.codec2Url] as string | undefined) ?? DEFAULT_CODEC2_URL).trim().replace(/\/+$/, '')
+}
+
+async function post(url: string, body: unknown, timeout = TIMEOUT): Promise<Response> {
   return fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(TIMEOUT),
+    signal: AbortSignal.timeout(timeout),
   })
+}
+
+/**
+ * codec2: the writer's reply (/hide → /drop) and the reader's way back (/reveal → GET /drop). The
+ * store ALWAYS returns a frame — a decoy for a locator nobody stored — so only opening it with the
+ * keyring tells a post from ordinary text, exactly as with sealed posts under the old codec.
+ */
+async function codec2(msg: Extract<SwRequest, { type: 'HIDE' | 'DROP' | 'REVEAL2' }>): Promise<SwResponse> {
+  const base = await codec2Base()
+  if (!base) return { ok: false, error: 'codec2 off' }
+  try {
+    if (msg.type === 'HIDE') {
+      // best-of-3 on a CPU model: 15–25 s measured
+      const r = await post(`${base}/hide`, { thread: msg.thread, platform: msg.platform, nbytes: 8, tries: 3 }, 120_000)
+      return r.ok ? { ok: true, data: await r.json() } : { ok: false, status: r.status, error: `hide failed (${r.status})` }
+    }
+    if (msg.type === 'DROP') {
+      const r = await post(`${base}/drop`, { locator: msg.locator, token: msg.token, frame: msg.frameB64 })
+      return r.status === 201 ? { ok: true, data: {} } : { ok: false, status: r.status, error: `drop failed (${r.status})` }
+    }
+    // The reply and the platform are all reading needs (the opener is inside the reply). The server
+    // tries each sentence boundary, so a reply can yield more than one locator: fetch them all and
+    // let the keyring decide — a wrong split's locator gets a decoy that never opens.
+    const r = await post(`${base}/reveal`, { text: msg.text, platform: msg.platform, nbits: 64 })
+    if (!r.ok) return { ok: false, status: r.status, error: `reveal failed (${r.status})` }
+    const { locators } = (await r.json()) as { locators: string[] }
+    if (!locators?.length) return { ok: false, error: 'not-cover' }
+    const frames: string[] = []
+    for (const l of locators) {
+      const d = await fetch(`${base}/drop/${l}`, { signal: AbortSignal.timeout(TIMEOUT) })
+      if (d.ok) frames.push(((await d.json()) as { frame: string }).frame)
+    }
+    return frames.length ? { ok: true, data: { frames } } : { ok: false, error: 'drop unreachable' }
+  } catch (e) {
+    return { ok: false, error: `codec2 unreachable: ${String(e)}` }
+  }
 }
 
 async function handle(msg: SwRequest): Promise<SwResponse> {
@@ -74,11 +117,29 @@ async function handle(msg: SwRequest): Promise<SwResponse> {
         if (r?.ok) frames.push({ i: c.i, frame: fromB64((r.data as { ciphertext: string }).ciphertext) })
       }
     }
-    await Promise.all([worker(), worker(), worker()])
+    // codec2 lane: reply-shaped blocks. One at a time — the server serialises model calls anyway,
+    // and each reply costs a few seconds (up to 4 split points).
+    const platform = platformOf(msg.host ?? '')
+    const replies = (await codec2Base())
+      ? msg.texts.map((t, i) => ({ t: replyText(t), i })).filter(({ t }) => !looksLikeCover(t) && looksLikeReply(t)).slice(0, 10)
+      : []
+    const lane2 = async () => {
+      for (const c of replies) {
+        const r = await codec2({ type: 'REVEAL2', text: c.t, platform }).catch(() => null)
+        if (r?.ok) for (const f of (r.data as { frames: string[] }).frames) frames.push({ i: c.i, frame: fromB64(f) })
+      }
+    }
+    await Promise.all([worker(), worker(), worker(), lane2()])
     // Step 3: sealed posts open only with the keyring (nothing else can tell they are posts);
     // older posts that show their rule get a Reveal as before.
     const { opened, legacy } = await openCandidates(frames)
     return { ok: true, data: { found: legacy.sort((a, b) => a - b), opened } }
+  }
+  if (msg.type === 'HIDE' || msg.type === 'DROP' || msg.type === 'REVEAL2') return codec2(msg)
+  if (msg.type === 'OPEN_FRAME') {
+    // The reveal card read a reply: open its frame with the keyring, as a scan would.
+    const { opened } = await openCandidates(msg.framesB64.map((f) => ({ i: 0, frame: fromB64(f) })))
+    return opened.length ? { ok: true, data: { id: opened[0].id } } : { ok: false, error: 'not-opened' }
   }
   if (msg.type === 'WORLD_SIM') {
     // STAGING DEMO ONLY. World's simulator rejects calls with an extension Origin, so the gate —

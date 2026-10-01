@@ -2,8 +2,9 @@
 //
 // Posts carry no tag (a hashtag is exactly the "this person is hiding something" flag the high-risk
 // story warns about), so finding them is two steps, both in the service worker:
-//   1. shape — blocks that look like cover text (shared/webframe.mjs looksLikeCover)
-//   2. proof — the codec decodes each candidate and inspect() checks it is really a lortnoc frame.
+//   1. shape — blocks that look like cover text (shared/webframe.mjs looksLikeCover, 25+ lowercase
+//      words) or like a codec2 reply (shared/coverctx.mjs looksLikeReply, 5–45 plain words)
+//   2. proof — the codec decodes each candidate and the keyring tries to open the frame.
 // This file only COLLECTS text blocks. It must import nothing shared with other entries: Chrome runs
 // an injected script as a classic script, so any cross-chunk `import` kills it (measured: "Cannot
 // use import statement outside a module" once this file imported shared/webframe.mjs).
@@ -12,7 +13,7 @@ const BLOCK = /^(block|flex|grid|list-item|table-cell)$/
 const MAX_BLOCKS = 200
 
 /** Innermost block-level elements with at least `minWords` words of their own text. */
-export function collectBlocks(root: HTMLElement, minWords = 25): HTMLElement[] {
+export function collectBlocks(root: HTMLElement, minWords = 5): HTMLElement[] {
   const seen = new Set<HTMLElement>()
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode: (n) => ((n.nodeValue?.trim().length ?? 0) > 20 ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP),
@@ -32,7 +33,7 @@ export function collectBlocks(root: HTMLElement, minWords = 25): HTMLElement[] {
 /** Ask the service worker which of these blocks are posts THIS reader can open (sealed, opened with
  *  their keyring) — and which are older posts that show their rule (legacy: Reveal as before). */
 export async function confirmPosts(blocks: HTMLElement[]): Promise<{ legacy: HTMLElement[]; sealed: { el: HTMLElement; id: string }[] }> {
-  const r = (await chrome.runtime.sendMessage({ type: 'FIND_POSTS', texts: blocks.map((b) => b.innerText) })) as
+  const r = (await chrome.runtime.sendMessage({ type: 'FIND_POSTS', texts: blocks.map((b) => b.innerText), host: location.hostname })) as
     | { ok: true; data: { found: number[]; opened?: { i: number; id: string }[] } }
     | { ok: false }
   if (!r?.ok) return { legacy: [], sealed: [] }

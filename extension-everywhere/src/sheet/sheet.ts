@@ -11,10 +11,15 @@ import { gateSealer } from '../../../shared/gateclient.mjs'
 import { sw, gatePost } from '../shared/messages'
 import { contentHash, withAuthor } from '../../../shared/member.mjs'
 import { memberships, attestAsMember, ensSpaces, ensKeys } from '../shared/spaces'
-import type { EncodeData, ContentToFrame, FrameToContent, GateHealth } from '../shared/messages'
+import type { EncodeData, HideData, ContentToFrame, FrameToContent, GateHealth } from '../shared/messages'
 import { icon, hydrateIcons } from '../shared/icons'
+import { threadContext } from '../../../shared/coverctx.mjs'
 
 hydrateIcons()
+
+/** From the content script: `nofield`, and the page's title (c), host (h) and the comment being
+ *  replied to (p), which codec2's opener answers. */
+const page = new URLSearchParams(location.hash.slice(1))
 
 type CheckDraft =
   | { check: 'public' }
@@ -302,6 +307,20 @@ function renderHonesty() {
 // Seal → encode → insert
 // ---------------------------------------------------------------------------
 let lastCover = ''
+/**
+ * codec2: a reply to this conversation — an opener answering the thread, then a carrier holding only
+ * a locator; the frame goes to codec2's drop store under it. '' when codec2 is off or anything fails
+ * — the caller falls back. The frame is stored BEFORE the reply is handed out, so a reply never
+ * points at nothing.
+ */
+async function replyCover(frame: Uint8Array): Promise<string> {
+  const ctx = threadContext(page.get('c') ?? '', page.get('h') ?? '', page.get('p') ?? '')
+  const h = await sw<HideData>({ type: 'HIDE', ...ctx })
+  if (!h.ok) return ''
+  const d = await sw({ type: 'DROP', locator: h.data.locator, token: h.data.token, frameB64: toB64(frame) })
+  return d.ok ? h.data.text : ''
+}
+
 async function go() {
   const text = msgEl.value
   if (!text.trim()) return setStatus('Write something first.', 'err')
@@ -341,11 +360,15 @@ async function go() {
     // The author's own passphrases join their keyring, so they still see their own post.
     for (const d of groups.flat()) if (d.check === 'passphrase') void sw({ type: 'KEYRING_ADD_PASS', passphrase: d.passphrase })
     setStatus('Turning it into ordinary text…')
-    const r = await sw<EncodeData>({ type: 'ENCODE', ciphertextB64: toB64(frame) })
-    if (!r.ok) throw new Error(r.error)
-    // Never tagged: a marker is a "this person is hiding something" flag; readers find posts by
-    // deep scan (shape + codec) or right-click Reveal instead.
-    lastCover = presentCover(r.data.coverText, { marker: false })
+    lastCover = await replyCover(frame)
+    if (!lastCover) {
+      // The old codec: the whole frame in the words. Fallback when codec2 is off or fails.
+      const r = await sw<EncodeData>({ type: 'ENCODE', ciphertextB64: toB64(frame) })
+      if (!r.ok) throw new Error(r.error)
+      // Never tagged: a marker is a "this person is hiding something" flag; readers find posts by
+      // deep scan (shape + codec) or right-click Reveal instead.
+      lastCover = presentCover(r.data.coverText, { marker: false })
+    }
     $('cover').textContent = lastCover
     toParent({ lortnoc: 'insert', text: lastCover })
     // Plaintext is done with: clear it from this frame's memory and DOM.
@@ -473,7 +496,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') toParent({ lortnoc: 'close' })
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void go()
 })
-if (location.hash === '#nofield') setStatus('Tip: click the box you want to post in, any time before you press Hide & insert.')
+if (page.has('nofield')) setStatus('Tip: click the box you want to post in, any time before you press Hide & insert.')
 Promise.all([memberships(), chrome.storage.local.get('lastWho'), ensSpaces(), ensKeys()]).then(([mem, last, ens, keys]) => {
   // Your spaces, with nothing to manage: bought here (keys), joined by reading (memberships), or added.
   ensList = [...new Set([...ens, ...Object.keys(keys), ...Object.keys(mem).filter((k) => k.startsWith('@')).map((k) => k.slice(1))])].sort()
