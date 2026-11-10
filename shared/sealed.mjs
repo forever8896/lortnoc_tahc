@@ -20,7 +20,9 @@
 //          m = HKDF(leafKey, salt, "lortnoc/sealed/slot/v1" ‖ i, 36). Unused slots are random.
 //          The 4-byte tag only tells a reader "this key fits this slot"; the body's tag decides.
 //   body   AES-SIV(CEK = HKDF(root, salt, LABEL_CEK, 64), AD = salt ‖ ref ‖ slots)
-//          plaintext: version(1) ‖ flags(1: bit0 squeezed) ‖ shapeLen(2) ‖ shape ‖ message
+//          plaintext (v2): version(1) ‖ flags(1: bit0 squeezed) ‖ shapeLen(2) ‖ msgLen(2) ‖ shape ‖
+//          message ‖ zero padding, so the whole post is exactly one of BUCKETS bytes. (v1: no msgLen,
+//          no padding — still opened.)
 //          The shape (policy.mjs encoding, public params only) is INSIDE: a reader who opened the
 //          post learns what it asked for; nobody else does.
 //
@@ -47,7 +49,15 @@ import { normalisePassphrase } from './checks/passphrase.mjs'
 import { squeezeIfSmaller, unsqueezeMaybe } from './squeeze.mjs'
 
 const enc = new TextEncoder()
-export const SEALED_VERSION = 1
+/** Version 2 pads the body so every post is one of BUCKETS bytes long (v1 posts still open). */
+export const SEALED_VERSION = 2
+/**
+ * Every v2 post is exactly one of these sizes, and the drop store's decoys come in the same sizes
+ * (codec2/drops.py). Without this a post's LENGTH told it apart from a decoy — measured: real posts
+ * were 87–150 B while decoys started at 96. With it, real and decoy are the same number of uniformly
+ * random bytes. The padding is inside the AES-SIV body, so it is authenticated like the message.
+ */
+export const BUCKETS = Object.freeze([256, 512, 1024, 2048, 4096])
 export const SALT_LEN = 8
 export const REF_LEN = 8
 export const SLOTS = 2
@@ -153,7 +163,14 @@ export async function sealPost(text, policy, { gateSeal } = {}) {
 
   const { bytes, compressed } = squeezeIfSmaller(text)
   const shape = Uint8Array.from(encodeShape(treeOf(rows)))
-  const inner = cat([SEALED_VERSION, compressed ? 1 : 0, shape.length >> 8, shape.length & 255], shape, bytes)
+  // v2 inner: version ‖ flags ‖ shapeLen(2) ‖ msgLen(2) ‖ shape ‖ message ‖ zero padding to a bucket
+  const used = HEAD + 16 + 6 + shape.length + bytes.length
+  const size = BUCKETS.find((b) => b >= used)
+  if (!size) throw new Error(`message too long for one post (${used} > ${BUCKETS[BUCKETS.length - 1]} bytes)`)
+  const inner = new Uint8Array(size - HEAD - 16)
+  inner.set([SEALED_VERSION, compressed ? 1 : 0, shape.length >> 8, shape.length & 255, bytes.length >> 8, bytes.length & 255])
+  inner.set(shape, 6)
+  inner.set(bytes, 6 + shape.length)
   const head = cat(salt, ref, ...slots)
   const cek = hkdf(sha256, root, salt, LABEL_CEK, 64)
   return cat(head, aessiv(cek, head).encrypt(inner))
@@ -196,10 +213,13 @@ export async function openPost(frame, { keys = [], gateShares = [] } = {}) {
     } catch {
       continue
     }
-    if (inner[0] !== SEALED_VERSION) return null
+    const v = inner[0]
+    if (v !== 1 && v !== 2) return null
     const shapeLen = (inner[2] << 8) | inner[3]
-    const { node: shape } = decodeShape(inner.subarray(4, 4 + shapeLen), 0)
-    const text = unsqueezeMaybe(inner.subarray(4 + shapeLen), (inner[1] & 1) === 1)
+    const at = v === 2 ? 6 : 4                       // v1 had no msgLen and no padding
+    const { node: shape } = decodeShape(inner.subarray(at, at + shapeLen), 0)
+    const msg = v === 2 ? inner.subarray(at + shapeLen, at + shapeLen + ((inner[4] << 8) | inner[5])) : inner.subarray(at + shapeLen)
+    const text = unsqueezeMaybe(msg, (inner[1] & 1) === 1)
     return { text, checks: describe(shape), honesty: honesty(shape), shape }
   }
   return null

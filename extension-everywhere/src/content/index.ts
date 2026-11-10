@@ -48,6 +48,9 @@ function parentText(box: HTMLElement | null): string {
       if (!(n.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING)) break // reached the box
       const p = n.parentElement
       if (!p || p.closest('[contenteditable="true"],textarea,script,style,[data-lortnoc-chip]')) continue
+      // page chrome is not conversation: Reddit's left nav and sidebar sit before the comment box in the
+      // DOM, and their menu words once made the reply wander off topic
+      if (p.closest('nav,aside,header,footer,button,select,label,[role="navigation"],[role="complementary"],[role="banner"],[role="menu"],[role="toolbar"]')) continue
       if (n.nodeValue?.trim()) parts.push(n.nodeValue.trim())
     }
     const text = parts.join(' ').replace(/\s+/g, ' ')

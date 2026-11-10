@@ -1,0 +1,58 @@
+# codec2 on fly.io — short reply covers (Qwen3-0.6B-Base, exact arithmetic coding) + the drop store.
+# Deploy from the REPO ROOT:
+#     flyctl deploy --config codec2/fly.toml --dockerfile codec2/Dockerfile codec2
+# First time only:
+#     flyctl apps create lortnoc-codec2
+#     flyctl volumes create codec2_data --app lortnoc-codec2 --region cdg --size 1
+#
+# ⚠️ EXACTLY ONE MACHINE, always on, never resized casually:
+#   * every reply is written AND read by this one process — float logits can differ across CPUs,
+#     thread counts and library versions, and a different table means a reply decodes to nothing;
+#   * the drop store (every sealed post + .secret, which keeps decoys stable) is on ONE volume.
+#     With WALRUS set, every post is also on Walrus and the volume is only a cache: a fresh volume
+#     rebuilds its index from the wallet's quilts at boot. Without WALRUS, losing the volume loses
+#     every post. EITHER WAY back up drops/.secret: it derives the decoys AND the Walrus index key.
+# Secrets (never in this file):
+#     flyctl secrets set --app lortnoc-codec2 WALRUS_KEY=suiprivkey1...   # pays SUI gas + WAL storage
+# After any deploy:  flyctl scale count 1 --app lortnoc-codec2 --yes
+app = "lortnoc-codec2"
+primary_region = "cdg"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  THREADS = "4"          # part of the determinism contract — do not change once replies exist
+  TEMP = "0.9"
+  TOPP = "0.92"
+  # Walrus archive (codec2/archive.py). testnet keeps posts 53 DAYS (1-day epochs); mainnet ~2 years
+  # (2-week epochs) and needs WAL + SUI in the WALRUS_KEY wallet. Empty = archive off.
+  WALRUS = "mainnet"
+  WALRUS_EPOCHS = "53"
+  # Every flush is one quilt, and a quilt costs the same (~0.22 WAL + ~0.005 SUI for 53 epochs)
+  # whether it holds 1 post or 600. At low traffic, flush rarely: 6 h ≈ 4 quilts/day ≈ $12/yr;
+  # every 10 min would be up to 144/day ≈ $420/yr. A full batch (600) still flushes at once.
+  FLUSH_INTERVAL = "21600"
+
+[[mounts]]
+  source = "codec2_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false      # model load takes ~30–60 s; keep it warm
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "120s"
+
+# fp32 0.6B ≈ 2.4 GB of weights + torch + KV cache. 4 shared cores for the matmuls.
+[[vm]]
+  size = "shared-cpu-4x"
+  memory = "6gb"

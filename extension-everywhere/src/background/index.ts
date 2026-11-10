@@ -2,9 +2,8 @@
 // the right-click menu (reveal). Both inject the content script into ONE tab on demand; activeTab
 // is granted by the user gesture itself, so the extension holds no standing access to any site.
 import contentScript from '../content/index.ts?script'
-import { CODER, DEFAULT_CODEC_URL, DEFAULT_CODEC2_URL, DEFAULT_GATE_URL, LOCAL, GATE_PATHS, RELAYER_URL } from '../shared/messages'
+import { DEFAULT_CODEC_URL, DEFAULT_GATE_URL, LOCAL, GATE_PATHS, RELAYER_URL } from '../shared/messages'
 import type { SwRequest, SwResponse } from '../shared/messages'
-import { looksLikeCover, canonicalCover } from '../../../shared/webframe.mjs'
 import { fromB64 } from '../../../shared/keys.mjs'
 import { platformOf, looksLikeReply, replyText } from '../../../shared/coverctx.mjs'
 import { buySpace, buyState, spaceAvailable, checkCollection, spaceInfo, spacePrice } from './buy'
@@ -33,11 +32,6 @@ async function gateBase(): Promise<string> {
   return ((got[LOCAL.gateUrl] as string) || DEFAULT_GATE_URL).replace(/\/+$/, '')
 }
 
-/** '' = codec2 is off: writers use the old codec, scans skip reply-shaped blocks. */
-async function codec2Base(): Promise<string> {
-  const got = await chrome.storage.local.get(LOCAL.codec2Url)
-  return ((got[LOCAL.codec2Url] as string | undefined) ?? DEFAULT_CODEC2_URL).trim().replace(/\/+$/, '')
-}
 
 async function post(url: string, body: unknown, timeout = TIMEOUT): Promise<Response> {
   return fetch(url, {
@@ -54,8 +48,7 @@ async function post(url: string, body: unknown, timeout = TIMEOUT): Promise<Resp
  * keyring tells a post from ordinary text, exactly as with sealed posts under the old codec.
  */
 async function codec2(msg: Extract<SwRequest, { type: 'HIDE' | 'DROP' | 'REVEAL2' }>): Promise<SwResponse> {
-  const base = await codec2Base()
-  if (!base) return { ok: false, error: 'codec2 off' }
+  const base = await codecBase()
   try {
     if (msg.type === 'HIDE') {
       // best-of-3 on a CPU model: 15–25 s measured
@@ -107,29 +100,15 @@ async function handle(msg: SwRequest): Promise<SwResponse> {
     return { ok: true, data: { on } }
   }
   if (msg.type === 'FIND_POSTS') {
-    // Deep scan, step 1 (shape, free) then step 2 (codec + frame check), a few at a time.
-    const candidates = msg.texts.map((t, i) => ({ t, i })).filter(({ t }) => looksLikeCover(t)).slice(0, 40)
-    const frames: { i: number; frame: Uint8Array }[] = []
-    const queue = [...candidates]
-    const worker = async () => {
-      for (let c = queue.shift(); c; c = queue.shift()) {
-        const r = await handle({ type: 'DECODE', coverText: canonicalCover(c.t) }).catch(() => null)
-        if (r?.ok) frames.push({ i: c.i, frame: fromB64((r.data as { ciphertext: string }).ciphertext) })
-      }
-    }
-    // codec2 lane: reply-shaped blocks. One at a time — the server serialises model calls anyway,
-    // and each reply costs a few seconds (up to 4 split points).
+    // Deep scan: reply-shaped blocks (free shape check), then the codec, then the keyring. One at a
+    // time — the server serialises model calls anyway, and each reply costs a few seconds.
     const platform = platformOf(msg.host ?? '')
-    const replies = (await codec2Base())
-      ? msg.texts.map((t, i) => ({ t: replyText(t), i })).filter(({ t }) => !looksLikeCover(t) && looksLikeReply(t)).slice(0, 10)
-      : []
-    const lane2 = async () => {
-      for (const c of replies) {
-        const r = await codec2({ type: 'REVEAL2', text: c.t, platform }).catch(() => null)
-        if (r?.ok) for (const f of (r.data as { frames: string[] }).frames) frames.push({ i: c.i, frame: fromB64(f) })
-      }
+    const replies = msg.texts.map((t, i) => ({ t: replyText(t), i })).filter(({ t }) => looksLikeReply(t)).slice(0, 10)
+    const frames: { i: number; frame: Uint8Array }[] = []
+    for (const c of replies) {
+      const r = await codec2({ type: 'REVEAL2', text: c.t, platform }).catch(() => null)
+      if (r?.ok) for (const f of (r.data as { frames: string[] }).frames) frames.push({ i: c.i, frame: fromB64(f) })
     }
-    await Promise.all([worker(), worker(), worker(), lane2()])
     // Step 3: sealed posts open only with the keyring (nothing else can tell they are posts);
     // older posts that show their rule get a Reveal as before.
     const { opened, legacy } = await openCandidates(frames)
@@ -170,18 +149,6 @@ async function handle(msg: SwRequest): Promise<SwResponse> {
     if (msg.type === 'HEALTH') {
       const r = await fetch(`${base}/health`, { signal: AbortSignal.timeout(8_000) })
       return r.ok ? { ok: true, data: await r.json() } : { ok: false, error: `health ${r.status}` }
-    }
-    if (msg.type === 'ENCODE') {
-      const r = await post(`${base}/encode`, { ciphertext: msg.ciphertextB64, coder: CODER })
-      if (r.ok) return { ok: true, data: await r.json() }
-      return { ok: false, status: r.status, error: r.status === 503 ? 'the codec is paused' : `encode failed (${r.status})` }
-    }
-    if (msg.type === 'DECODE') {
-      const r = await post(`${base}/decode`, { coverText: msg.coverText, coder: CODER })
-      if (r.ok) return { ok: true, data: await r.json() }
-      // 422 = not cover text. 400 is ALSO "not ours" today: arith answers 400 for prose made only of
-      // vocabulary words (codec/arith.py, research-tokyo/normalization.md flag 2).
-      return { ok: false, status: r.status, error: r.status === 422 || r.status === 400 ? 'not-cover' : `decode failed (${r.status})` }
     }
     return { ok: false, error: 'unknown message' }
   } catch (e) {

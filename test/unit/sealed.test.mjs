@@ -1,7 +1,7 @@
 // Sealed posts (shared/sealed.mjs): open ONLY with the right keys, and say nothing without them.
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { sealPost, openPost, passKey, sealedRef, SLOTS, SLOT_LEN, REF_LEN } from '../../shared/sealed.mjs'
+import { sealPost, openPost, passKey, sealedRef, SLOTS, SLOT_LEN, REF_LEN, BUCKETS } from '../../shared/sealed.mjs'
 
 const PASS = { check: 'passphrase', passphrase: 'river copper lantern moss eleven' }
 const PASS2 = { check: 'passphrase', passphrase: 'quiet orbit maple seven tide' }
@@ -94,5 +94,28 @@ describe('sealed — says nothing without a key', () => {
   test('refused: more than two passphrase/anyone rules, or anything nested deeper', async () => {
     await assert.rejects(sealPost('x', { or: [PASS, PASS2, { check: 'public' }] }), /at most 2/)
     await assert.rejects(sealPost('x', { or: [{ and: [PASS, PASS2] }, { check: 'public' }] }), /nested/)
+  })
+})
+
+describe('sealed — size buckets (a post\'s length must not tell it from a decoy)', () => {
+  test('every post is exactly one of BUCKETS bytes, short or long, and still opens', async () => {
+    for (const len of [0, 1, 20, 140, 170, 200, 400, 900, 1800, 3500]) {
+      const text = 'x'.repeat(len).replace(/x/g, () => 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)])
+      const f = await sealPost(text, PASS)
+      assert.ok(BUCKETS.includes(f.length), `${len} chars → ${f.length} bytes, not a bucket`)
+      assert.equal((await openPost(f, { keys: [K] })).text, text)
+    }
+  })
+  test('a typical short message lands in the smallest bucket (where nearly all decoys are)', async () => {
+    assert.equal((await sealPost('meet at the north gate at nine', PASS)).length, BUCKETS[0])
+  })
+  test('a message too long for the largest bucket is refused, not truncated', async () => {
+    const huge = Array.from({ length: 6000 }, () => String.fromCharCode(33 + Math.floor(Math.random() * 90))).join('')
+    await assert.rejects(sealPost(huge, PASS), /too long/)
+  })
+  test('the padding is authenticated: flipping a padding byte stops the post opening', async () => {
+    const f = await sealPost('hi', PASS)
+    f[f.length - 20] ^= 1
+    assert.equal(await openPost(f, { keys: [K] }), null)
   })
 })

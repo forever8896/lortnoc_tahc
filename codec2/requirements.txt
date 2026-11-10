@@ -1,0 +1,6 @@
+# Pinned to the versions the round trips were measured with. Changing torch or transformers can change
+# float logits, and with them the coder's tables: replies already posted would stop decoding.
+torch==2.14.1
+transformers==5.18.0
+tokenizers==0.23.2
+numpy==2.5.3

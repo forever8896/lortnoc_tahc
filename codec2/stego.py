@@ -36,12 +36,12 @@ SAFE = re.compile(r"[A-Za-z0-9 .,!?'\-:;()/%$&]*")
 
 
 class Model:
-    def __init__(self, name: str, dtype=torch.float32, temperature=0.9, top_p=0.92):
+    def __init__(self, name: str, dtype=torch.float32, temperature=0.9, top_p=0.92, revision=None):
         torch.manual_seed(0)
         torch.set_num_threads(int(os.environ.get("THREADS", "6")))
         self.name = name
-        self.tok = AutoTokenizer.from_pretrained(name)
-        self.lm = AutoModelForCausalLM.from_pretrained(name, dtype=dtype)
+        self.tok = AutoTokenizer.from_pretrained(name, revision=revision)
+        self.lm = AutoModelForCausalLM.from_pretrained(name, dtype=dtype, revision=revision)
         self.lm.eval()
         self.temperature, self.top_p = temperature, top_p
         # which vocabulary entries may appear in a reply

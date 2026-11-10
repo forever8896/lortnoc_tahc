@@ -4,35 +4,26 @@
 //   * the content script — injected on demand into ONE tab via activeTab; never sees plaintext
 //   * the sheet / reveal iframes — extension-origin pages where plaintext lives and dies
 
-export const DEFAULT_CODEC_URL = 'https://lortnoc-codec.fly.dev'
 /**
- * codec2 (reply covers): a short natural reply carrying a locator, the sealed frame stored under it
- * in codec2's drop store. Off ('') until a public instance exists — set it under Settings →
- * Connection (e.g. http://localhost:8091). When off or failing, the old codec writes the cover.
+ * The codec (codec2/): a post becomes a short natural reply carrying a locator; the sealed frame is
+ * kept in codec2's drop store under it. This extension uses ONLY codec2 — the older codec/ (whole
+ * frame in the words) still serves the Telegram and X extensions, never this one.
  */
-export const DEFAULT_CODEC2_URL = ''
+export const DEFAULT_CODEC_URL = 'https://lortnoc-codec2.fly.dev'
 /** The gate holds shares for attested checks (time lock, World ID, tokens). Local until hosted. */
 // the public gate (gate/fly.toml); a local one (node gate/server.mjs) can be set under Settings → Connection
 export const DEFAULT_GATE_URL = 'https://lortnoc-gate.fly.dev'
 /** Turns a paid space purchase into its ENS name (relayer POST /space, PRD §23.2). */
 export const RELAYER_URL = 'https://lortnoc-relayer.fly.dev'
 
-/**
- * Named on EVERY request, never inherited (CLAUDE.md §4). Every extension calls the same codec
- * instance, so a server-side default would be shared state between surfaces.
- */
-export const CODER = 'arith'
-
 export const LOCAL = {
-  codecUrl: 'codecUrl',
-  codec2Url: 'codec2Url',
+  // A NEW key on purpose: 'codecUrl' may still hold the old codec's address, which speaks another protocol.
+  codecUrl: 'codec2Url',
   gateUrl: 'gateUrl',
 } as const
 
 export type SwRequest =
   | { type: 'HEALTH' }
-  | { type: 'ENCODE'; ciphertextB64: string }
-  | { type: 'DECODE'; coverText: string }
   | { type: 'GATE_HEALTH' }
   | { type: 'GATE'; path: GatePath; body: unknown }
   | { type: 'WORLD_SIM'; connectUrl: string }
@@ -77,9 +68,7 @@ export type GatePath = (typeof GATE_PATHS)[number]
 
 export type SwResponse<T = unknown> = { ok: true; data: T } | { ok: false; error: string; status?: number }
 
-export type HealthData = { model: string; digest: string; ready: boolean; paused?: boolean; message?: string }
-export type EncodeData = { coverText: string }
-export type DecodeData = { ciphertext: string }
+export type HealthData = { model: string; revision?: string | null; ready: boolean }
 export type HideData = { text: string; locator: string; token: string }
 export type GateHealth = { ok: boolean; pub: string; signPub: string; checks: string[]; world?: { env: string; envs?: string[] } | null }
 

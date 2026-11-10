@@ -2,8 +2,7 @@
 //
 // Posts carry no tag (a hashtag is exactly the "this person is hiding something" flag the high-risk
 // story warns about), so finding them is two steps, both in the service worker:
-//   1. shape — blocks that look like cover text (shared/webframe.mjs looksLikeCover, 25+ lowercase
-//      words) or like a codec2 reply (shared/coverctx.mjs looksLikeReply, 5–45 plain words)
+//   1. shape — blocks that look like a reply cover (shared/coverctx.mjs looksLikeReply, 5–80 plain words)
 //   2. proof — the codec decodes each candidate and the keyring tries to open the frame.
 // This file only COLLECTS text blocks. It must import nothing shared with other entries: Chrome runs
 // an injected script as a classic script, so any cross-chunk `import` kills it (measured: "Cannot

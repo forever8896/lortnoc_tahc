@@ -2,7 +2,6 @@
 // It builds a policy from groups (AND of ORs, PRD §16.6), seals the message with shared/webframe,
 // has the codec turn the bytes into cover text, and hands ONLY the cover to the content script.
 import { COUNTRIES } from '../shared/countries'
-import { presentCover } from '../../../shared/webframe.mjs'
 import { sealPost } from '../../../shared/sealed.mjs'
 import { honesty } from '../../../shared/policy.mjs'
 import { generatePassphrase } from '../../../shared/checks/passphrase.mjs'
@@ -11,7 +10,7 @@ import { gateSealer } from '../../../shared/gateclient.mjs'
 import { sw, gatePost } from '../shared/messages'
 import { contentHash, withAuthor } from '../../../shared/member.mjs'
 import { memberships, attestAsMember, ensSpaces, ensKeys } from '../shared/spaces'
-import type { EncodeData, HideData, ContentToFrame, FrameToContent, GateHealth } from '../shared/messages'
+import type { HideData, ContentToFrame, FrameToContent, GateHealth } from '../shared/messages'
 import { icon, hydrateIcons } from '../shared/icons'
 import { threadContext } from '../../../shared/coverctx.mjs'
 
@@ -308,17 +307,18 @@ function renderHonesty() {
 // ---------------------------------------------------------------------------
 let lastCover = ''
 /**
- * codec2: a reply to this conversation — an opener answering the thread, then a carrier holding only
- * a locator; the frame goes to codec2's drop store under it. '' when codec2 is off or anything fails
- * — the caller falls back. The frame is stored BEFORE the reply is handed out, so a reply never
- * points at nothing.
+ * A reply to this conversation — an opener answering the thread, then a carrier holding only a
+ * locator; the sealed frame goes to the codec's drop store under it. The frame is stored BEFORE the
+ * reply is handed out, so a reply never points at nothing. Throws on failure: there is no fallback.
  */
 async function replyCover(frame: Uint8Array): Promise<string> {
   const ctx = threadContext(page.get('c') ?? '', page.get('h') ?? '', page.get('p') ?? '')
   const h = await sw<HideData>({ type: 'HIDE', ...ctx })
-  if (!h.ok) return ''
+  if (!h.ok) throw new Error(h.status === 429 ? 'Too many in a row. Wait a minute, then try again.' : `The codec is unreachable (${h.error}).`)
+  setStatus('Storing the locked message…')
   const d = await sw({ type: 'DROP', locator: h.data.locator, token: h.data.token, frameB64: toB64(frame) })
-  return d.ok ? h.data.text : ''
+  if (!d.ok) throw new Error(`Could not store the message (${d.error}). Nothing was posted.`)
+  return h.data.text
 }
 
 async function go() {
@@ -360,15 +360,9 @@ async function go() {
     // The author's own passphrases join their keyring, so they still see their own post.
     for (const d of groups.flat()) if (d.check === 'passphrase') void sw({ type: 'KEYRING_ADD_PASS', passphrase: d.passphrase })
     setStatus('Turning it into ordinary text…')
+    // Never tagged: a marker is a "this person is hiding something" flag; readers find posts by
+    // deep scan or right-click Reveal instead.
     lastCover = await replyCover(frame)
-    if (!lastCover) {
-      // The old codec: the whole frame in the words. Fallback when codec2 is off or fails.
-      const r = await sw<EncodeData>({ type: 'ENCODE', ciphertextB64: toB64(frame) })
-      if (!r.ok) throw new Error(r.error)
-      // Never tagged: a marker is a "this person is hiding something" flag; readers find posts by
-      // deep scan (shape + codec) or right-click Reveal instead.
-      lastCover = presentCover(r.data.coverText, { marker: false })
-    }
     $('cover').textContent = lastCover
     toParent({ lortnoc: 'insert', text: lastCover })
     // Plaintext is done with: clear it from this frame's memory and DOM.

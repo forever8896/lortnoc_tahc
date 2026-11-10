@@ -9,9 +9,11 @@ import tempfile
 import threading
 import unittest
 import urllib.error
+
+F1, F2 = os.urandom(256), os.urandom(512)   # sealed v2 frames are always bucket-sized
 import urllib.request
 
-from drops import DECOY_MAX, DECOY_MIN, DropStore, locator_for, new_token
+from drops import BUCKETS, DropStore, locator_for, new_token
 
 
 class Store(unittest.TestCase):
@@ -25,21 +27,21 @@ class Store(unittest.TestCase):
     def test_put_get(self):
         tok = new_token()
         loc = locator_for(tok, 8)
-        self.assertEqual(self.s.put(loc, b"frame-1", tok), "stored")
-        self.assertEqual(self.s.get(loc), b"frame-1")
+        self.assertEqual(self.s.put(loc, F1, tok), "stored")
+        self.assertEqual(self.s.get(loc), F1)
 
     def test_first_write_wins(self):
         tok = new_token()
         loc = locator_for(tok, 8)
-        self.s.put(loc, b"first", tok)
-        self.assertEqual(self.s.put(loc, b"second", tok), "exists")
-        self.assertEqual(self.s.get(loc), b"first")
+        self.s.put(loc, F1, tok)
+        self.assertEqual(self.s.put(loc, F2, tok), "exists")
+        self.assertEqual(self.s.get(loc), F1)
 
     def test_concurrent_writers_one_winner(self):
         tok = new_token()
         loc = locator_for(tok, 8)
         results = []
-        ts = [threading.Thread(target=lambda i=i: results.append(self.s.put(loc, b"w%d" % i, tok))) for i in range(16)]
+        ts = [threading.Thread(target=lambda i=i: results.append(self.s.put(loc, bytes([i]) * 256, tok))) for i in range(16)]
         [t.start() for t in ts]
         [t.join() for t in ts]
         self.assertEqual(results.count("stored"), 1)
@@ -49,21 +51,26 @@ class Store(unittest.TestCase):
     def test_locator_needs_its_token(self):
         """A reader who decoded the locator cannot write to it — or probe it by write-then-read."""
         loc = locator_for(new_token(), 8)
-        self.assertEqual(self.s.put(loc, b"junk", new_token()), "forbidden")
-        self.assertEqual(self.s.put(loc, b"junk", loc), "forbidden")
-        self.assertNotEqual(self.s.get(loc), b"junk")
+        self.assertEqual(self.s.put(loc, F2, new_token()), "forbidden")
+        self.assertEqual(self.s.put(loc, F2, loc), "forbidden")
+        self.assertNotEqual(self.s.get(loc), F2)
 
     def test_decoy_deterministic_and_random_looking(self):
         loc = os.urandom(8)
         a, b = self.s.get(loc), self.s.get(loc)
         self.assertEqual(a, b)
-        self.assertTrue(DECOY_MIN <= len(a) <= DECOY_MAX)
+        self.assertIn(len(a), BUCKETS)
         self.assertNotEqual(a, self.s.get(os.urandom(8)))
         self.assertGreater(len(set(a)), len(a) // 3)  # not a constant / low-entropy filler
 
     def test_decoy_stable_across_restart(self):
         loc = os.urandom(8)
         self.assertEqual(self.s.get(loc), DropStore(self.dir.name).get(loc))
+
+    def test_decoy_sizes_follow_the_buckets(self):
+        sizes = [len(self.s.get(os.urandom(8))) for _ in range(400)]
+        self.assertTrue(set(sizes) <= set(BUCKETS))
+        self.assertGreater(sizes.count(256) / len(sizes), 0.8)   # where nearly every real post is
 
     def test_decoy_differs_per_secret(self):
         loc = os.urandom(8)
@@ -74,6 +81,7 @@ class Store(unittest.TestCase):
         tok = new_token()
         self.assertEqual(self.s.put(locator_for(tok, 8), b"", tok), "invalid")
         self.assertEqual(self.s.put(locator_for(tok, 8), b"x" * 5000, tok), "invalid")
+        self.assertEqual(self.s.put(locator_for(tok, 8), b"x" * 150, tok), "invalid")   # not a bucket: a tell
         self.assertEqual(self.s.put(locator_for(tok, 2), b"x", tok), "invalid")
 
 
@@ -111,10 +119,10 @@ class Http(unittest.TestCase):
     def test_round_trip(self):
         tok = new_token()
         loc = locator_for(tok, 8).hex()
-        frame = base64.b64encode(os.urandom(120)).decode()
+        frame = base64.b64encode(os.urandom(256)).decode()
         self.assertEqual(self.call("/drop", {"locator": loc, "token": tok.hex(), "frame": frame})[0], 201)
         self.assertEqual(self.call(f"/drop/{loc}"), (200, {"frame": frame}))
-        other = base64.b64encode(b"other").decode()
+        other = base64.b64encode(os.urandom(256)).decode()
         self.assertEqual(self.call("/drop", {"locator": loc, "token": tok.hex(), "frame": other})[0], 409)
         self.assertEqual(self.call(f"/drop/{loc}")[1]["frame"], frame)
 
@@ -124,11 +132,11 @@ class Http(unittest.TestCase):
         s2, b = self.call(f"/drop/{loc.upper()}")
         self.assertEqual((s1, s2), (200, 200))
         self.assertEqual(a, b)
-        self.assertTrue(DECOY_MIN <= len(base64.b64decode(a["frame"])) <= DECOY_MAX)
+        self.assertIn(len(base64.b64decode(a["frame"])), BUCKETS)
 
     def test_wrong_token_forbidden(self):
         loc = locator_for(new_token(), 8).hex()
-        frame = base64.b64encode(b"junk").decode()
+        frame = base64.b64encode(F2).decode()
         self.assertEqual(self.call("/drop", {"locator": loc, "token": new_token().hex(), "frame": frame})[0], 403)
 
     def test_bad_requests(self):
@@ -137,6 +145,18 @@ class Http(unittest.TestCase):
         tok = new_token()
         loc = locator_for(tok, 8).hex()
         self.assertEqual(self.call("/drop", {"locator": loc, "token": tok.hex(), "frame": "!!"})[0], 400)
+
+    def test_model_routes_rate_limited_per_client(self):
+        """/hide holds the single model for ~20 s; one client must not be able to queue everyone else out.
+        The limit applies before the model is even needed (here it is never loaded)."""
+        self.server.HIDE_RATE = 2
+        try:
+            codes = [self.call("/hide", {"platform": "x", "thread": "t"})[0] for _ in range(3)]
+            self.assertEqual(codes[:2], [503, 503])   # under the limit: reaches "model loading"
+            self.assertEqual(codes[2], 429)
+        finally:
+            self.server.HIDE_RATE = 10
+            self.server.writes.clear()
 
     def test_rate_limit(self):
         self.server.DROP_RATE = 2

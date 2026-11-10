@@ -30,11 +30,17 @@ from drops import DropStore, locator_for, new_token
 from stego import Model, best_of, opener, reveal_reply, valid_opener
 
 MODEL = os.environ.get("CODEC2_MODEL", "Qwen/Qwen3-0.6B-Base")
+# Pinned weights: a different revision gives different tables, and every stored reply stops decoding.
+REVISION = os.environ.get("CODEC2_REVISION") or None
 PORT = int(os.environ.get("PORT", "8090"))
 MAX_BODY = 16 * 1024
 PLATFORMS = {"reddit", "x", "news"}
 HEX = re.compile(r"[0-9a-f]{8,32}")
-DROP_RATE = int(os.environ.get("DROP_RATE", "30"))  # writes per minute per client
+# Per client per minute. /hide holds the one model for ~20 s and /reveal for a few, and requests are
+# serialised — so without these one client could keep everyone else waiting.
+DROP_RATE = int(os.environ.get("DROP_RATE", "30"))
+HIDE_RATE = int(os.environ.get("HIDE_RATE", "10"))
+REVEAL_RATE = int(os.environ.get("REVEAL_RATE", "40"))
 
 model = None
 lock = threading.Lock()
@@ -42,13 +48,14 @@ drops = DropStore(os.environ.get("DROP_DIR", os.path.join(os.path.dirname(os.pat
 writes: dict[str, list[float]] = {}  # in memory only, never logged (CLAUDE.md §8 Layer 4)
 
 
-def limited(ip: str) -> bool:
-    now = time.time()
-    recent = [t for t in writes.get(ip, []) if now - t < 60]
+def limited(ip: str, bucket: str = "drop") -> bool:
+    rate = {"drop": DROP_RATE, "hide": HIDE_RATE, "reveal": REVEAL_RATE}[bucket]
+    key, now = f"{bucket}:{ip}", time.time()
+    recent = [t for t in writes.get(key, []) if now - t < 60]
     if len(writes) > 10_000:
         writes.clear()
-    writes[ip] = recent + [now]
-    return len(recent) >= DROP_RATE
+    writes[key] = recent + [now]
+    return len(recent) >= rate
 
 
 def unhex(v) -> bytes | None:
@@ -58,10 +65,15 @@ def unhex(v) -> bytes | None:
 
 def load():
     global model
-    model = Model(MODEL, temperature=float(os.environ.get("TEMP", "0.9")), top_p=float(os.environ.get("TOPP", "0.92")))
+    model = Model(MODEL, temperature=float(os.environ.get("TEMP", "0.9")), top_p=float(os.environ.get("TOPP", "0.92")),
+                  revision=REVISION)
 
 
 class H(BaseHTTPRequestHandler):
+    def _client(self) -> str:
+        # Behind Fly's proxy every request comes from the proxy; it names the real client in a header.
+        return self.headers.get("Fly-Client-IP") or self.client_address[0]
+
     def _send(self, code, obj):
         body = json.dumps(obj).encode()
         self.send_response(code)
@@ -82,7 +94,7 @@ class H(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "bad locator"})
             return self._send(200, {"frame": base64.b64encode(drops.get(loc)).decode()})
         if self.path == "/health":
-            return self._send(200, {"model": MODEL, "ready": model is not None,
+            return self._send(200, {"model": MODEL, "revision": REVISION, "ready": model is not None,
                                     "temperature": model and model.temperature, "top_p": model and model.top_p})
         self._send(404, {"error": "not found"})
 
@@ -96,6 +108,8 @@ class H(BaseHTTPRequestHandler):
             return self._send(400, {"error": "bad json"})
         if self.path == "/drop":
             return self._drop(req)
+        if self.path in ("/hide", "/reveal") and limited(self._client(), self.path[1:]):
+            return self._send(429, {"error": "slow down"})
         if model is None:
             return self._send(503, {"error": "loading"})
         platform = req.get("platform") if req.get("platform") in PLATFORMS else "news"
@@ -112,8 +126,18 @@ class H(BaseHTTPRequestHandler):
             for _ in range(max(1, min(6, int(req.get("tries") or 3)))):
                 tok = new_token()
                 tokens[locator_for(tok, nbytes)] = tok
+            if not given and not thread.strip():
+                return self._send(400, {"error": "thread or opener required"})
             with lock:
-                first = given or (opener(model, platform, thread) if thread.strip() else "")
+                # The opener is what ties a reply to its thread: the carrier after it sees only the
+                # opener, so with no opener it can wander anywhere ("the three-part column on the
+                # Constitution", posted on r/fruit). Never post without one: if the page context gave
+                # none, try the title alone (its first block); if that fails too, refuse.
+                first = given or opener(model, platform, thread)
+                if not first:
+                    first = opener(model, platform, thread.split("\n\n")[0])
+                if not first:
+                    return self._send(500, {"error": "no reply that fits this thread, try again"})
                 payload, text = best_of(model, platform, first, nbytes, payloads=list(tokens))
             if not text:
                 return self._send(500, {"error": "no cover found, try again"})
@@ -131,7 +155,7 @@ class H(BaseHTTPRequestHandler):
         self._send(404, {"error": "not found"})
 
     def _drop(self, req):
-        if limited(self.client_address[0]):
+        if limited(self._client()):
             return self._send(429, {"error": "slow down"})
         loc, tok = unhex(req.get("locator")), unhex(req.get("token"))
         try:
@@ -148,7 +172,26 @@ class H(BaseHTTPRequestHandler):
         pass
 
 
+def start_archive():
+    """WALRUS=testnet|mainnet: also keep every post on Walrus (archive.py). Off when unset."""
+    net = os.environ.get("WALRUS", "").strip()
+    if not net:
+        print("codec2: Walrus archive OFF (posts live on this disk only)", flush=True)
+        return
+    from archive import Archive
+    arch = Archive(drops, network=net, epochs=int(os.environ.get("WALRUS_EPOCHS", "53")),
+                   interval=float(os.environ.get("FLUSH_INTERVAL", "600")))
+    if not os.path.exists(arch.path) and os.environ.get("WALRUS_RECOVER", "1") != "0":
+        try:                                   # fresh disk: rebuild the index from Walrus first
+            print(f"codec2: recovered {arch.recover()} post(s) from Walrus", flush=True)
+        except Exception as e:
+            print(f"codec2: recovery skipped: {str(e)[-300:]}", flush=True)
+    arch.start()
+    print(f"codec2: Walrus archive ON ({net}, {arch.epochs} epochs, flush every {arch.interval:.0f}s)", flush=True)
+
+
 if __name__ == "__main__":
+    start_archive()
     threading.Thread(target=load, daemon=True).start()
     print(f"codec2 on :{PORT} loading {MODEL}", flush=True)
     ThreadingHTTPServer(("0.0.0.0", PORT), H).serve_forever()

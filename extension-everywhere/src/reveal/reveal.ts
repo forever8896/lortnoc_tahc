@@ -1,16 +1,15 @@
 // The reveal card — an extension-origin iframe. The page hands it COVER text (public); the message
 // it recovers is rendered only here, never written into the page's DOM where the site's scripts
 // could read it.
-import { canonicalCover, inspect, openMessage, looksLikeCover } from '../../../shared/webframe.mjs'
+import { inspect, openMessage } from '../../../shared/webframe.mjs'
 import { platformOf, looksLikeReply, replyText } from '../../../shared/coverctx.mjs'
-import { fromB64 } from '../../../shared/keys.mjs'
 import { gateReleaser } from '../../../shared/gateclient.mjs'
 import { sw, gatePost } from '../shared/messages'
 import type { GateHealth } from '../shared/messages'
 import { readAuthor } from '../../../shared/member.mjs'
 import { memberKey, rememberMember, ownedSpaces, banMember, ensKeys } from '../shared/spaces'
 import { writeBan } from '../shared/ensWrite'
-import type { DecodeData, FrameToContent } from '../shared/messages'
+import type { FrameToContent } from '../shared/messages'
 import { icon, hydrateIcons } from '../shared/icons'
 
 hydrateIcons()
@@ -236,53 +235,19 @@ async function main() {
   if (p.get('s')) return showSealed(p.get('s')!)
   const raw = p.get('t') ?? ''
 
-  // codec2 reply: the locator in the words, the frame in the drop store. Reading needs the reply and
-  // the platform only. A stranger's sentence may decode to some locator too and get a decoy frame;
-  // only the keyring can tell, so both say the same.
-  if (!looksLikeCover(raw) && looksLikeReply(raw)) {
-    setStatus('Reading…')
-    const r = await sw<{ frames: string[] }>({ type: 'REVEAL2', text: replyText(raw), platform: platformOf(p.get('h') ?? '') })
-    if (r.ok) {
-      const o = await sw<{ id: string }>({ type: 'OPEN_FRAME', framesB64: r.data.frames })
-      return o.ok ? showSealed(o.data.id) : (setStatus(NOTHING), fit())
-    }
-    // not a reply cover (or codec2 is off): the old codec below has its say
-  }
-
-  const cover = canonicalCover(raw)
-  if (!cover) return setStatus('Nothing to reveal here.', 'err'), fit()
-
-  const r = await sw<DecodeData>({ type: 'DECODE', coverText: cover })
+  // A reply: the locator in the words, the frame in the drop store. Reading needs the reply and the
+  // platform only. A stranger's sentence may decode to some locator too and get a decoy frame; only
+  // the keyring can tell, so both say the same.
+  if (!looksLikeReply(raw)) return setStatus('This isn’t a lortnoc message, or the site changed it.', 'err'), fit()
+  setStatus('Reading…')
+  const r = await sw<{ frames: string[] }>({ type: 'REVEAL2', text: replyText(raw), platform: platformOf(p.get('h') ?? '') })
   if (!r.ok) {
-    return setStatus(
-      r.error === 'not-cover'
-        ? 'This isn’t a lortnoc message, or the site changed it.'
-        : `Couldn’t reach the codec: ${r.error}`,
-      'err',
-    ), fit()
+    return r.error === 'not-cover'
+      ? (setStatus(NOTHING), fit())
+      : (setStatus(`Couldn’t reach the codec: ${r.error}`, 'err'), fit())
   }
-  frame = fromB64(r.data.ciphertext)
-  const info = inspect(frame)
-  if (!info) return setStatus('This is a lortnoc message from another surface (X or Telegram). Open it there.', 'err'), fit()
-  if (info.unsupported) return setStatus('This message needs a newer version of the extension.', 'err'), fit()
-
-  $('checks').textContent = `Locked · ${(info.checks ?? []).join(' · ')}`
-  $('needs').hidden = false
-  $('pass').hidden = !info.needs?.includes('passphrase')
-  $('identity').hidden = !info.needs?.includes('recipients')
-  $('verifyHuman').hidden = !info.needs?.includes('human')
-  if (info.needs?.includes('human')) {
-    const g = await sw<GateHealth>({ type: 'GATE_HEALTH' })
-    // the simulator does Proof of Human only — never passports (Identity Check)
-    canSim = g.ok && !!g.data.world?.envs?.includes('staging') && !(info.checks ?? []).some((c: string) => /passport/i.test(c))
-  }
-  $('simHuman').hidden = $('verifyHuman').hidden || !canSim
-  $('proveNft').hidden = !info.needs?.includes('nft')
-  postSpace = (info.checks ?? []).find((c: string) => c.includes(' · members of '))?.split(' · members of ')[1]
-    ?? (info.checks ?? []).find((c: string) => c.startsWith('Holders of '))?.replace(/^Holders of |'s NFT$/g, '') ?? ''
-  setStatus('')
-  await attempt() // a public post, or a passphrase already typed in this card, opens straight away
-  if ($('out').hidden && !$('pass').hidden) $<HTMLInputElement>('pw').focus()
+  const o = await sw<{ id: string }>({ type: 'OPEN_FRAME', framesB64: r.data.frames })
+  return o.ok ? showSealed(o.data.id) : (setStatus(NOTHING), fit())
 }
 
 async function tryPassphrase() {

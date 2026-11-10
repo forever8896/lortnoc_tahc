@@ -1,0 +1,5 @@
+.venv
+drops
+__pycache__
+*.pyc
+walrus/node_modules

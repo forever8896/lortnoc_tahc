@@ -1,6 +1,6 @@
 // The full page (the popup's gear): Keys, Spaces, Settings. The popup keeps only what is used on a
 // page — write hidden, find hidden posts, always on for this site.
-import { sw, LOCAL, DEFAULT_CODEC_URL, DEFAULT_CODEC2_URL, DEFAULT_GATE_URL } from '../shared/messages'
+import { sw, LOCAL, DEFAULT_CODEC_URL, DEFAULT_GATE_URL } from '../shared/messages'
 import type { HealthData, GateHealth } from '../shared/messages'
 import { memberships, ensSpaces, ensKeys } from '../shared/spaces'
 import { COUNTRIES } from '../shared/countries'
@@ -59,16 +59,11 @@ addEventListener('hashchange', () => go(location.hash.slice(1) || 'keys'))
 // ---------------------------------------------------------------------------
 let gateUrl = DEFAULT_GATE_URL
 async function status() {
-  const [c, g, st] = await Promise.all([sw<HealthData>({ type: 'HEALTH' }), sw<GateHealth>({ type: 'GATE_HEALTH' }), chrome.storage.local.get([LOCAL.codecUrl, LOCAL.gateUrl, LOCAL.codec2Url])])
+  const [c, g, st] = await Promise.all([sw<HealthData>({ type: 'HEALTH' }), sw<GateHealth>({ type: 'GATE_HEALTH' }), chrome.storage.local.get([LOCAL.codecUrl, LOCAL.gateUrl])])
   gateUrl = ((st[LOCAL.gateUrl] as string) || DEFAULT_GATE_URL).replace(/\/+$/, '')
-  // codec2: short replies that fit the page. Empty = off; the codec above writes every cover then.
-  const reply = ((st[LOCAL.codec2Url] as string | undefined) ?? DEFAULT_CODEC2_URL).trim()
-  if (!$<HTMLInputElement>('reply').value) $<HTMLInputElement>('reply').value = reply
-  $('dReply').className = `dot ${reply ? 'ok' : 'warn'}`
-  $('replyState').textContent = reply ? 'Short replies · on' : 'Short replies · off'
   if (!$<HTMLInputElement>('codec').value) $<HTMLInputElement>('codec').value = (st[LOCAL.codecUrl] as string) || DEFAULT_CODEC_URL
   if (!$<HTMLInputElement>('gate').value) $<HTMLInputElement>('gate').value = gateUrl
-  const cOk = c.ok && c.data.ready && !c.data.paused
+  const cOk = c.ok && c.data.ready
   for (const id of ['dCodec', 'dCodec2']) $(id).className = `dot ${cOk ? 'ok' : 'bad'}`
   for (const id of ['dGate', 'dGate2']) $(id).className = `dot ${g.ok ? 'ok' : 'bad'}`
   $('codecState').textContent = cOk ? `Codec · ready` : 'Codec · unreachable'
@@ -80,10 +75,6 @@ async function status() {
 }
 $('saveCodec').onclick = async () => {
   await chrome.storage.local.set({ [LOCAL.codecUrl]: $<HTMLInputElement>('codec').value.trim() || DEFAULT_CODEC_URL })
-  say('connMsg', 'Saved.', 'ok'), void status()
-}
-$('saveReply').onclick = async () => {
-  await chrome.storage.local.set({ [LOCAL.codec2Url]: $<HTMLInputElement>('reply').value.trim() })
   say('connMsg', 'Saved.', 'ok'), void status()
 }
 $('saveGate').onclick = async () => {
