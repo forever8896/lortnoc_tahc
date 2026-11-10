@@ -2,25 +2,25 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
-import { SuiClient } from '@mysten/sui/client'
+import { SuiGrpcClient } from '@mysten/sui/grpc'
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519'
 import { decodeSuiPrivateKey } from '@mysten/sui/cryptography'
-import { WalrusClient } from '@mysten/walrus'
+import { walrus as walrusExtension } from '@mysten/walrus'
 
 export const NETWORK = process.env.WALRUS_NETWORK === 'mainnet' ? 'mainnet' : 'testnet'
-const RPC = { testnet: 'https://sui-testnet-rpc.publicnode.com', mainnet: 'https://sui-rpc.publicnode.com' }[NETWORK]
+// gRPC, not JSON-RPC: every public Sui JSON-RPC endpoint (Mysten, publicnode, Blast) refuses since
+// ~2026-10 ("deprecated, use gRPC"). @mysten/walrus 0.6 could only speak JSON-RPC, hence 1.x.
+const GRPC = { testnet: 'https://fullnode.testnet.sui.io:443', mainnet: 'https://fullnode.mainnet.sui.io:443' }[NETWORK]
 const RELAY = { testnet: 'https://upload-relay.testnet.walrus.space', mainnet: 'https://upload-relay.mainnet.walrus.space' }[NETWORK]
 export const GRAPHQL = { testnet: 'https://graphql.testnet.sui.io/graphql', mainnet: 'https://graphql.mainnet.sui.io/graphql' }[NETWORK]
 
-export const sui = new SuiClient({ url: process.env.SUI_RPC || RPC })
-export const walrus = new WalrusClient({
-  network: NETWORK,
-  suiClient: sui,
+export const sui = new SuiGrpcClient({ network: NETWORK, baseUrl: process.env.SUI_GRPC || GRPC }).$extend(walrusExtension({
   // The relay is paid per upload. Mainnet asks 40 MIST per KiB of ENCODED size (~64 MiB for any quilt)
   // ≈ 2.6M MIST ≈ 0.0026 SUI (read from /v1/tip-config 2026-10-12); testnet asks far less. The old
   // cap of 1000 MIST would have had every mainnet upload refused.
   uploadRelay: { host: process.env.WALRUS_RELAY || RELAY, sendTip: { max: Number(process.env.WALRUS_MAX_TIP || 5_000_000) } },
-})
+}))
+export const walrus = sui.walrus
 
 /** WALRUS_KEY = a `suiprivkey1…` string (production). Without it, the local Sui CLI key (dev only). */
 export function signer() {

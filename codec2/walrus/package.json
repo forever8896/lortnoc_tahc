@@ -4,8 +4,8 @@
   "type": "module",
   "description": "Uploads codec2's sealed posts to Walrus in Quilts, and rebuilds the drop store from them.",
   "dependencies": {
-    "@mysten/sui": "1.45.2",
-    "@mysten/walrus": "0.6.7"
+    "@mysten/sui": "2.39.1",
+    "@mysten/walrus": "1.2.39"
   },
   "overrides": {
     "@mysten/sui": "$@mysten/sui"

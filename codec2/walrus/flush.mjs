@@ -34,7 +34,7 @@ for (const i of [0, entries.length - 1]) {
 }
 process.stdout.write(JSON.stringify({
   blobId: res[0].blobId,
-  blobObjectId: res[0].blobObject.id.id,
-  endEpoch: res[0].blobObject.storage.end_epoch,
+  blobObjectId: res[0].blobObject.id?.id ?? res[0].blobObject.id,
+  endEpoch: res[0].blobObject.storage.end_epoch ?? res[0].blobObject.storage.endEpoch,
   patches,
 }))
