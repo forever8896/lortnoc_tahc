@@ -314,7 +314,7 @@ let lastCover = ''
 async function replyCover(frame: Uint8Array): Promise<string> {
   const ctx = threadContext(page.get('c') ?? '', page.get('h') ?? '', page.get('p') ?? '')
   const h = await sw<HideData>({ type: 'HIDE', ...ctx })
-  if (!h.ok) throw new Error(h.status === 429 ? 'Too many in a row. Wait a minute, then try again.' : `The codec is unreachable (${h.error}).`)
+  if (!h.ok) throw new Error(h.status === 429 ? 'Too many in a row. Wait a minute, then try again.' : h.status === 503 ? 'The codec is waking up. Try again in a minute.' : `The codec is unreachable (${h.error}).`)
   setStatus('Storing the locked message…')
   const d = await sw({ type: 'DROP', locator: h.data.locator, token: h.data.token, frameB64: toB64(frame) })
   if (!d.ok) throw new Error(`Could not store the message (${d.error}). Nothing was posted.`)

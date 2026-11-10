@@ -10,6 +10,8 @@ import { buySpace, buyState, spaceAvailable, checkCollection, spaceInfo, spacePr
 import { openCandidates, sealedGet, keyringView, addPassphrase, removePassphrase, forgetConnected, worldConnect, walletConnect, onWidgetMessage } from './sealed'
 
 const TIMEOUT = 30_000 // gpt2 takes seconds; fail closed rather than hang
+// codec2 sleeps between uses (door/): the first call after a nap waits for it to wake (~5-40 s)
+const WAKE = 60_000
 
 /** Demo passes (relayer POST /demo/mint): testnet NFTs so anyone can try a holders-only space. */
 async function demoMint(to: string[]): Promise<SwResponse> {
@@ -52,7 +54,7 @@ async function codec2(msg: Extract<SwRequest, { type: 'HIDE' | 'DROP' | 'REVEAL2
   try {
     if (msg.type === 'HIDE') {
       // best-of-3 on a CPU model: 15–25 s measured
-      const r = await post(`${base}/hide`, { thread: msg.thread, platform: msg.platform, nbytes: 8, tries: 3 }, 120_000)
+      const r = await post(`${base}/hide`, { thread: msg.thread, platform: msg.platform, nbytes: 8, tries: 3 }, 120_000 + WAKE)
       return r.ok ? { ok: true, data: await r.json() } : { ok: false, status: r.status, error: `hide failed (${r.status})` }
     }
     if (msg.type === 'DROP') {
@@ -62,7 +64,7 @@ async function codec2(msg: Extract<SwRequest, { type: 'HIDE' | 'DROP' | 'REVEAL2
     // The reply and the platform are all reading needs (the opener is inside the reply). The server
     // tries each sentence boundary, so a reply can yield more than one locator: fetch them all and
     // let the keyring decide — a wrong split's locator gets a decoy that never opens.
-    const r = await post(`${base}/reveal`, { text: msg.text, platform: msg.platform, nbits: 64 })
+    const r = await post(`${base}/reveal`, { text: msg.text, platform: msg.platform, nbits: 64 }, TIMEOUT + WAKE)
     if (!r.ok) return { ok: false, status: r.status, error: `reveal failed (${r.status})` }
     const { locators } = (await r.json()) as { locators: string[] }
     if (!locators?.length) return { ok: false, error: 'not-cover' }

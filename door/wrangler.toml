@@ -6,6 +6,8 @@ name = "lortnoc-codec2"
 main = "src/door.mjs"
 compatibility_date = "2026-10-01"
 
+routes = [{ pattern = "codec2.lortnoctahc.com", custom_domain = true }]
+
 [vars]
 BOAT_SANDBOX = "bx_tz5jt7xa"
 BOX_URL = "https://box-node-d5a7b3e8fe0b8267-8080.on.boat.dev"

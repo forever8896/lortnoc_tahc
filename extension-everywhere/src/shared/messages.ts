@@ -9,7 +9,7 @@
  * kept in codec2's drop store under it. This extension uses ONLY codec2 — the older codec/ (whole
  * frame in the words) still serves the Telegram and X extensions, never this one.
  */
-export const DEFAULT_CODEC_URL = 'https://lortnoc-codec2.fly.dev'
+export const DEFAULT_CODEC_URL = 'https://codec2.lortnoctahc.com'
 /** The gate holds shares for attested checks (time lock, World ID, tokens). Local until hosted. */
 // the public gate (gate/fly.toml); a local one (node gate/server.mjs) can be set under Settings → Connection
 export const DEFAULT_GATE_URL = 'https://lortnoc-gate.fly.dev'
