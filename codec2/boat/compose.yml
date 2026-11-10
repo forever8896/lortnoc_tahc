@@ -1,0 +1,23 @@
+# codec2 on a boat sandbox (boat.dev). The sandbox sleeps between uses; the front door (door/)
+# resumes it on the first request and stops it when idle. Docker comes back by itself on resume and
+# `restart: unless-stopped` brings the container with it.
+#
+#   ~/codec2/boat/setup.sh   (idempotent; run after a code push)
+#
+# Secrets (WALRUS_KEY, DROP_SECRET, DOOR_SECRET) live in ~/codec2-secrets.env, mode 600, written by
+# setup.sh from stdin; never in this file or the image.
+services:
+  codec2:
+    image: lortnoc-codec2
+    restart: unless-stopped
+    ports: ["8080:8080"]          # `boat host 8080` serves this; DOOR_SECRET turns away anything else
+    env_file: /home/user/codec2-secrets.env
+    environment:
+      THREADS: "4"                # part of the determinism contract (fly.toml) — never change
+      TEMP: "0.9"
+      TOPP: "0.92"
+      WALRUS: mainnet
+      WALRUS_EPOCHS: "53"
+      FLUSH_INTERVAL: "21600"     # timed by the oldest waiting post, so it survives sleeping
+    volumes:
+      - /home/user/codec2-data:/data

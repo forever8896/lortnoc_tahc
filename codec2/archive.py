@@ -53,6 +53,7 @@ class Archive:
         self.index: dict[str, dict] = {}
         self.last_flush = time.time()
         self.last_error: str | None = None
+        self.flushing = False
         if os.path.exists(self.path):
             with open(self.path) as f:
                 self.index = json.load(f)
@@ -106,16 +107,32 @@ class Archive:
         self.last_flush, self.last_error = time.time(), None
         return len(names)
 
+    def oldest_age(self) -> float | None:
+        """Seconds the oldest not-yet-archived post has waited, or None. The door uses it to wake a
+        sleeping machine in time for the upload."""
+        todo = self.pending()
+        return time.time() - os.path.getmtime(os.path.join(self.store.root, todo[0])) if todo else None
+
     def due(self) -> bool:
-        n = len(self.pending())
-        return n >= BATCH_MAX or (n > 0 and time.time() - self.last_flush >= self.interval)
+        # Timed by the OLDEST waiting post, not by process uptime: on a machine that sleeps between
+        # uses (boat), every wake is a fresh process, and an uptime clock would never reach 6 h.
+        todo = self.pending()
+        if len(todo) >= BATCH_MAX:
+            return True
+        if not todo:
+            return False
+        return time.time() - os.path.getmtime(os.path.join(self.store.root, todo[0])) >= self.interval
 
     def run_forever(self, tick=10.0):
         while True:
             try:
                 while self.due():
-                    if not self.flush():
-                        break
+                    self.flushing = True             # /health says busy: the door must not stop us now
+                    try:
+                        if not self.flush():
+                            break
+                    finally:
+                        self.flushing = False
             except Exception as e:                   # keep serving; posts stay local and retry next tick
                 self.last_error = str(e)[-500:]
                 print(f"[archive] {self.last_error}", flush=True)

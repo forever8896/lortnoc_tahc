@@ -73,6 +73,17 @@ class ArchiveTest(unittest.TestCase):
         for loc, _ in posts:
             self.assertTrue(self.arch.has(loc.hex()))
 
+    def test_due_is_timed_by_the_oldest_post_not_uptime(self):
+        """On boat every wake is a new process. An uptime clock restarts each time and, on a machine
+        that never stays up 6 h, would never upload at all. The oldest waiting post decides."""
+        self.arch.interval = 3600
+        loc, _ = self._post()
+        self.assertFalse(self.arch.due())                    # fresh post: wait
+        old = os.path.getmtime(os.path.join(self.store.root, loc.hex())) - 7200
+        os.utime(os.path.join(self.store.root, loc.hex()), (old, old))
+        fresh = Archive(self.store, flush_cmd=self.arch.flush_cmd, fetch=self._fetch, interval=3600)
+        self.assertTrue(fresh.due())                         # a just-woken process uploads at once
+
     def test_locators_never_leave_in_the_clear(self):
         """Quilt names are public. A locator there would let anyone tell a real reply from a decoy."""
         posts = [self._post() for _ in range(3)]

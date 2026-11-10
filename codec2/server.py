@@ -20,6 +20,7 @@ is the determinism the coder relies on (see stego.py).
 import base64
 import json
 import binascii
+import hmac
 import os
 import re
 import threading
@@ -41,8 +42,12 @@ HEX = re.compile(r"[0-9a-f]{8,32}")
 DROP_RATE = int(os.environ.get("DROP_RATE", "30"))
 HIDE_RATE = int(os.environ.get("HIDE_RATE", "10"))
 REVEAL_RATE = int(os.environ.get("REVEAL_RATE", "40"))
+# Behind the boat front door (door/): only requests carrying this secret are served, and the client
+# IP comes from the door's header. Unset (local, Fly): no check, IP from Fly-Client-IP or the socket.
+DOOR_SECRET = os.environ.get("DOOR_SECRET", "").encode()
 
 model = None
+arch = None  # archive.Archive when WALRUS is set
 lock = threading.Lock()
 drops = DropStore(os.environ.get("DROP_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "drops")))
 writes: dict[str, list[float]] = {}  # in memory only, never logged (CLAUDE.md §8 Layer 4)
@@ -71,8 +76,15 @@ def load():
 
 class H(BaseHTTPRequestHandler):
     def _client(self) -> str:
-        # Behind Fly's proxy every request comes from the proxy; it names the real client in a header.
+        # Behind a proxy every request comes from the proxy; it names the real client in a header.
+        if DOOR_SECRET:
+            return self.headers.get("X-Client-IP") or "door"
         return self.headers.get("Fly-Client-IP") or self.client_address[0]
+
+    def _door_ok(self) -> bool:
+        if not DOOR_SECRET:
+            return True
+        return hmac.compare_digest(self.headers.get("X-Door-Secret", "").encode(), DOOR_SECRET)
 
     def _send(self, code, obj):
         body = json.dumps(obj).encode()
@@ -88,6 +100,8 @@ class H(BaseHTTPRequestHandler):
         self._send(204, {})
 
     def do_GET(self):
+        if not self._door_ok():
+            return self._send(403, {"error": "forbidden"})
         if self.path.startswith("/drop/"):
             loc = unhex(self.path[len("/drop/"):])
             if not loc or len(loc) < 4:
@@ -95,10 +109,17 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {"frame": base64.b64encode(drops.get(loc)).decode()})
         if self.path == "/health":
             return self._send(200, {"model": MODEL, "revision": REVISION, "ready": model is not None,
-                                    "temperature": model and model.temperature, "top_p": model and model.top_p})
+                                    "temperature": model and model.temperature, "top_p": model and model.top_p,
+                                    # the door only puts the machine to sleep when nothing is mid-flight
+                                    "busy": lock.locked() or bool(arch and arch.flushing),
+                                    "pending": len(arch.pending()) if arch else None,
+                                    "pendingAge": arch and arch.oldest_age(),
+                                    "flushInterval": arch and arch.interval})
         self._send(404, {"error": "not found"})
 
     def do_POST(self):
+        if not self._door_ok():
+            return self._send(403, {"error": "forbidden"})
         n = int(self.headers.get("content-length") or 0)
         if n > MAX_BODY:
             return self._send(413, {"error": "too large"})
@@ -178,7 +199,12 @@ def start_archive():
     if not net:
         print("codec2: Walrus archive OFF (posts live on this disk only)", flush=True)
         return
+    global arch
     from archive import Archive
+    if not os.environ.get("DROP_SECRET"):
+        # On a disk that can be lost (boat deletes a stopped disk after 14+ days), a secret kept only
+        # on it would take the Walrus index key with it: every archived post unrecoverable.
+        print("codec2: WARNING DROP_SECRET unset; the secret lives only on this disk", flush=True)
     arch = Archive(drops, network=net, epochs=int(os.environ.get("WALRUS_EPOCHS", "53")),
                    interval=float(os.environ.get("FLUSH_INTERVAL", "600")))
     if not os.path.exists(arch.path) and os.environ.get("WALRUS_RECOVER", "1") != "0":

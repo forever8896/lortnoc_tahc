@@ -1,0 +1,23 @@
+# The codec2 front door (src/door.mjs). Deploy: npx wrangler@4 deploy --config door/wrangler.toml
+# Secrets (never in this file):
+#   wrangler secret put BOAT_KEY      a boat API key that can read, resume and stop the sandbox
+#   wrangler secret put DOOR_SECRET   same value as the sandbox's DOOR_SECRET
+name = "lortnoc-codec2"
+main = "src/door.mjs"
+compatibility_date = "2026-10-01"
+
+[vars]
+BOAT_SANDBOX = "bx_tz5jt7xa"
+BOX_URL = "https://box-node-d5a7b3e8fe0b8267-8080.on.boat.dev"
+
+[[durable_objects.bindings]]
+name = "DOOR"
+class_name = "Door"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Door"]
+
+# weekly: boat may expire a disk that stays stopped 14+ days; this wake keeps it alive
+[triggers]
+crons = ["17 4 * * 1"]

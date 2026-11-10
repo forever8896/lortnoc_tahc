@@ -158,6 +158,19 @@ class Http(unittest.TestCase):
             self.server.HIDE_RATE = 10
             self.server.writes.clear()
 
+    def test_door_secret(self):
+        """Behind the boat front door: no secret, no service, so nobody can bypass the door's
+        rate limits or wake logic. The client IP comes from the door, not the socket."""
+        self.server.DOOR_SECRET = b"s3cret"
+        try:
+            self.assertEqual(self.call("/health")[0], 403)
+            req = urllib.request.Request(self.base + "/health", headers={"X-Door-Secret": "s3cret"})
+            with urllib.request.urlopen(req) as r:
+                self.assertEqual(r.status, 200)
+                self.assertIn("busy", json.load(r))
+        finally:
+            self.server.DOOR_SECRET = b""
+
     def test_rate_limit(self):
         self.server.DROP_RATE = 2
         try:
