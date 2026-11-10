@@ -2,6 +2,9 @@
 # resumes it on the first request and stops it when idle. Docker comes back by itself on resume and
 # `restart: unless-stopped` brings the container with it.
 #
+# Size: `large` (8 vCPU / 16 GB). Measured 2026-11-10 on the same reply: `default` gave a 4.8 s reveal
+# fresh but 12-18 s after resuming onto a contended host (CPU steal); `large` gives 5.5 s reveal, ~29 s hide.
+#
 #   ~/codec2/boat/setup.sh   (idempotent; run after a code push)
 #
 # Secrets (WALRUS_KEY, DROP_SECRET, DOOR_SECRET) live in ~/codec2-secrets.env, mode 600, written by
