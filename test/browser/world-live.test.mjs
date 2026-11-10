@@ -32,7 +32,7 @@ before(async () => {
   execFileSync('npm', ['run', 'build', '--prefix', join(ROOT, 'extension-everywhere')], { env: { ...process.env, OUT_DIR: DIST }, stdio: 'ignore' })
   const db = mkdtempSync(join(tmpdir(), 'lortnoc-gate-'))
   dirs.push(db)
-  // GATE_URL=https://lortnoc-gate.fly.dev → run against the PUBLIC gate (a production smoke test)
+  // GATE_URL=https://gate.lortnoctahc.com → run against the PUBLIC gate (a production smoke test)
   if (!process.env.GATE_URL) gate = spawn(process.execPath, [join(ROOT, 'gate/server.mjs')], { env: { ...process.env, PORT: String(GATE_PORT), GATE_DB: join(db, 'g.sqlite') }, stdio: 'ignore' })
   codec = spawn('python3', ['server.py'], { cwd: join(ROOT, 'codec'), env: { ...process.env, PORT: String(CODEC_PORT), CODEC_BACKEND: 'markov' }, stdio: 'ignore' })
   for (let i = 0; i < 80; i++) {

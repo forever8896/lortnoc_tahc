@@ -33,7 +33,7 @@ Everything below is deployed and was exercised with real transactions, not mocke
 | Storage | Sui testnet + Walrus | package `0xb214da01…4faf` |
 | Codec | fly.io | `lortnoc-codec.fly.dev` — **paused during the alpha** |
 | Sealed inference | fly.io + 0G Compute | `lortnoc-zerog.fly.dev` |
-| Relayer | fly.io | `lortnoc-relayer.fly.dev` |
+| Relayer + gate | kimi-vps behind a Cloudflare tunnel (`deploy/kimi-vps/`) | `relayer.lortnoctahc.com`, `gate.lortnoctahc.com` |
 
 Four handles have been issued. Three of them are owned by wallets that **have never sent a
 transaction on any chain** — because the relayer paid, not them. More on why that matters below.
@@ -409,7 +409,7 @@ cd codec && pip install -r requirements.txt && python server.py
 # check the chains — read-only, no key needed
 node scripts/ens/status.mjs                # the ENS layer
 node scripts/ens/status.mjs alice          # one handle's records
-curl -s https://lortnoc-relayer.fly.dev/health
+curl -s https://relayer.lortnoctahc.com/health
 ```
 
 Reproducing the deployment (a fresh chain, a rotated pin) is documented in

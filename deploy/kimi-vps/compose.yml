@@ -1,0 +1,73 @@
+# The relayer and the gate on kimi-vps (moved off fly.io 2026-11-10). Lives at /opt/lortnoc.
+#
+#   internet ──► Cloudflare ──► tunnel "lortnoc" (cloudflared, outbound only)
+#                                  ├─ relayer.lortnoctahc.com → relayer:8080
+#                                  └─ gate.lortnoctahc.com    → gate:8080
+#
+# Its own network: nothing here shares a network with kimi-hermes or frog-tunnel, and NO port is
+# published (ufw allows only SSH). That is also what makes CLIENT_IP_HEADER safe to trust: only
+# cloudflared can reach these containers.
+#
+# Secrets: /opt/lortnoc/secrets/{relayer,gate}.env (mode 600, root). Never in this file or the image.
+# State:   /opt/lortnoc/data/relayer (knocks.json), /opt/lortnoc/data/gate (gate.sqlite = the gate key,
+#          deposits, sessions — losing it locks every gated post; back it up).
+# Deploy:  deploy/kimi-vps/deploy.sh   (build locally → docker load on the VPS → compose up)
+#
+# ONE relayer, ONE gate, deliberately (see relayer/fly.toml): knocks live in one process and both
+# copies would race the same funded key's nonce; World ID nonces must return to the gate that issued them.
+name: lortnoc
+
+x-hardening: &hardening
+  restart: unless-stopped
+  user: "1000:1000"
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  networks: [lortnoc]
+  logging: { driver: json-file, options: { max-size: 10m, max-file: "3" } }
+
+services:
+  relayer:
+    <<: *hardening
+    image: lortnoc-relayer:vps
+    env_file: ./secrets/relayer.env
+    environment:
+      CLIENT_IP_HEADER: cf-connecting-ip
+      KNOCK_STORE: /data/knocks.json
+    volumes: [./data/relayer:/data]
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+
+  gate:
+    <<: *hardening
+    image: lortnoc-gate:vps
+    env_file: ./secrets/gate.env
+    environment:
+      CLIENT_IP_HEADER: cf-connecting-ip
+      GATE_DB: /data/gate.sqlite
+    volumes: [./data/gate:/data]
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+
+  tunnel:
+    image: cloudflare/cloudflared:2026.10.0
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "--config", "/etc/cloudflared/config.yml", "run"]
+    volumes:
+      - ./tunnel/config.yml:/etc/cloudflared/config.yml:ro
+      - ./tunnel/creds.json:/etc/cloudflared/creds.json:ro
+    networks: [lortnoc]
+    depends_on: [relayer, gate]
+    logging: { driver: json-file, options: { max-size: 10m, max-file: "3" } }
+
+networks:
+  lortnoc: { driver: bridge }

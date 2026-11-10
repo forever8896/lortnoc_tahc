@@ -5,7 +5,7 @@
 // binding cannot read your messages either. If it is down, the app falls back to the free path.
 import type { Ticket } from './proof'
 
-const BASE = ((import.meta.env.VITE_RELAYER_URL as string) || 'https://lortnoc-relayer.fly.dev').replace(/\/$/, '')
+const BASE = ((import.meta.env.VITE_RELAYER_URL as string) || 'https://relayer.lortnoctahc.com').replace(/\/$/, '')
 
 export type GroupSnapshot = { members: string[]; root: string; memberCount: number; groupId: string }
 export type ClaimResult = {

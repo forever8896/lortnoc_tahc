@@ -1,6 +1,6 @@
 // The full page (the popup's gear): Keys, Spaces, Settings. The popup keeps only what is used on a
 // page — write hidden, find hidden posts, always on for this site.
-import { sw, LOCAL, DEFAULT_CODEC_URL, DEFAULT_GATE_URL } from '../shared/messages'
+import { sw, LOCAL, DEFAULT_CODEC_URL, DEFAULT_GATE_URL, liveUrl } from '../shared/messages'
 import type { HealthData, GateHealth } from '../shared/messages'
 import { memberships, ensSpaces, ensKeys } from '../shared/spaces'
 import { COUNTRIES } from '../shared/countries'
@@ -60,8 +60,8 @@ addEventListener('hashchange', () => go(location.hash.slice(1) || 'keys'))
 let gateUrl = DEFAULT_GATE_URL
 async function status() {
   const [c, g, st] = await Promise.all([sw<HealthData>({ type: 'HEALTH' }), sw<GateHealth>({ type: 'GATE_HEALTH' }), chrome.storage.local.get([LOCAL.codecUrl, LOCAL.gateUrl])])
-  gateUrl = ((st[LOCAL.gateUrl] as string) || DEFAULT_GATE_URL).replace(/\/+$/, '')
-  if (!$<HTMLInputElement>('codec').value) $<HTMLInputElement>('codec').value = (st[LOCAL.codecUrl] as string) || DEFAULT_CODEC_URL
+  gateUrl = liveUrl(st[LOCAL.gateUrl], DEFAULT_GATE_URL)
+  if (!$<HTMLInputElement>('codec').value) $<HTMLInputElement>('codec').value = liveUrl(st[LOCAL.codecUrl], DEFAULT_CODEC_URL)
   if (!$<HTMLInputElement>('gate').value) $<HTMLInputElement>('gate').value = gateUrl
   const cOk = c.ok && c.data.ready
   for (const id of ['dCodec', 'dCodec2']) $(id).className = `dot ${cOk ? 'ok' : 'bad'}`

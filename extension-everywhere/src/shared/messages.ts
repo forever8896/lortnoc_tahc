@@ -11,10 +11,21 @@
  */
 export const DEFAULT_CODEC_URL = 'https://codec2.lortnoctahc.com'
 /** The gate holds shares for attested checks (time lock, World ID, tokens). Local until hosted. */
-// the public gate (gate/fly.toml); a local one (node gate/server.mjs) can be set under Settings → Connection
-export const DEFAULT_GATE_URL = 'https://lortnoc-gate.fly.dev'
+// the public gate (deploy/kimi-vps/); a local one (node gate/server.mjs) can be set under Settings → Connection
+export const DEFAULT_GATE_URL = 'https://gate.lortnoctahc.com'
 /** Turns a paid space purchase into its ENS name (relayer POST /space, PRD §23.2). */
-export const RELAYER_URL = 'https://lortnoc-relayer.fly.dev'
+export const RELAYER_URL = 'https://relayer.lortnoctahc.com'
+
+/** Hosts we have moved off (fly.io → boat / kimi-vps, 2026-11-10). Settings → Save stores the URL it
+ * shows, so an install that ever saved still holds the old default; read it through this. */
+const RETIRED: Record<string, string> = {
+  'https://lortnoc-gate.fly.dev': DEFAULT_GATE_URL,
+  'https://lortnoc-codec.fly.dev': DEFAULT_CODEC_URL,
+}
+export function liveUrl(stored: unknown, fallback: string): string {
+  const u = ((stored as string) || fallback).trim().replace(/\/+$/, '')
+  return RETIRED[u] ?? u
+}
 
 export const LOCAL = {
   // A NEW key on purpose: 'codecUrl' may still hold the old codec's address, which speaks another protocol.

@@ -54,6 +54,11 @@ const ensSpaces = createEnsSpaces()
 // The activity trail (gate/debug.mjs) — GATE_DEBUG=0 turns it off. Read from THIS machine only.
 const debug = process.env.GATE_DEBUG === '0' ? null : createDebug({ file: join(dirname(DB), 'events.jsonl') })
 const gate = createGate({ dbPath: DB, keyHex: process.env.GATE_KEY, world, ensSpaces, holders: createHolders({ ensSpaces }), debug })
+// Behind a tunnel (kimi-vps: cloudflared → this container, no published port) every request comes
+// from the tunnel's address; CLIENT_IP_HEADER=cf-connecting-ip makes rate limits per real client.
+// Only set it where nothing but the proxy can reach the port, or the header is spoofable.
+const IP_HEADER = process.env.CLIENT_IP_HEADER?.toLowerCase()
+const clientIp = (req) => (IP_HEADER && req.headers[IP_HEADER]) || req.socket.remoteAddress || '?'
 const local = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress)
 const ORIGINS = (process.env.GATE_ORIGINS ?? '*').split(',')
 
@@ -80,7 +85,7 @@ const send = (res, status, body, origin) => {
 createServer(async (req, res) => {
   const origin = req.headers.origin
   if (req.method === 'OPTIONS') return send(res, 204, {}, origin)
-  if (limited(req.socket.remoteAddress ?? '?')) return send(res, 429, { error: 'slow down' }, origin)
+  if (limited(clientIp(req))) return send(res, 429, { error: 'slow down' }, origin)
   try {
     if (req.method === 'GET' && (req.url === '/health' || req.url === '/')) {
       return send(res, 200, { ok: true, pub: gate.pub, signPub: gate.signPub, checks: gate.checks, world: gate.world, deposits: gate.stats() }, origin)

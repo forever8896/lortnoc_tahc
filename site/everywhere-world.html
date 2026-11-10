@@ -27,13 +27,13 @@
     <span class="eyebrow" data-reveal>Scripts</span>
     <h2 id="verify-h" data-reveal>Verify it <em>yourself.</em></h2>
     <div class="shots">
-      <div class="shot" data-reveal><h3><span class="n">01</span>The public gate: World ID configured, and the environments it serves</h3><pre>curl -s https://lortnoc-gate.fly.dev/health</pre></div>
+      <div class="shot" data-reveal><h3><span class="n">01</span>The public gate: World ID configured, and the environments it serves</h3><pre>curl -s https://gate.lortnoctahc.com/health</pre></div>
       <div class="shot" data-reveal><h3><span class="n">02</span>Every refusal the gate must make, with World's verdicts faked</h3><pre>git clone https://github.com/forever8896/lortnoc_tahc &amp;&amp; cd lortnoc_tahc
 npm ci --prefix shared &amp;&amp; npm ci --prefix gate
 node --test test/unit/world.test.mjs test/unit/sealed-gate.test.mjs</pre></div>
       <div class="shot" data-reveal><h3><span class="n">03</span>Live: World's widget, the simulator, World's API and World Chain</h3><pre>npm ci &amp;&amp; npx playwright install chromium
 npm ci --prefix extension-everywhere
-WORLD_LIVE=1 GATE_URL=https://lortnoc-gate.fly.dev node --test test/browser/world-live.test.mjs</pre></div>
+WORLD_LIVE=1 GATE_URL=https://gate.lortnoctahc.com node --test test/browser/world-live.test.mjs</pre></div>
       <div class="shot" data-reveal><h3><span class="n">04</span>A real phone: a passport nationality proof, end to end</h3><pre>node gate/world-phone.mjs identity:DNK</pre></div>
     </div>
     <table class="table" data-reveal>
@@ -43,7 +43,7 @@ WORLD_LIVE=1 GATE_URL=https://lortnoc-gate.fly.dev node --test test/browser/worl
         <tr><td>RP id</td><td class="mono">rp_df5f7a98b6caa910</td></tr>
         <tr><td>WorldIDVerifier, staging and sandbox</td><td class="mono"><a href="https://worldscan.org/address/0x703a6316c975DEabF30b637c155edD53e24657DB">0x703a6316c975DEabF30b637c155edD53e24657DB</a></td></tr>
         <tr><td>WorldIDVerifier, production</td><td class="mono"><a href="https://worldscan.org/address/0x00000000009E00F9FE82CfeeBB4556686da094d7">0x00000000009E00F9FE82CfeeBB4556686da094d7</a></td></tr>
-        <tr><td>Public gate</td><td class="mono"><a href="https://lortnoc-gate.fly.dev/health">https://lortnoc-gate.fly.dev</a></td></tr>
+        <tr><td>Public gate</td><td class="mono"><a href="https://gate.lortnoctahc.com/health">https://gate.lortnoctahc.com</a></td></tr>
       </tbody>
     </table>
   </section>

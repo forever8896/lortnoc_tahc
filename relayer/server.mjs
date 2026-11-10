@@ -25,7 +25,7 @@ import {
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { mainnet, sepolia } from 'viem/chains'
-import { SuiClient } from '@mysten/sui/client'
+import { SuiGrpcClient } from '@mysten/sui/grpc'
 import { Transaction } from '@mysten/sui/transactions'
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519'
 import { decodeSuiPrivateKey } from '@mysten/sui/cryptography'
@@ -52,7 +52,12 @@ const SPACES_D = readJson('app/src/lib/live/spaces-deployment.json')
 const SPACE_BRANCH = ENS_D.lortnoc.spaces ?? null
 
 const PORT = Number(process.env.PORT || 8080)
-const SUI_RPC = process.env.SUI_RPC || 'https://sui-testnet-rpc.publicnode.com'
+// The real client address for rate limits. On Fly it is fly-client-ip; behind cloudflared on kimi-vps
+// set CLIENT_IP_HEADER=cf-connecting-ip (safe there: no published port, only the tunnel reaches us).
+const IP_HEADER = process.env.CLIENT_IP_HEADER?.toLowerCase()
+const clientIp = (req) => (IP_HEADER && req.headers[IP_HEADER]) || req.headers['fly-client-ip'] || req.ip || 'local'
+// gRPC, not JSON-RPC: every public Sui JSON-RPC endpoint has refused since ~2026-10-14
+const SUI_RPC = process.env.SUI_RPC || 'https://fullnode.testnet.sui.io:443'
 const SEPOLIA_RPC = process.env.SEPOLIA_RPC || 'https://ethereum-sepolia-rpc.publicnode.com'
 // Mainnet is READ-ONLY here (SpaceBought receipts). This service never sends a mainnet tx.
 const MAINNET_RPC = process.env.MAINNET_RPC || 'https://ethereum-rpc.publicnode.com'
@@ -119,7 +124,7 @@ const zg = createPublicClient({ chain: zeroG, transport: http(zeroG.rpcUrls.defa
 const zgWallet = createWalletClient({ account, chain: zeroG, transport: http(zeroG.rpcUrls.default.http[0]) })
 const eth = createPublicClient({ chain: sepolia, transport: http(SEPOLIA_RPC) })
 const ethWallet = createWalletClient({ account, chain: sepolia, transport: http(SEPOLIA_RPC) })
-const sui = new SuiClient({ url: SUI_RPC })
+const sui = new SuiGrpcClient({ network: 'testnet', baseUrl: SUI_RPC })
 const mainnetReader = createPublicClient({ chain: mainnet, transport: http(MAINNET_RPC) })
 
 /** One Sepolia send at a time. /claim, /space and the stipends all sign with the same key, and
@@ -198,10 +203,10 @@ app.get('/health', async (_req, res) => {
       try {
         const [s, w] = await Promise.all([
           sui.getBalance({ owner }),
-          sui.getBalance({ owner, coinType: WAL_TYPE }).catch(() => ({ totalBalance: '0' })),
+          sui.getBalance({ owner, coinType: WAL_TYPE }).catch(() => ({ balance: { balance: '0' } })),
         ])
-        suiBal = s.totalBalance
-        walBal = w.totalBalance
+        suiBal = s.balance.balance
+        walBal = w.balance.balance
       } catch (e) {
         suiError = String(e.message ?? e).slice(0, 200)
       }
@@ -431,20 +436,19 @@ async function payStipend(recipient) {
   const owner = suiSigner.toSuiAddress()
   const tx = new Transaction()
   const [suiCoin] = tx.splitCoins(tx.gas, [SUI_STIPEND])
-  const wal = await sui.getCoins({ owner, coinType: WAL_TYPE })
-  if (!wal.data.length) throw new Error('treasury holds no WAL')
-  const primary = wal.data[0].coinObjectId
-  if (wal.data.length > 1) {
-    tx.mergeCoins(tx.object(primary), wal.data.slice(1).map((c) => tx.object(c.coinObjectId)))
+  const wal = (await sui.listCoins({ owner, coinType: WAL_TYPE })).objects
+  if (!wal.length) throw new Error('treasury holds no WAL')
+  const primary = wal[0].objectId
+  if (wal.length > 1) {
+    tx.mergeCoins(tx.object(primary), wal.slice(1).map((c) => tx.object(c.objectId)))
   }
   const [walCoin] = tx.splitCoins(tx.object(primary), [WAL_STIPEND])
   tx.transferObjects([suiCoin, walCoin], recipient)
 
-  const res = await sui.signAndExecuteTransaction({
-    transaction: tx, signer: suiSigner, options: { showEffects: true },
-  })
+  const r = await sui.signAndExecuteTransaction({ transaction: tx, signer: suiSigner })
+  const res = r.Transaction ?? r.FailedTransaction
+  if (!res.status.success) throw new Error(`stipend failed: ${JSON.stringify(res.status.error).slice(0, 200)}`)
   await sui.waitForTransaction({ digest: res.digest })
-  if (res.effects?.status.status !== 'success') throw new Error(res.effects?.status.error ?? 'stipend failed')
   log(`stipend → ${recipient} (${res.digest})`)
   return res.digest
 }
@@ -501,7 +505,7 @@ const demoMint = DEMO_PASS
   : null
 app.post('/demo/mint', async (req, res) => {
   if (!demoMint) return res.status(503).json({ error: 'no demo pass deployed' })
-  const r = await demoMint(req.body, req.ip ?? '?')
+  const r = await demoMint(req.body, clientIp(req))
   res.status(r.status).json({ ...r.body, collection: `eip155:11155111/erc721:${DEMO_PASS.toLowerCase()}` })
 })
 
@@ -640,7 +644,7 @@ app.post('/knock', (req, res) => {
   if (typeof sealed !== 'string' || sealed.length > 4096) {
     return res.status(400).json({ error: 'sealed must be a base64 string under 4KB' })
   }
-  const ip = req.headers['fly-client-ip'] ?? req.ip ?? 'local'
+  const ip = clientIp(req)
   if (rateLimited(`${ip}|${toHandle}`)) {
     return res.status(429).json({ error: 'too many knocks — slow down', retryAfter: 60 })
   }

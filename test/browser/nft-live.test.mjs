@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const GATE_PORT = 8797
 const CODEC_PORT = 8798
-const RELAYER = process.env.RELAYER ?? 'https://lortnoc-relayer.fly.dev'
+const RELAYER = process.env.RELAYER ?? 'https://relayer.lortnoctahc.com'
 let skip = process.env.NFT_LIVE ? null : 'set NFT_LIVE=1 (live Sepolia + relayer)'
 let chromium, gate, codec, site, siteUrl, DIST, viem, accounts
 const comments = [], dirs = [], open = []

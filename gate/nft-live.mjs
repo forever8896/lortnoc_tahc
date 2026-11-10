@@ -26,7 +26,7 @@ import { writeBan } from '../extension-everywhere/src/shared/ensWrite.ts'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const RELAYER = process.env.RELAYER ?? 'https://lortnoc-relayer.fly.dev'
+const RELAYER = process.env.RELAYER ?? 'https://relayer.lortnoctahc.com'
 const S = readDeployment().lortnoc.spaces
 const SPACES = JSON.parse(readFileSync(join(ROOT, 'app/src/lib/live/spaces-deployment.json'), 'utf8')).sepolia.address
 const RPC = 'https://ethereum-sepolia-rpc.publicnode.com'

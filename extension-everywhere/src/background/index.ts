@@ -2,7 +2,7 @@
 // the right-click menu (reveal). Both inject the content script into ONE tab on demand; activeTab
 // is granted by the user gesture itself, so the extension holds no standing access to any site.
 import contentScript from '../content/index.ts?script'
-import { DEFAULT_CODEC_URL, DEFAULT_GATE_URL, LOCAL, GATE_PATHS, RELAYER_URL } from '../shared/messages'
+import { DEFAULT_CODEC_URL, DEFAULT_GATE_URL, LOCAL, GATE_PATHS, RELAYER_URL, liveUrl } from '../shared/messages'
 import type { SwRequest, SwResponse } from '../shared/messages'
 import { fromB64 } from '../../../shared/keys.mjs'
 import { platformOf, looksLikeReply, replyText } from '../../../shared/coverctx.mjs'
@@ -26,12 +26,12 @@ async function demoMint(to: string[]): Promise<SwResponse> {
 
 async function codecBase(): Promise<string> {
   const got = await chrome.storage.local.get(LOCAL.codecUrl)
-  return ((got[LOCAL.codecUrl] as string) || DEFAULT_CODEC_URL).replace(/\/+$/, '')
+  return liveUrl(got[LOCAL.codecUrl], DEFAULT_CODEC_URL)
 }
 
 async function gateBase(): Promise<string> {
   const got = await chrome.storage.local.get(LOCAL.gateUrl)
-  return ((got[LOCAL.gateUrl] as string) || DEFAULT_GATE_URL).replace(/\/+$/, '')
+  return liveUrl(got[LOCAL.gateUrl], DEFAULT_GATE_URL)
 }
 
 

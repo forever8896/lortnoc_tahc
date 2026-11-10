@@ -5,7 +5,7 @@ import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-export async function buyLiveSpace({ prefix = 'live', token: tokenIn, relayer = process.env.RELAYER ?? 'https://lortnoc-relayer.fly.dev' } = {}) {
+export async function buyLiveSpace({ prefix = 'live', token: tokenIn, relayer = process.env.RELAYER ?? 'https://relayer.lortnoctahc.com' } = {}) {
   const viem = await import('../../gate/node_modules/viem/_esm/index.js')
   const accounts = await import('../../gate/node_modules/viem/_esm/accounts/index.js')
   const { clients, sendTx, readDeployment } = await import('../../scripts/ens/lib/ens.mjs')

@@ -1,0 +1,9 @@
+# cloudflared ingress for the "lortnoc" tunnel (id below; its creds.json is only on the VPS).
+tunnel: b03ecc1e-7632-45b4-bece-41f3c51cbbdf
+credentials-file: /etc/cloudflared/creds.json
+ingress:
+  - hostname: relayer.lortnoctahc.com
+    service: http://relayer:8080
+  - hostname: gate.lortnoctahc.com
+    service: http://gate:8080
+  - service: http_status:404

@@ -5,7 +5,7 @@
 // Opened plaintext is held in storage.session (extension-only, memory-backed, gone when the browser
 // closes) for the reveal card to show. It never goes to the page: the content script only learns
 // WHICH block opened, and the card is an extension-origin frame.
-import { DEFAULT_GATE_URL, LOCAL } from '../shared/messages'
+import { DEFAULT_GATE_URL, LOCAL, liveUrl } from '../shared/messages'
 import type { SwResponse, WorldRequest } from '../shared/messages'
 import { canonicalCover } from '../../../shared/webframe.mjs'
 import { openPost, sealedRef, passKey } from '../../../shared/sealed.mjs'
@@ -16,7 +16,7 @@ import type { Claims } from '../shared/keyring'
 
 async function gateBase(): Promise<string> {
   const got = await chrome.storage.local.get(LOCAL.gateUrl)
-  return ((got[LOCAL.gateUrl] as string) || DEFAULT_GATE_URL).replace(/\/+$/, '')
+  return liveUrl(got[LOCAL.gateUrl], DEFAULT_GATE_URL)
 }
 async function gate(path: string, body: unknown): Promise<any> {
   const r = await fetch(`${await gateBase()}${path}`, {

@@ -7,6 +7,6 @@
   "dependencies": {
     "express": "^4.21.2",
     "viem": "^2.21.0",
-    "@mysten/sui": "1.37.6"
+    "@mysten/sui": "2.39.1"
   }
 }
