@@ -189,25 +189,33 @@ app.get('/health', async (_req, res) => {
       eth.readContract({ address: REGISTRAR, abi: registrarAbi, functionName: 'isRelayer', args: [account.address] }),
       zg.readContract({ address: MEMBERSHIP, abi: membershipAbi, functionName: 'memberCount' }),
     ])
-    let suiBal = '0', walBal = '0'
+    // Sui is only for the stipend, which is best-effort. Since ~2026-10-14 every public Sui JSON-RPC
+    // endpoint refuses ("deprecated, use gRPC"); letting that fail /health took the WHOLE relayer out of
+    // Fly's rotation for a month — claims, knocks and Spaces included, none of which touch Sui.
+    let suiBal = '0', walBal = '0', suiError = null
     if (suiSigner) {
       const owner = suiSigner.toSuiAddress()
-      const [s, w] = await Promise.all([
-        sui.getBalance({ owner }),
-        sui.getBalance({ owner, coinType: WAL_TYPE }).catch(() => ({ totalBalance: '0' })),
-      ])
-      suiBal = s.totalBalance
-      walBal = w.totalBalance
+      try {
+        const [s, w] = await Promise.all([
+          sui.getBalance({ owner }),
+          sui.getBalance({ owner, coinType: WAL_TYPE }).catch(() => ({ totalBalance: '0' })),
+        ])
+        suiBal = s.totalBalance
+        walBal = w.totalBalance
+      } catch (e) {
+        suiError = String(e.message ?? e).slice(0, 200)
+      }
     }
     const spacesAuthorized = SPACE_BRANCH
       ? await eth.readContract({ address: SPACE_BRANCH.registrar, abi: spaceRegistrarAbi, functionName: 'isRelayer', args: [account.address] })
       : null
-    const ok = authorized && spacesAuthorized !== false && ethBal > 0n && (!suiSigner || (BigInt(suiBal) > 0n && BigInt(walBal) > 0n))
+    const ok = authorized && spacesAuthorized !== false && ethBal > 0n && (!suiSigner || suiError !== null || (BigInt(suiBal) > 0n && BigInt(walBal) > 0n))
     res.json({
       ok, relayer: account.address, sepoliaAuthorized: authorized, spacesAuthorized,
       memberCount: members.toString(),
       balances: { zeroG: formatEther(zgBal), sepolia: formatEther(ethBal), sui: suiBal, wal: walBal },
       sui: suiSigner?.toSuiAddress() ?? null,
+      suiError,
       contracts: {
         membership: MEMBERSHIP, registrar: REGISTRAR, parent: PARENT,
         spaceRegistrar: SPACE_BRANCH?.registrar ?? null,
