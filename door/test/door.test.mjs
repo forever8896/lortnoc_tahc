@@ -20,17 +20,22 @@ function memStorage() {
 
 /** A sandbox that is asleep until resumed, then takes `bootPolls` health checks to load the model. */
 function world({ asleep = true, bootPolls = 2, pending = 0, pendingAge = 0 } = {}) {
-  const w = { state: asleep ? 'archived' : 'running', boots: 0, resumes: 0, stops: 0, boxCalls: [], clock: 1_000_000 }
+  const w = { state: asleep ? 'archived' : 'running', hosted: !asleep, boots: 0, resumes: 0, stops: 0, hosts: 0, boxCalls: [], clock: 1_000_000 }
   w.fetchImpl = async (url, init = {}) => {
     const u = new URL(url)
     if (u.host === 'boat.dev') {
       assert.equal(init.headers.authorization, 'Bearer KEY')
       if (u.pathname.endsWith('/resume')) { w.resumes++; w.state = 'running'; w.boots = 0; return new Response('{}', { status: 202 }) }
-      if (u.pathname.endsWith('/stop')) { w.stops++; w.state = 'archived'; return new Response('{}', { status: 202 }) }
+      if (u.pathname.endsWith('/stop')) { w.stops++; w.state = 'archived'; w.hosted = false; return new Response('{}', { status: 202 }) }
+      if (u.pathname.endsWith('/host')) {
+        assert.deepEqual(JSON.parse(init.body), { port: 8080, public: true })
+        w.hosts++; w.hosted = true; return Response.json({ ok: true })
+      }
       return Response.json({ sandbox: { state: w.state } })
     }
     // the box
     if (w.state !== 'running') throw new Error('connection refused')
+    if (!w.hosted) return new Response('Found', { status: 302 })   // boat's fallback for an unhosted port
     assert.equal(init.headers['x-door-secret'], 'SECRET')
     w.boxCalls.push([u.pathname, init.headers['x-client-ip']])
     if (u.pathname === '/health') {
@@ -59,6 +64,7 @@ test('a request to a sleeping machine resumes it, waits for the model, then answ
   assert.equal(r.status, 200)
   assert.deepEqual(await r.json(), { locators: ['aabbccdd00112233'] })
   assert.equal(w.resumes, 1)
+  assert.equal(w.hosts, 1, 'boat forgets hosted ports on stop: re-hosted after resume')
   assert.deepEqual(w.boxCalls.at(-1), ['/reveal', '1.2.3.4'])     // the real client IP, for rate limits
 })
 

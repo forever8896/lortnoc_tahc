@@ -53,7 +53,8 @@ export class DoorCore {
   constructor(storage, env, { fetchImpl = fetch, now = Date.now, wait = sleep } = {}) {
     this.storage = storage
     this.env = env
-    this.fetch = fetchImpl
+    // wrapped: Workers throw "Illegal invocation" if the global fetch is called as this.fetch(...)
+    this.fetch = (...a) => fetchImpl(...a)
     this.now = now
     this.wait = wait
     this.waking = null          // the one wake in progress; concurrent requests share it
@@ -76,11 +77,16 @@ export class DoorCore {
     }
   }
 
-  boat(path, method = 'GET') {
+  boat(path, method = 'GET', body = {}) {
     return this.fetch(`${BOAT_API}/sandboxes/${this.env.BOAT_SANDBOX}${path}`, {
       method, headers: { authorization: `Bearer ${this.env.BOAT_KEY}`, 'content-type': 'application/json' },
-      body: method === 'POST' ? '{}' : undefined,
+      body: method === 'POST' ? JSON.stringify(body) : undefined,
     })
+  }
+
+  /** boat drops hosted ports on stop (measured 2026-11-10); re-registering gives back the same URL. */
+  host() {
+    return this.boat('/host', 'POST', { port: 8080, public: true })
   }
 
   async boatState() {
@@ -110,10 +116,16 @@ export class DoorCore {
       const r = await this.boat('/resume', 'POST')
       if (!r.ok && r.status !== 409) throw new Error(`boat resume ${r.status}`)
     }
-    // up to WAKE_LIMIT_MS for the machine, then the container, then the model
+    // up to WAKE_LIMIT_MS for the machine, then the port route, then the container, then the model
+    let hosted = false
     while (this.now() - t0 < WAKE_LIMIT_MS) {
       const hh = await this.health()
       if (hh?.ready) { this.readyAt = this.now(); return }
+      if (!hosted && ['ready', 'idle', 'running'].includes(await this.boatState())) {
+        const r = await this.host()
+        if (!r.ok) throw new Error(`boat host ${r.status}`)
+        hosted = true
+      }
       await this.wait(WAKE_POLL_MS)
     }
     throw new Error('codec2 did not wake in time')
