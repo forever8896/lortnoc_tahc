@@ -140,6 +140,18 @@ test('posts waiting for Walrus: the door wakes the machine when the oldest is du
   assert.equal(w.resumes, 1, 'woken for the upload')
 })
 
+test('an upload that keeps failing never keeps the machine awake', async () => {
+  // overdue post (8 h > 6 h interval) whose upload failed: the box says retryIn 6 h
+  const w = world({ asleep: false, bootPolls: 0, pending: 1, pendingAge: 8 * 3600 })
+  const s = memStorage()
+  const d = new DoorCore(s, env, w)
+  await d.handle(reveal('one'))
+  w.clock += 11 * 60_000
+  await d.alarm()
+  assert.equal(w.stops, 1)
+  assert.ok((await s.get('flushAt')) - w.clock >= 3600_000, 'never sooner than an hour')
+})
+
 test('a resume that never comes up returns 503, not a hang', async () => {
   const w = world({ bootPolls: 1e9 })
   const d = new DoorCore(memStorage(), env, w)

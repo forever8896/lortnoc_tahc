@@ -28,6 +28,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from drops import DropStore, locator_for, new_token
+from archive import RETRY_AFTER
 from stego import Model, best_of, opener, reveal_reply, valid_opener
 
 MODEL = os.environ.get("CODEC2_MODEL", "Qwen/Qwen3-0.6B-Base")
@@ -114,7 +115,10 @@ class H(BaseHTTPRequestHandler):
                                     "busy": lock.locked() or bool(arch and arch.flushing),
                                     "pending": len(arch.pending()) if arch else None,
                                     "pendingAge": arch and arch.oldest_age(),
-                                    "flushInterval": arch and arch.interval})
+                                    "flushInterval": arch and arch.interval,
+                                    # seconds until the archiver will try again after a failed upload
+                                    "retryIn": max(0.0, arch.failed_at + RETRY_AFTER - time.time()) if arch and arch.failed_at else 0,
+                                    "archiveError": arch and arch.last_error})
         self._send(404, {"error": "not found"})
 
     def do_POST(self):

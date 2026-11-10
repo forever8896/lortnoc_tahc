@@ -84,6 +84,20 @@ class ArchiveTest(unittest.TestCase):
         fresh = Archive(self.store, flush_cmd=self.arch.flush_cmd, fetch=self._fetch, interval=3600)
         self.assertTrue(fresh.due())                         # a just-woken process uploads at once
 
+    def test_failed_upload_backs_off(self):
+        """An empty wallet must not mean a retry every 10 s, nor a door waking the machine for it."""
+        import archive
+        self.arch.interval = 0
+        self._post()
+        self.assertTrue(self.arch.due())
+        self.arch.flush_cmd = [sys.executable, "-c", "import sys; sys.exit('InsufficientCoinBalance')"]
+        with self.assertRaises(RuntimeError):
+            self.arch.flush()
+        self.arch.failed_at = archive.time.time()      # what run_forever records on a failure
+        self.assertFalse(self.arch.due())              # backs off for RETRY_AFTER
+        self.arch.failed_at -= archive.RETRY_AFTER + 1
+        self.assertTrue(self.arch.due())
+
     def test_locators_never_leave_in_the_clear(self):
         """Quilt names are public. A locator there would let anyone tell a real reply from a decoy."""
         posts = [self._post() for _ in range(3)]

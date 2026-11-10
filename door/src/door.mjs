@@ -158,7 +158,10 @@ export class DoorCore {
       this.readyAt = 0
       // posts not on Walrus yet: come back when the oldest is due (codec2 FLUSH_INTERVAL)
       if (h?.pending) {
-        const wakeAt = now + Math.max(60_000, ((h.flushInterval ?? 21600) - (h.pendingAge ?? 0)) * 1000 + 60_000)
+        // after a failed upload the box waits retryIn before trying again: so does the door. Never
+        // less than an hour — an upload that keeps failing must not keep a machine awake
+        const dueIn = Math.max((h.flushInterval ?? 21600) - (h.pendingAge ?? 0), h.retryIn ?? 0)
+        const wakeAt = now + Math.max(3600_000, dueIn * 1000 + 60_000)
         await this.storage.put('flushAt', wakeAt)
         return this._next(wakeAt)
       }

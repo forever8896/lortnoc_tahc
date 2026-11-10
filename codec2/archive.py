@@ -35,6 +35,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 AGGREGATORS = {"testnet": "https://aggregator.walrus-testnet.walrus.space",
                "mainnet": "https://aggregator.walrus-mainnet.walrus.space"}
 BATCH_MAX = 600            # a quilt holds up to 666 files; one slot is the index
+# After a failed upload (empty wallet, Walrus down), wait this long before the next try. Without it
+# the archiver retried every 10 s, and the door woke a sleeping machine every ~11 min for an upload
+# that could not succeed: a large sandbox awake all day, paid for nothing.
+RETRY_AFTER = 6 * 3600.0
 
 
 class Archive:
@@ -54,6 +58,7 @@ class Archive:
         self.last_flush = time.time()
         self.last_error: str | None = None
         self.flushing = False
+        self.failed_at = 0.0                         # last failed upload (epoch s), 0 = none
         if os.path.exists(self.path):
             with open(self.path) as f:
                 self.index = json.load(f)
@@ -104,7 +109,7 @@ class Archive:
                 assert name in res["patches"], f"walrus returned no patch for {name}"
                 self.index[loc] = {"b": res["blobId"], "n": name}
             self._save()
-        self.last_flush, self.last_error = time.time(), None
+        self.last_flush, self.last_error, self.failed_at = time.time(), None, 0.0
         return len(names)
 
     def oldest_age(self) -> float | None:
@@ -119,7 +124,7 @@ class Archive:
         todo = self.pending()
         if len(todo) >= BATCH_MAX:
             return True
-        if not todo:
+        if not todo or time.time() - self.failed_at < RETRY_AFTER:
             return False
         return time.time() - os.path.getmtime(os.path.join(self.store.root, todo[0])) >= self.interval
 
@@ -133,8 +138,9 @@ class Archive:
                             break
                     finally:
                         self.flushing = False
-            except Exception as e:                   # keep serving; posts stay local and retry next tick
+            except Exception as e:                   # keep serving; posts stay local and retry later
                 self.last_error = str(e)[-500:]
+                self.failed_at = time.time()
                 print(f"[archive] {self.last_error}", flush=True)
             time.sleep(tick)
 
