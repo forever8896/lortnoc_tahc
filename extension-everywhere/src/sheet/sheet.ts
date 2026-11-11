@@ -313,8 +313,16 @@ let lastCover = ''
  */
 async function replyCover(frame: Uint8Array): Promise<string> {
   const ctx = threadContext(page.get('c') ?? '', page.get('h') ?? '', page.get('p') ?? '')
-  const h = await sw<HideData>({ type: 'HIDE', ...ctx })
-  if (!h.ok) throw new Error(h.status === 429 ? 'Too many in a row. Wait a minute, then try again.' : h.status === 503 ? 'The codec is waking up. Try again in a minute.' : `The codec is unreachable (${h.error}).`)
+  // 20–40 s warm, up to ~80 s if the codec's machine was asleep: show that it is moving
+  const t0 = Date.now()
+  const tick = () => {
+    const s = Math.round((Date.now() - t0) / 1000)
+    setStatus(`Turning it into ordinary text… ${s} s${s >= 40 ? ' (the codec was asleep; waking it adds up to a minute)' : ' (usually 20–40 s)'}`)
+  }
+  tick()
+  const timer = setInterval(tick, 1000)
+  const h = await sw<HideData>({ type: 'HIDE', ...ctx }).finally(() => clearInterval(timer))
+  if (!h?.ok) throw new Error(h?.status === 429 ? 'Too many in a row. Wait a minute, then try again.' : h?.status === 503 ? 'The codec is waking up. Try again in a minute.' : `The codec is unreachable (${h?.error ?? "no answer from the extension; reload it in chrome://extensions"}).`)
   setStatus('Storing the locked message…')
   const d = await sw({ type: 'DROP', locator: h.data.locator, token: h.data.token, frameB64: toB64(frame) })
   if (!d.ok) throw new Error(`Could not store the message (${d.error}). Nothing was posted.`)
@@ -359,7 +367,6 @@ async function go() {
     const frame = await sealPost(body, policy, { gateSeal })
     // The author's own passphrases join their keyring, so they still see their own post.
     for (const d of groups.flat()) if (d.check === 'passphrase') void sw({ type: 'KEYRING_ADD_PASS', passphrase: d.passphrase })
-    setStatus('Turning it into ordinary text…')
     // Never tagged: a marker is a "this person is hiding something" flag; readers find posts by
     // deep scan or right-click Reveal instead.
     lastCover = await replyCover(frame)

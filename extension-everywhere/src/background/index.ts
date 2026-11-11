@@ -49,7 +49,21 @@ async function post(url: string, body: unknown, timeout = TIMEOUT): Promise<Resp
  * store ALWAYS returns a frame — a decoy for a locator nobody stored — so only opening it with the
  * keyring tells a post from ordinary text, exactly as with sealed posts under the old codec.
  */
-async function codec2(msg: Extract<SwRequest, { type: 'HIDE' | 'DROP' | 'REVEAL2' }>): Promise<SwResponse> {
+/**
+ * Chrome terminates an extension service worker whose fetch() waits more than ~30 s for a response,
+ * and a hide is 20–40 s warm, up to ~80 s when the boat sandbox has to wake first. An extension API
+ * call resets the idle timer, so tick one every 20 s while a codec2 request is in flight.
+ */
+async function keepAlive<T>(work: Promise<T>): Promise<T> {
+  const t = setInterval(() => void chrome.runtime.getPlatformInfo(), 20_000)
+  try { return await work } finally { clearInterval(t) }
+}
+
+function codec2(msg: Extract<SwRequest, { type: 'HIDE' | 'DROP' | 'REVEAL2' }>): Promise<SwResponse> {
+  return keepAlive(codec2Call(msg))
+}
+
+async function codec2Call(msg: Extract<SwRequest, { type: 'HIDE' | 'DROP' | 'REVEAL2' }>): Promise<SwResponse> {
   const base = await codecBase()
   try {
     if (msg.type === 'HIDE') {
