@@ -232,8 +232,28 @@ def reveal_reply(model: Model, text: str, platform: str, nbits: int) -> list[byt
     return found
 
 
+_STOP = set("""about above after again against also among another anyone anything around because been before
+being below between both could does doing down during each even ever every from further have having here
+into itself just like make many more most much must never only other over same should some still such than
+that their them then there these they thing think this those through today tonight under until very want
+were what when where which while will with would your yours really going know good great people""".split())
+
+
+def _words(t: str) -> set[str]:
+    """Content words, cut to a 5-letter stem so strawberry/strawberries and kiwi/kiwis meet."""
+    return {w[:5] for w in re.findall(r"[a-z]{4,}", t.lower()) if w not in _STOP}
+
+
+def on_topic(s: str, thread: str) -> bool:
+    """Does the reply share at least one content word with the thread? The base model, given a thin
+    context, wanders anywhere (measured 2026-11-11 on r/fruit: a sociology headline, and once a line
+    about race) and that is posted under someone's name. A thread too thin to judge passes."""
+    want = _words(thread)
+    return len(want) < 2 or bool(want & _words(s))
+
+
 @torch.no_grad()
-def opener(model: Model, platform: str, thread: str, tries=4, max_tokens=40) -> str:
+def opener(model: Model, platform: str, thread: str, tries=8, max_tokens=40) -> str:
     """One sentence answering the thread. Sampled freely: it carries no bits, so nothing about it has
     to be reproducible. '' if no clean sentence comes out (the carrier then stands alone)."""
     import random
@@ -251,7 +271,8 @@ def opener(model: Model, platform: str, thread: str, tries=4, max_tokens=40) -> 
                 break
             logits, past = model.step([tid], past)
         s = " ".join(model.tok.decode(out).split())
-        if out[-1] in model.ends and 3 <= len(s.split()) <= 25 and SAFE.fullmatch(s) and valid_opener(s):
+        if (out[-1] in model.ends and 3 <= len(s.split()) <= 25 and SAFE.fullmatch(s) and valid_opener(s)
+                and on_topic(s, thread)):
             return s
     return ""
 

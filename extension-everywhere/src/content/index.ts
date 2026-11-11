@@ -40,6 +40,22 @@ function closeFrame() {
  */
 function parentText(box: HTMLElement | null): string {
   if (!box) return ''
+  // New Reddit draws its comment box inside shadow roots (shreddit-composer → faceplate…). Walking up
+  // from inside one never reaches the post, and compareDocumentPosition across the boundary says
+  // nothing useful, so start from the outermost host instead. Measured 2026-11-11 on r/fruit: with
+  // the post missed, the codec got only the tab title and the reply wandered to a sociology headline.
+  while (box.getRootNode() instanceof ShadowRoot) box = (box.getRootNode() as ShadowRoot).host as HTMLElement
+  return nearText(box) || pageSummary()
+}
+
+/** The page's own summary of what it is about: what link previews show. Public, and always on topic. */
+function pageSummary(): string {
+  const meta = (k: string) => document.querySelector<HTMLMetaElement>(`meta[property="${k}"],meta[name="${k}"]`)?.content?.trim() ?? ''
+  const t = [meta('og:title'), meta('og:description') || meta('description')].filter(Boolean).join(' ')
+  return t.replace(/\s+/g, ' ').slice(0, 400)
+}
+
+function nearText(box: HTMLElement): string {
   let el = box.parentElement
   for (let depth = 0; el && el !== document.body && depth < 8; depth++, el = el.parentElement) {
     const parts: string[] = []
