@@ -21,5 +21,12 @@
       "source": "/everywhere/ens",
       "destination": "/everywhere-ens.html"
     }
+  ],
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/everywhere",
+      "permanent": false
+    }
   ]
 }
